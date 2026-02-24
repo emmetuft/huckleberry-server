@@ -50,7 +50,7 @@ describe('DomoProxyService', () => {
       expect.objectContaining({
         method: 'GET',
         headers: expect.objectContaining({
-          'X-DOMO-Developer-Token': 'test-token',
+          'x-domo-developer-token': 'test-token',
         }),
       }),
     );

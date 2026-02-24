@@ -1,12 +1,13 @@
 import { ArgumentsHost, Catch, ExceptionFilter, Logger } from '@nestjs/common';
 import { Response } from 'express';
+import { ContentType } from '../constants/http.constants.js';
 
 /** Error shape thrown by DomoProxyService */
 export class DomoApiError extends Error {
   constructor(
     public readonly statusCode: number,
     message: string,
-    public readonly contentType?: string,
+    public readonly contentType?: string | null,
   ) {
     super(message);
     this.name = 'DomoApiError';
@@ -27,11 +28,10 @@ export class DomoExceptionFilter implements ExceptionFilter {
 
     response.status(exception.statusCode);
 
-    if (exception.contentType?.includes('application/json')) {
-      response.setHeader('Content-Type', 'application/json');
-      response.end(exception.message);
+    if (exception.contentType?.includes(ContentType.JSON)) {
+      response.type(ContentType.JSON).send(exception.message);
     } else {
-      response.type('text/plain').send(exception.message);
+      response.type(ContentType.TEXT).send(exception.message);
     }
   }
 }

@@ -16,6 +16,8 @@ import { TextSummarizationDto } from './dto/text-summarization.dto.js';
 import { TextToSqlDto } from './dto/text-to-sql.dto.js';
 import { TextToBeastModeDto } from './dto/text-to-beastmode.dto.js';
 import { DomoAuthGuard } from '../common/guards/domo-auth.guard.js';
+import { HttpHeader } from '../common/constants/http.constants.js';
+import { DomoApiError } from '../common/filters/domo-exception.filter.js';
 
 @Controller('ai-services')
 @UseGuards(DomoAuthGuard)
@@ -40,6 +42,19 @@ export class AiServicesController {
     @Res() res: ExpressResponse,
   ) {
     const domoResponse = await this.aiServices.chatStream(dto);
+
+    if (!domoResponse.ok) {
+      const text = await domoResponse.text().catch(() => '');
+      throw new DomoApiError(
+        domoResponse.status,
+        text || domoResponse.statusText,
+        domoResponse.headers.get(HttpHeader.ContentType),
+      );
+    }
+
+    if (!domoResponse.body) {
+      throw new DomoApiError(502, 'Upstream returned no response body');
+    }
 
     res.status(domoResponse.status);
     domoResponse.headers.forEach((value, key) => {

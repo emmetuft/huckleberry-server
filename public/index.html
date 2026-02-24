@@ -684,7 +684,7 @@
       if (!res.ok) throw new Error(res.statusText);
       const agents = await res.json();
       const options = '<option value="">-- Select Agent --</option>' +
-        agents.map(a => `<option value="${a.id}">${a.name} (${a.id.slice(0, 8)}...)</option>`).join('');
+        agents.map(a => `<option value="${escapeHtml(a.id)}">${escapeHtml(a.name)} (${escapeHtml(a.id.slice(0, 8))}...)</option>`).join('');
       selects.forEach(sel => {
         const prev = sel.value;
         sel.innerHTML = options;

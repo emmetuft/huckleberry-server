@@ -24,6 +24,8 @@ import { ExecuteAgentDto } from './dto/execute-agent.dto.js';
 import { ResumeAgentDto } from './dto/resume-agent.dto.js';
 import { DomoAuthGuard } from '../common/guards/domo-auth.guard.js';
 import { AgentIdGuard } from '../common/guards/agent-id.guard.js';
+import { HttpHeader } from '../common/constants/http.constants.js';
+import { DomoApiError } from '../common/filters/domo-exception.filter.js';
 import { AgentInclude } from '../common/types/domo-common.types.js';
 
 @Controller('agents')
@@ -89,6 +91,19 @@ export class AgentsController {
   ) {
     const domoResponse = await this.agentsService.executeStream(agentId, dto);
 
+    if (!domoResponse.ok) {
+      const text = await domoResponse.text().catch(() => '');
+      throw new DomoApiError(
+        domoResponse.status,
+        text || domoResponse.statusText,
+        domoResponse.headers.get(HttpHeader.ContentType),
+      );
+    }
+
+    if (!domoResponse.body) {
+      throw new DomoApiError(502, 'Upstream returned no response body');
+    }
+
     res.status(domoResponse.status);
     domoResponse.headers.forEach((value, key) => {
       res.setHeader(key, value);
@@ -107,6 +122,19 @@ export class AgentsController {
     @Res() res: ExpressResponse,
   ) {
     const domoResponse = await this.agentsService.resumeStream(agentId, dto);
+
+    if (!domoResponse.ok) {
+      const text = await domoResponse.text().catch(() => '');
+      throw new DomoApiError(
+        domoResponse.status,
+        text || domoResponse.statusText,
+        domoResponse.headers.get(HttpHeader.ContentType),
+      );
+    }
+
+    if (!domoResponse.body) {
+      throw new DomoApiError(502, 'Upstream returned no response body');
+    }
 
     res.status(domoResponse.status);
     domoResponse.headers.forEach((value, key) => {

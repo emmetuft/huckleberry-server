@@ -12,35 +12,8 @@ import { SqlRequestOption } from '../../common/types/domo-ai-services.types.js';
 import {
   ParameterizedPromptTemplateDto,
   ReasoningConfigDto,
+  AIDataSourceSchemaDto,
 } from './common-ai.dto.js';
-
-class AISchemaColumnDto {
-  @IsString()
-  name!: string;
-
-  @IsString()
-  type!: string;
-
-  @IsString()
-  @IsOptional()
-  description?: string;
-
-  @IsArray()
-  @IsString({ each: true })
-  @IsOptional()
-  sampleValues?: string[];
-}
-
-class AIDataSourceSchemaDto {
-  @IsString()
-  dataSourceId!: string;
-
-  @IsArray()
-  @ValidateNested({ each: true })
-  @Type(() => AISchemaColumnDto)
-  @IsOptional()
-  columns?: AISchemaColumnDto[];
-}
 
 export class TextToSqlDto {
   @IsString()

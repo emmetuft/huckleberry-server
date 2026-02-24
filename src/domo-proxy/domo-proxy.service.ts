@@ -1,6 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AppConfig } from '../common/config/configuration.js';
+import {
+  ContentType,
+  DomoHeader,
+  HttpHeader,
+} from '../common/constants/http.constants.js';
 import { DomoApiError } from '../common/filters/domo-exception.filter.js';
 
 export interface DomoRequestOptions {
@@ -56,17 +61,25 @@ export class DomoProxyService {
   ): Promise<Response> {
     const url = this.buildUrl(path, options?.query);
     const headers = this.buildHeaders(options?.headers);
-    headers['Accept'] = 'text/event-stream';
+    headers[HttpHeader.Accept] = ContentType.SSE;
 
     if (this.isDev) {
       this.logger.debug(`STREAM POST ${url}`);
     }
 
-    return fetch(url, {
-      method: 'POST',
-      headers,
-      body: body ? JSON.stringify(body) : undefined,
-    });
+    try {
+      return await fetch(url, {
+        method: 'POST',
+        headers,
+        body: body ? JSON.stringify(body) : undefined,
+      });
+    } catch (error) {
+      this.logger.error(`Stream fetch failed: ${String(error)}`);
+      throw new DomoApiError(
+        503,
+        `Domo API unavailable: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
   }
 
   private async request<T>(
@@ -89,23 +102,32 @@ export class DomoProxyService {
       this.logger.debug(`Headers: ${JSON.stringify(safeHeaders)}`);
     }
 
-    const response = await fetch(url, {
-      method,
-      headers,
-      body: body ? JSON.stringify(body) : undefined,
-    });
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        method,
+        headers,
+        body: body ? JSON.stringify(body) : undefined,
+      });
+    } catch (error) {
+      this.logger.error(`Fetch failed for ${method} ${url}: ${String(error)}`);
+      throw new DomoApiError(
+        503,
+        `Domo API unavailable: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
 
     if (!response.ok) {
       const text = await response.text().catch(() => '');
       throw new DomoApiError(
         response.status,
         text || response.statusText,
-        response.headers.get('content-type'),
+        response.headers.get(HttpHeader.ContentType),
       );
     }
 
-    const contentType = response.headers.get('content-type') || '';
-    if (contentType.includes('application/json')) {
+    const contentType = response.headers.get(HttpHeader.ContentType) || '';
+    if (contentType.includes(ContentType.JSON)) {
       return (await response.json()) as T;
     }
 
@@ -124,11 +146,11 @@ export class DomoProxyService {
 
   private buildHeaders(extra?: Record<string, string>): Record<string, string> {
     const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
+      [HttpHeader.ContentType]: ContentType.JSON,
     };
 
     if (this.isDev && this.devToken) {
-      headers['X-DOMO-Developer-Token'] = this.devToken;
+      headers[DomoHeader.DeveloperToken] = this.devToken;
     }
 
     if (extra) {
