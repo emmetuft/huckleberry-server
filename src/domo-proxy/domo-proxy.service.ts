@@ -20,6 +20,9 @@ export class DomoProxyService {
     this.baseUrl = appConfig.domoInstanceUrl;
     this.devToken = appConfig.devToken;
     this.isDev = appConfig.nodeEnv === 'development';
+    this.logger.log(
+      `isDev=${this.isDev}, nodeEnv=${appConfig.nodeEnv}, hasToken=${!!this.devToken}, baseUrl=${this.baseUrl}`,
+    );
   }
 
   async get<T>(path: string, options?: DomoRequestOptions): Promise<T> {
@@ -59,18 +62,11 @@ export class DomoProxyService {
       this.logger.debug(`STREAM POST ${url}`);
     }
 
-    const response = await fetch(url, {
+    return fetch(url, {
       method: 'POST',
       headers,
       body: body ? JSON.stringify(body) : undefined,
     });
-
-    if (!response.ok) {
-      const text = await response.text().catch(() => '');
-      throw new DomoApiError(response.status, text || response.statusText);
-    }
-
-    return response;
   }
 
   private async request<T>(
@@ -84,6 +80,7 @@ export class DomoProxyService {
 
     if (this.isDev) {
       this.logger.debug(`${method} ${url}`);
+      this.logger.debug(`Headers: ${JSON.stringify(headers)}`);
     }
 
     const response = await fetch(url, {
@@ -97,7 +94,7 @@ export class DomoProxyService {
       throw new DomoApiError(
         response.status,
         text || response.statusText,
-        undefined,
+        response.headers.get('content-type'),
       );
     }
 

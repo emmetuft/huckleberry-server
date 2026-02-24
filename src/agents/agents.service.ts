@@ -8,6 +8,10 @@ import {
   SearchAgentsRequest,
   SearchAgentsResponse,
 } from '../common/types/domo-agent.types.js';
+import {
+  AssistantExecutionRequest,
+  AgentResumeRequest,
+} from '../common/types/domo-session.types.js';
 import { AgentInclude } from '../common/types/domo-common.types.js';
 
 const AGENTS_BASE = '/api/ai/v1/agents';
@@ -45,5 +49,25 @@ export class AgentsService {
     dto: AgentContextUpdateRequest,
   ): Promise<CustomAgent> {
     return this.domo.put<CustomAgent>(`${AGENTS_BASE}/${agentId}/context`, dto);
+  }
+
+  async executeStream(
+    agentId: string,
+    dto: AssistantExecutionRequest,
+  ): Promise<Response> {
+    return this.domo.postStream(
+      `${AGENTS_BASE}/${agentId}/execute/streaming`,
+      dto,
+    );
+  }
+
+  async resumeStream(
+    agentId: string,
+    dto: AgentResumeRequest,
+  ): Promise<Response> {
+    return this.domo.postStream(
+      `${AGENTS_BASE}/${agentId}/resume/streaming`,
+      dto,
+    );
   }
 }

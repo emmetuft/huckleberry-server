@@ -23,6 +23,8 @@ async function bootstrap() {
   const config = app.get(ConfigService);
   app.useGlobalInterceptors(new LoggingInterceptor(config));
 
+  app.enableShutdownHooks();
+
   const port = config.get<AppConfig>('app')?.port ?? 3000;
   await app.listen(port);
 }

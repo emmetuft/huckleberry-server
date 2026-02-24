@@ -1,0 +1,1041 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Huckleberry API Tester</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #1a1a2e; --surface: #16213e; --surface2: #0f3460;
+    --border: #1a3a6a; --text: #e0e0e0; --text-muted: #8892a4;
+    --accent: #4fc3f7; --accent-hover: #81d4fa;
+    --danger: #ef5350; --danger-hover: #e57373;
+    --success: #66bb6a; --warn: #ffa726; --error: #ef5350;
+    --radius: 6px; --font: 'SF Mono', 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+  }
+  body { font-family: var(--font); background: var(--bg); color: var(--text); min-height: 100vh; padding: 24px; font-size: 13px; }
+  h1 { font-size: 18px; font-weight: 600; color: var(--accent); }
+  .header { display: flex; align-items: center; gap: 16px; margin-bottom: 20px; flex-wrap: wrap; }
+  .header .token-group { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+  .header label { color: var(--text-muted); font-size: 12px; white-space: nowrap; }
+  .header input { background: var(--surface); border: 1px solid var(--border); color: var(--text); padding: 6px 10px; border-radius: var(--radius); width: 280px; font-family: var(--font); font-size: 12px; }
+  .header input:focus { outline: none; border-color: var(--accent); }
+
+  /* Section nav */
+  .section-nav { display: flex; gap: 4px; margin-bottom: 16px; }
+  .section-btn { padding: 6px 16px; background: var(--surface); border: 1px solid var(--border); color: var(--text-muted); cursor: pointer; font-family: var(--font); font-size: 12px; font-weight: 600; border-radius: var(--radius); transition: all 0.15s; }
+  .section-btn:hover { color: var(--text); border-color: var(--accent); }
+  .section-btn.active { background: var(--surface2); color: var(--accent); border-color: var(--accent); }
+  .section { display: none; }
+  .section.active { display: block; }
+
+  .tabs { display: flex; gap: 2px; margin-bottom: 0; border-bottom: 2px solid var(--border); }
+  .tab { padding: 8px 16px; background: transparent; border: none; color: var(--text-muted); cursor: pointer; font-family: var(--font); font-size: 12px; border-bottom: 2px solid transparent; margin-bottom: -2px; transition: color 0.15s, border-color 0.15s; }
+  .tab:hover { color: var(--text); }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .tab.danger { color: var(--danger); }
+  .tab.danger.active { border-bottom-color: var(--danger); }
+
+  .panel { display: none; background: var(--surface); border: 1px solid var(--border); border-top: none; border-radius: 0 0 var(--radius) var(--radius); padding: 20px; }
+  .panel.active { display: block; }
+
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .form-grid .full { grid-column: 1 / -1; }
+  .field { display: flex; flex-direction: column; gap: 4px; }
+  .field label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
+  .field label .req { color: var(--danger); }
+  .field input, .field textarea, .field select { background: var(--bg); border: 1px solid var(--border); color: var(--text); padding: 8px 10px; border-radius: var(--radius); font-family: var(--font); font-size: 12px; resize: vertical; }
+  .field input:focus, .field textarea:focus, .field select:focus { outline: none; border-color: var(--accent); }
+  .field textarea { min-height: 60px; }
+  .field .hint { font-size: 10px; color: var(--text-muted); }
+
+  .collapsible { margin-top: 12px; }
+  .collapsible summary { cursor: pointer; color: var(--text-muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; padding: 6px 0; user-select: none; }
+  .collapsible summary:hover { color: var(--text); }
+  .collapsible .inner { padding-top: 12px; }
+
+  .context-section { border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; margin-top: 8px; }
+  .context-section h4 { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
+
+  .actions { margin-top: 16px; display: flex; gap: 8px; align-items: center; }
+  button.submit { padding: 8px 20px; border: none; border-radius: var(--radius); font-family: var(--font); font-size: 12px; font-weight: 600; cursor: pointer; transition: background 0.15s; }
+  button.submit.primary { background: var(--accent); color: #111; }
+  button.submit.primary:hover { background: var(--accent-hover); }
+  button.submit.danger { background: var(--danger); color: #fff; }
+  button.submit.danger:hover { background: var(--danger-hover); }
+  button.submit:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .response-area { margin-top: 24px; }
+  .response-header { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+  .status-badge { padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: 600; }
+  .status-badge.s2xx { background: var(--success); color: #111; }
+  .status-badge.s4xx { background: var(--warn); color: #111; }
+  .status-badge.s5xx { background: var(--error); color: #fff; }
+  .status-badge.sErr { background: #666; color: #fff; }
+  .status-badge.streaming { background: var(--accent); color: #111; }
+  .elapsed { font-size: 11px; color: var(--text-muted); }
+  .copy-btn { margin-left: auto; background: var(--surface2); border: 1px solid var(--border); color: var(--text-muted); padding: 3px 10px; border-radius: var(--radius); font-family: var(--font); font-size: 11px; cursor: pointer; }
+  .copy-btn:hover { color: var(--text); border-color: var(--accent); }
+  pre.response { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; overflow-x: auto; max-height: 500px; overflow-y: auto; white-space: pre-wrap; word-break: break-word; font-size: 12px; line-height: 1.5; }
+
+  .json-key { color: #81d4fa; }
+  .json-str { color: #a5d6a7; }
+  .json-num { color: #ffcc80; }
+  .json-bool { color: #ce93d8; }
+  .json-null { color: #ef9a9a; }
+
+  .stop-btn { background: var(--danger); border: none; color: #fff; padding: 8px 20px; border-radius: var(--radius); font-family: var(--font); font-size: 12px; font-weight: 600; cursor: pointer; display: none; }
+  .stop-btn:hover { background: var(--danger-hover); }
+
+  .example-pills { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }
+  .example-pill { padding: 5px 12px; background: var(--surface2); border: 1px solid var(--border); color: var(--text-muted); border-radius: 16px; font-family: var(--font); font-size: 11px; cursor: pointer; transition: all 0.15s; white-space: nowrap; }
+  .example-pill:hover { color: var(--accent); border-color: var(--accent); }
+  .gen-uuid { color: var(--accent); font-size: 11px; cursor: pointer; text-decoration: underline; margin-left: 4px; }
+  .gen-uuid:hover { color: var(--accent-hover); }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>Huckleberry API Tester</h1>
+  <div class="token-group">
+    <label for="token">x-domo-developer-token</label>
+    <input type="password" id="token" placeholder="Paste your token..." />
+  </div>
+</div>
+
+<!-- Section switcher -->
+<div class="section-nav">
+  <button class="section-btn active" data-section="agents">Agents</button>
+  <button class="section-btn" data-section="ai">AI Services</button>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- AGENTS SECTION                                                      -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<div class="section active" id="section-agents">
+
+<div class="tabs" data-tab-group="agents">
+  <button class="tab active" data-tab="create">Create</button>
+  <button class="tab" data-tab="get">Get</button>
+  <button class="tab" data-tab="update">Update</button>
+  <button class="tab danger" data-tab="delete">Delete</button>
+  <button class="tab" data-tab="search">Search</button>
+  <button class="tab" data-tab="context">Update Context</button>
+  <button class="tab" data-tab="execute">Execute (Stream)</button>
+  <button class="tab" data-tab="resume">Resume</button>
+</div>
+
+<!-- CREATE -->
+<div class="panel active" data-group="agents" id="panel-create">
+  <form id="form-create" class="form-grid">
+    <div class="field">
+      <label>Name <span class="req">*</span></label>
+      <input type="text" name="name" required />
+    </div>
+    <div class="field">
+      <label>Toolkit IDs</label>
+      <input type="text" name="toolkitIds" placeholder="Comma-separated" />
+      <span class="hint">e.g. tk-1, tk-2</span>
+    </div>
+    <div class="field full">
+      <label>Prompt <span class="req">*</span></label>
+      <textarea name="prompt" required rows="3"></textarea>
+    </div>
+    <div class="field full">
+      <label>System Message</label>
+      <textarea name="systemMessage" rows="2"></textarea>
+    </div>
+    <details class="collapsible full">
+      <summary>Context (optional)</summary>
+      <div class="inner form-grid">
+        <div class="field"><label>dataSourceIds</label><input type="text" name="ctx_dataSourceIds" placeholder="Comma-separated" /></div>
+        <div class="field"><label>cardIds</label><input type="text" name="ctx_cardIds" placeholder="Comma-separated" /></div>
+        <div class="field"><label>pageIds</label><input type="text" name="ctx_pageIds" placeholder="Comma-separated numbers" /></div>
+        <div class="field"><label>ignorableDataSourceIds</label><input type="text" name="ctx_ignorableDataSourceIds" placeholder="Comma-separated" /></div>
+      </div>
+    </details>
+    <div class="actions full">
+      <button type="submit" class="submit primary">Create Agent</button>
+    </div>
+  </form>
+</div>
+
+<!-- GET -->
+<div class="panel" data-group="agents" id="panel-get">
+  <form id="form-get" class="form-grid">
+    <div class="field">
+      <label>Agent ID <span class="req">*</span></label>
+      <input type="text" name="agentId" required />
+    </div>
+    <div class="field">
+      <label>Include</label>
+      <select name="include">
+        <option value="">(none)</option>
+        <option value="all">all</option>
+        <option value="context">context</option>
+        <option value="toolkits">toolkits</option>
+      </select>
+    </div>
+    <div class="actions full">
+      <button type="submit" class="submit primary">Get Agent</button>
+    </div>
+  </form>
+</div>
+
+<!-- UPDATE -->
+<div class="panel" data-group="agents" id="panel-update">
+  <form id="form-update" class="form-grid">
+    <div class="field">
+      <label>Agent ID <span class="req">*</span></label>
+      <input type="text" name="agentId" required />
+    </div>
+    <div class="field">
+      <label>Name</label>
+      <input type="text" name="name" />
+    </div>
+    <div class="field full">
+      <label>Prompt</label>
+      <textarea name="prompt" rows="3"></textarea>
+    </div>
+    <div class="field full">
+      <label>System Message</label>
+      <textarea name="systemMessage" rows="2"></textarea>
+    </div>
+    <div class="field full">
+      <label>Toolkit IDs</label>
+      <input type="text" name="toolkitIds" placeholder="Comma-separated" />
+    </div>
+    <details class="collapsible full">
+      <summary>Context (optional)</summary>
+      <div class="inner form-grid">
+        <div class="field"><label>dataSourceIds</label><input type="text" name="ctx_dataSourceIds" placeholder="Comma-separated" /></div>
+        <div class="field"><label>cardIds</label><input type="text" name="ctx_cardIds" placeholder="Comma-separated" /></div>
+        <div class="field"><label>pageIds</label><input type="text" name="ctx_pageIds" placeholder="Comma-separated numbers" /></div>
+        <div class="field"><label>ignorableDataSourceIds</label><input type="text" name="ctx_ignorableDataSourceIds" placeholder="Comma-separated" /></div>
+      </div>
+    </details>
+    <div class="actions full">
+      <button type="submit" class="submit primary">Update Agent</button>
+    </div>
+  </form>
+</div>
+
+<!-- DELETE -->
+<div class="panel" data-group="agents" id="panel-delete">
+  <form id="form-delete" class="form-grid">
+    <div class="field">
+      <label>Agent ID <span class="req">*</span></label>
+      <input type="text" name="agentId" required />
+    </div>
+    <div class="actions full">
+      <button type="submit" class="submit danger">Delete Agent</button>
+    </div>
+  </form>
+</div>
+
+<!-- SEARCH -->
+<div class="panel" data-group="agents" id="panel-search">
+  <form id="form-search" class="form-grid">
+    <div class="field full">
+      <label>Filters (JSON)</label>
+      <textarea name="filters" rows="3" placeholder='e.g. {"name": "my-agent"}'></textarea>
+    </div>
+    <div class="field">
+      <label>Sort</label>
+      <input type="text" name="sort" placeholder="e.g. name" />
+    </div>
+    <div class="field">
+      <label>Order</label>
+      <select name="order">
+        <option value="">(default)</option>
+        <option value="ASC">ASC</option>
+        <option value="DESC">DESC</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>Limit</label>
+      <input type="number" name="limit" min="1" placeholder="e.g. 10" />
+    </div>
+    <div class="field">
+      <label>Offset</label>
+      <input type="number" name="offset" min="0" placeholder="e.g. 0" />
+    </div>
+    <div class="actions full">
+      <button type="submit" class="submit primary">Search Agents</button>
+    </div>
+  </form>
+</div>
+
+<!-- UPDATE CONTEXT -->
+<div class="panel" data-group="agents" id="panel-context">
+  <form id="form-context" class="form-grid">
+    <div class="field full">
+      <label>Agent ID <span class="req">*</span></label>
+      <input type="text" name="agentId" required />
+    </div>
+    <div class="context-section full">
+      <h4>Add</h4>
+      <div class="form-grid">
+        <div class="field"><label>dataSourceIds</label><input type="text" name="add_dataSourceIds" placeholder="Comma-separated" /></div>
+        <div class="field"><label>cardIds</label><input type="text" name="add_cardIds" placeholder="Comma-separated" /></div>
+        <div class="field"><label>pageIds</label><input type="text" name="add_pageIds" placeholder="Comma-separated numbers" /></div>
+        <div class="field"><label>ignorableDataSourceIds</label><input type="text" name="add_ignorableDataSourceIds" placeholder="Comma-separated" /></div>
+      </div>
+    </div>
+    <div class="context-section full">
+      <h4>Remove</h4>
+      <div class="form-grid">
+        <div class="field"><label>dataSourceIds</label><input type="text" name="rm_dataSourceIds" placeholder="Comma-separated" /></div>
+        <div class="field"><label>cardIds</label><input type="text" name="rm_cardIds" placeholder="Comma-separated" /></div>
+        <div class="field"><label>pageIds</label><input type="text" name="rm_pageIds" placeholder="Comma-separated numbers" /></div>
+        <div class="field"><label>ignorableDataSourceIds</label><input type="text" name="rm_ignorableDataSourceIds" placeholder="Comma-separated" /></div>
+      </div>
+    </div>
+    <div class="actions full">
+      <button type="submit" class="submit primary">Update Context</button>
+    </div>
+  </form>
+</div>
+
+<!-- EXECUTE (STREAM) -->
+<div class="panel" data-group="agents" id="panel-execute">
+  <div class="example-pills">
+    <span style="font-size:11px;color:var(--text-muted);margin-right:4px;">Examples:</span>
+    <button type="button" class="example-pill" data-example="greeting">Simple Greeting</button>
+    <button type="button" class="example-pill" data-example="data-query">Data Query</button>
+    <button type="button" class="example-pill" data-example="multi-turn">Multi-turn</button>
+    <button type="button" class="example-pill" data-example="agent-type">Agent Type Override</button>
+  </div>
+  <form id="form-execute" class="form-grid">
+    <div class="field">
+      <label>Agent ID <span class="req">*</span></label>
+      <input type="text" name="agentId" required />
+    </div>
+    <div class="field">
+      <label>Session ID <span class="req">*</span> <span class="gen-uuid" id="gen-uuid-exec">Generate UUID</span></label>
+      <input type="text" name="sessionId" required />
+    </div>
+    <div class="field full">
+      <label>Input <span class="req">*</span></label>
+      <textarea name="input" required rows="3" placeholder="Ask the agent something..."></textarea>
+    </div>
+    <details class="collapsible full">
+      <summary>Options</summary>
+      <div class="inner form-grid">
+        <div class="field"><label>Model</label><input type="text" name="model" /></div>
+        <div class="field">
+          <label>Agent Type</label>
+          <select name="agentType">
+            <option value="">(default)</option>
+            <option value="REACT">REACT</option>
+            <option value="REWOO">REWOO</option>
+            <option value="SINGLE_TOOL">SINGLE_TOOL</option>
+            <option value="TOOL_CALLING">TOOL_CALLING</option>
+            <option value="MCP">MCP</option>
+            <option value="UNKNOWN">UNKNOWN</option>
+          </select>
+        </div>
+        <div class="field full">
+          <label>AI Assistant Context (JSON)</label>
+          <textarea name="aiAssistantContext" rows="3" placeholder='{"dataSourceIds":["ds-1"]}'></textarea>
+        </div>
+      </div>
+    </details>
+    <div class="actions full">
+      <button type="submit" class="submit primary" id="exec-send-btn">Execute</button>
+      <button type="button" class="stop-btn" id="exec-stop-btn">Stop</button>
+    </div>
+  </form>
+</div>
+
+<!-- RESUME -->
+<div class="panel" data-group="agents" id="panel-resume">
+  <form id="form-resume" class="form-grid">
+    <div class="field">
+      <label>Agent ID <span class="req">*</span></label>
+      <input type="text" name="agentId" required />
+    </div>
+    <div class="field">
+      <label>Session ID <span class="req">*</span> <span class="gen-uuid" id="gen-uuid-resume">Generate UUID</span></label>
+      <input type="text" name="sessionId" required />
+    </div>
+    <div class="field">
+      <label>Source Request ID <span class="req">*</span></label>
+      <input type="text" name="sourceRequestId" required />
+    </div>
+    <div class="field full">
+      <label>Response <span class="req">*</span></label>
+      <textarea name="response" required rows="3" placeholder="User response for tool approval, etc."></textarea>
+    </div>
+    <details class="collapsible full">
+      <summary>Options</summary>
+      <div class="inner form-grid">
+        <div class="field">
+          <label>Agent Strategy</label>
+          <select name="agentStrategy">
+            <option value="">(default)</option>
+            <option value="REACT">REACT</option>
+            <option value="REWOO">REWOO</option>
+            <option value="SINGLE_TOOL">SINGLE_TOOL</option>
+            <option value="TOOL_CALLING">TOOL_CALLING</option>
+            <option value="MCP">MCP</option>
+            <option value="UNKNOWN">UNKNOWN</option>
+          </select>
+        </div>
+      </div>
+    </details>
+    <div class="actions full">
+      <button type="submit" class="submit primary" id="resume-send-btn">Resume</button>
+      <button type="button" class="stop-btn" id="resume-stop-btn">Stop</button>
+    </div>
+  </form>
+</div>
+
+</div><!-- /section-agents -->
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- AI SERVICES SECTION                                                 -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<div class="section" id="section-ai">
+
+<div class="tabs" data-tab-group="ai">
+  <button class="tab active" data-tab="ai-chat">Chat</button>
+  <button class="tab" data-tab="ai-stream">Chat Stream</button>
+  <button class="tab" data-tab="ai-generate">Generate</button>
+  <button class="tab" data-tab="ai-summarize">Summarize</button>
+  <button class="tab" data-tab="ai-sql">Text to SQL</button>
+  <button class="tab" data-tab="ai-beastmode">BeastMode</button>
+</div>
+
+<!-- CHAT -->
+<div class="panel active" data-group="ai" id="panel-ai-chat">
+  <form id="form-ai-chat" class="form-grid">
+    <div class="field full">
+      <label>Input <span class="req">*</span></label>
+      <textarea name="input" required rows="3" placeholder="Ask something..."></textarea>
+    </div>
+    <details class="collapsible full">
+      <summary>Options</summary>
+      <div class="inner form-grid">
+        <div class="field"><label>Model</label><input type="text" name="model" placeholder="e.g. gpt-4" /></div>
+        <div class="field"><label>Session ID</label><input type="text" name="sessionId" /></div>
+        <div class="field"><label>Temperature</label><input type="number" name="temperature" step="0.1" min="0" max="2" /></div>
+        <div class="field"><label>Max Tokens</label><input type="number" name="maxTokens" min="1" /></div>
+        <div class="field full"><label>System</label><textarea name="system" rows="2"></textarea></div>
+      </div>
+    </details>
+    <div class="actions full">
+      <button type="submit" class="submit primary">Send</button>
+    </div>
+  </form>
+</div>
+
+<!-- CHAT STREAM -->
+<div class="panel" data-group="ai" id="panel-ai-stream">
+  <form id="form-ai-stream" class="form-grid">
+    <div class="field full">
+      <label>Input <span class="req">*</span></label>
+      <textarea name="input" required rows="3" placeholder="Ask something (streamed)..."></textarea>
+    </div>
+    <details class="collapsible full">
+      <summary>Options</summary>
+      <div class="inner form-grid">
+        <div class="field"><label>Model</label><input type="text" name="model" placeholder="e.g. gpt-4" /></div>
+        <div class="field"><label>Session ID</label><input type="text" name="sessionId" /></div>
+        <div class="field"><label>Temperature</label><input type="number" name="temperature" step="0.1" min="0" max="2" /></div>
+        <div class="field"><label>Max Tokens</label><input type="number" name="maxTokens" min="1" /></div>
+        <div class="field full"><label>System</label><textarea name="system" rows="2"></textarea></div>
+      </div>
+    </details>
+    <div class="actions full">
+      <button type="submit" class="submit primary" id="stream-send-btn">Stream</button>
+      <button type="button" class="stop-btn" id="stream-stop-btn">Stop</button>
+    </div>
+  </form>
+</div>
+
+<!-- GENERATE -->
+<div class="panel" data-group="ai" id="panel-ai-generate">
+  <form id="form-ai-generate" class="form-grid">
+    <div class="field full">
+      <label>Input <span class="req">*</span></label>
+      <textarea name="input" required rows="3" placeholder="Generate text..."></textarea>
+    </div>
+    <details class="collapsible full">
+      <summary>Options</summary>
+      <div class="inner form-grid">
+        <div class="field"><label>Model</label><input type="text" name="model" /></div>
+        <div class="field"><label>Session ID</label><input type="text" name="sessionId" /></div>
+        <div class="field"><label>Temperature</label><input type="number" name="temperature" step="0.1" min="0" max="2" /></div>
+        <div class="field"><label>Max Tokens</label><input type="number" name="maxTokens" min="1" /></div>
+        <div class="field full"><label>System</label><textarea name="system" rows="2"></textarea></div>
+      </div>
+    </details>
+    <div class="actions full">
+      <button type="submit" class="submit primary">Generate</button>
+    </div>
+  </form>
+</div>
+
+<!-- SUMMARIZE -->
+<div class="panel" data-group="ai" id="panel-ai-summarize">
+  <form id="form-ai-summarize" class="form-grid">
+    <div class="field full">
+      <label>Input <span class="req">*</span></label>
+      <textarea name="input" required rows="5" placeholder="Text to summarize..."></textarea>
+    </div>
+    <div class="field">
+      <label>Output Style</label>
+      <select name="outputStyle">
+        <option value="">(default)</option>
+        <option value="bulleted">Bulleted</option>
+        <option value="numbered">Numbered</option>
+        <option value="paragraph">Paragraph</option>
+      </select>
+    </div>
+    <details class="collapsible full">
+      <summary>Options</summary>
+      <div class="inner form-grid">
+        <div class="field"><label>Model</label><input type="text" name="model" /></div>
+        <div class="field"><label>Session ID</label><input type="text" name="sessionId" /></div>
+        <div class="field"><label>Temperature</label><input type="number" name="temperature" step="0.1" min="0" max="2" /></div>
+        <div class="field"><label>Max Tokens</label><input type="number" name="maxTokens" min="1" /></div>
+        <div class="field full"><label>System</label><textarea name="system" rows="2"></textarea></div>
+      </div>
+    </details>
+    <div class="actions full">
+      <button type="submit" class="submit primary">Summarize</button>
+    </div>
+  </form>
+</div>
+
+<!-- TEXT TO SQL -->
+<div class="panel" data-group="ai" id="panel-ai-sql">
+  <form id="form-ai-sql" class="form-grid">
+    <div class="field full">
+      <label>Input <span class="req">*</span></label>
+      <textarea name="input" required rows="3" placeholder="Describe the query..."></textarea>
+    </div>
+    <div class="field">
+      <label>SQL Request Option</label>
+      <select name="sqlRequestOption">
+        <option value="">(default)</option>
+        <option value="QUERY_ONLY">Query Only</option>
+        <option value="QUERY_AND_RESULTS">Query + Results</option>
+      </select>
+    </div>
+    <details class="collapsible full">
+      <summary>Options</summary>
+      <div class="inner form-grid">
+        <div class="field"><label>Model</label><input type="text" name="model" /></div>
+        <div class="field"><label>Session ID</label><input type="text" name="sessionId" /></div>
+        <div class="field"><label>Temperature</label><input type="number" name="temperature" step="0.1" min="0" max="2" /></div>
+        <div class="field"><label>Max Tokens</label><input type="number" name="maxTokens" min="1" /></div>
+        <div class="field full"><label>System</label><textarea name="system" rows="2"></textarea></div>
+        <div class="field full">
+          <label>Data Source Schemas (JSON)</label>
+          <textarea name="dataSourceSchemas" rows="3" placeholder='[{"dataSourceId":"ds-1","columns":[{"name":"id","type":"LONG"}]}]'></textarea>
+        </div>
+      </div>
+    </details>
+    <div class="actions full">
+      <button type="submit" class="submit primary">Generate SQL</button>
+    </div>
+  </form>
+</div>
+
+<!-- BEASTMODE -->
+<div class="panel" data-group="ai" id="panel-ai-beastmode">
+  <form id="form-ai-beastmode" class="form-grid">
+    <div class="field full">
+      <label>Input <span class="req">*</span></label>
+      <textarea name="input" required rows="3" placeholder="Describe the calculation..."></textarea>
+    </div>
+    <details class="collapsible full">
+      <summary>Options</summary>
+      <div class="inner form-grid">
+        <div class="field"><label>Model</label><input type="text" name="model" /></div>
+        <div class="field"><label>Session ID</label><input type="text" name="sessionId" /></div>
+        <div class="field"><label>Temperature</label><input type="number" name="temperature" step="0.1" min="0" max="2" /></div>
+        <div class="field"><label>Max Tokens</label><input type="number" name="maxTokens" min="1" /></div>
+        <div class="field full"><label>System</label><textarea name="system" rows="2"></textarea></div>
+        <div class="field full">
+          <label>Data Source Schemas (JSON)</label>
+          <textarea name="dataSourceSchemas" rows="3" placeholder='[{"dataSourceId":"ds-1","columns":[{"name":"revenue","type":"DOUBLE"}]}]'></textarea>
+        </div>
+      </div>
+    </details>
+    <div class="actions full">
+      <button type="submit" class="submit primary">Generate BeastMode</button>
+    </div>
+  </form>
+</div>
+
+</div><!-- /section-ai -->
+
+<!-- Shared response area -->
+<div class="response-area" id="response-area" style="display:none;">
+  <div class="response-header">
+    <span class="status-badge" id="status-badge"></span>
+    <span class="elapsed" id="elapsed"></span>
+    <button class="copy-btn" id="copy-btn">Copy</button>
+  </div>
+  <pre class="response" id="response-body"></pre>
+</div>
+
+<script>
+(function() {
+  const tokenInput = document.getElementById('token');
+  const responseArea = document.getElementById('response-area');
+  const statusBadge = document.getElementById('status-badge');
+  const elapsedEl = document.getElementById('elapsed');
+  const responseBody = document.getElementById('response-body');
+  const copyBtn = document.getElementById('copy-btn');
+
+  let lastResponseText = '';
+  let lastAgentId = '';
+  let streamController = null;
+
+  // Token persistence
+  tokenInput.value = localStorage.getItem('huck_token') || '';
+  tokenInput.addEventListener('input', () => localStorage.setItem('huck_token', tokenInput.value));
+
+  // ── Section nav ────────────────────────────────────────────────────
+  document.querySelectorAll('.section-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.section-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById('section-' + btn.dataset.section).classList.add('active');
+    });
+  });
+
+  // ── Tab nav (scoped per tab-group) ────────────────────────────────
+  document.querySelectorAll('.tabs').forEach(tabBar => {
+    const group = tabBar.dataset.tabGroup;
+    tabBar.querySelectorAll('.tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        tabBar.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll(`.panel[data-group="${group}"]`).forEach(p => p.classList.remove('active'));
+        tab.classList.add('active');
+        document.getElementById('panel-' + tab.dataset.tab).classList.add('active');
+      });
+    });
+  });
+
+  // Copy button
+  copyBtn.addEventListener('click', () => {
+    navigator.clipboard.writeText(lastResponseText).then(() => {
+      copyBtn.textContent = 'Copied!';
+      setTimeout(() => copyBtn.textContent = 'Copy', 1500);
+    });
+  });
+
+  // ── Helpers ────────────────────────────────────────────────────────
+  function splitCSV(val) {
+    if (!val || !val.trim()) return undefined;
+    return val.split(',').map(s => s.trim()).filter(Boolean);
+  }
+
+  function splitCSVNumbers(val) {
+    const arr = splitCSV(val);
+    return arr ? arr.map(Number) : undefined;
+  }
+
+  function buildContext(prefix, form) {
+    const ds = splitCSV(form.get(prefix + '_dataSourceIds'));
+    const cards = splitCSV(form.get(prefix + '_cardIds'));
+    const pages = splitCSVNumbers(form.get(prefix + '_pageIds'));
+    const ign = splitCSV(form.get(prefix + '_ignorableDataSourceIds'));
+    if (!ds && !cards && !pages && !ign) return undefined;
+    const ctx = {};
+    if (ds) ctx.dataSourceIds = ds;
+    if (cards) ctx.cardIds = cards;
+    if (pages) ctx.pageIds = pages;
+    if (ign) ctx.ignorableDataSourceIds = ign;
+    return ctx;
+  }
+
+  function syntaxHighlight(json) {
+    return json.replace(/("(?:\\.|[^"\\])*")\s*:/g, '<span class="json-key">$1</span>:')
+               .replace(/:\s*("(?:\\.|[^"\\])*")/g, ': <span class="json-str">$1</span>')
+               .replace(/:\s*(\d+\.?\d*)/g, ': <span class="json-num">$1</span>')
+               .replace(/:\s*(true|false)/g, ': <span class="json-bool">$1</span>')
+               .replace(/:\s*(null)/g, ': <span class="json-null">$1</span>');
+  }
+
+  function escapeHtml(s) {
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  function fillAgentId(id) {
+    lastAgentId = id;
+    document.querySelectorAll('input[name="agentId"]').forEach(el => {
+      if (!el.value) el.value = id;
+    });
+  }
+
+  function authHeaders() {
+    const headers = { 'Content-Type': 'application/json' };
+    const token = tokenInput.value.trim();
+    if (token) headers['x-domo-developer-token'] = token;
+    return headers;
+  }
+
+  function showStatus(status) {
+    statusBadge.textContent = status || 'ERR';
+    if (status >= 200 && status < 300) statusBadge.className = 'status-badge s2xx';
+    else if (status >= 400 && status < 500) statusBadge.className = 'status-badge s4xx';
+    else if (status >= 500) statusBadge.className = 'status-badge s5xx';
+    else statusBadge.className = 'status-badge sErr';
+  }
+
+  // ── Standard request ──────────────────────────────────────────────
+  async function send(method, path, body) {
+    responseArea.style.display = 'block';
+    statusBadge.textContent = '...';
+    statusBadge.className = 'status-badge';
+    elapsedEl.textContent = '';
+    responseBody.textContent = 'Sending...';
+
+    const start = performance.now();
+    let status, text;
+    try {
+      const opts = { method, headers: authHeaders() };
+      if (body !== undefined) opts.body = JSON.stringify(body);
+      const res = await fetch(path, opts);
+      status = res.status;
+      text = await res.text();
+    } catch (err) {
+      status = 0;
+      text = err.message;
+    }
+    const elapsed = Math.round(performance.now() - start);
+
+    elapsedEl.textContent = elapsed + 'ms';
+    showStatus(status);
+
+    let display = text;
+    try {
+      const parsed = JSON.parse(text);
+      display = JSON.stringify(parsed, null, 2);
+      if (parsed.id) fillAgentId(parsed.id);
+      if (Array.isArray(parsed) && parsed.length && parsed[0].id) fillAgentId(parsed[0].id);
+    } catch {}
+
+    lastResponseText = display;
+    responseBody.innerHTML = syntaxHighlight(escapeHtml(display));
+  }
+
+  // ── SSE stream request ────────────────────────────────────────────
+  async function sendStream(path, body, sendBtnId, stopBtnId) {
+    sendBtnId = sendBtnId || 'stream-send-btn';
+    stopBtnId = stopBtnId || 'stream-stop-btn';
+    const sendBtn = document.getElementById(sendBtnId);
+    const stopBtn = document.getElementById(stopBtnId);
+
+    responseArea.style.display = 'block';
+    statusBadge.textContent = 'SSE';
+    statusBadge.className = 'status-badge streaming';
+    elapsedEl.textContent = '';
+    responseBody.textContent = '';
+    lastResponseText = '';
+
+    sendBtn.disabled = true;
+    stopBtn.style.display = 'inline-block';
+
+    const controller = new AbortController();
+    streamController = controller;
+
+    const start = performance.now();
+    try {
+      const res = await fetch(path, {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+
+      if (!res.ok) {
+        const text = await res.text();
+        showStatus(res.status);
+        elapsedEl.textContent = Math.round(performance.now() - start) + 'ms';
+        lastResponseText = text;
+        responseBody.textContent = text;
+        return;
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const chunk = decoder.decode(value, { stream: true });
+        lastResponseText += chunk;
+        responseBody.textContent += chunk;
+        responseBody.scrollTop = responseBody.scrollHeight;
+      }
+
+      showStatus(200);
+    } catch (err) {
+      if (err.name === 'AbortError') {
+        statusBadge.textContent = 'STOPPED';
+        statusBadge.className = 'status-badge sErr';
+      } else {
+        showStatus(0);
+        responseBody.textContent += '\n\n[Error] ' + err.message;
+        lastResponseText += '\n\n[Error] ' + err.message;
+      }
+    } finally {
+      elapsedEl.textContent = Math.round(performance.now() - start) + 'ms';
+      sendBtn.disabled = false;
+      stopBtn.style.display = 'none';
+      streamController = null;
+    }
+  }
+
+  // Stop stream buttons
+  document.querySelectorAll('.stop-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (streamController) streamController.abort();
+    });
+  });
+
+  // ── AI Services: build common body fields from form ───────────────
+  function aiBody(form) {
+    const body = { input: form.get('input') };
+    const model = form.get('model');
+    if (model) body.model = model;
+    const sessionId = form.get('sessionId');
+    if (sessionId) body.sessionId = sessionId;
+    const system = form.get('system');
+    if (system) body.system = system;
+    const temp = form.get('temperature');
+    if (temp !== '' && temp !== null) { const n = Number(temp); if (!isNaN(n)) body.temperature = n; }
+    const maxT = form.get('maxTokens');
+    if (maxT !== '' && maxT !== null) { const n = Number(maxT); if (!isNaN(n)) body.maxTokens = n; }
+    return body;
+  }
+
+  // ── Agent form handlers ───────────────────────────────────────────
+  document.getElementById('form-create').addEventListener('submit', e => {
+    e.preventDefault();
+    const f = new FormData(e.target);
+    const body = { name: f.get('name'), prompt: f.get('prompt') };
+    const sys = f.get('systemMessage');
+    if (sys) body.systemMessage = sys;
+    const tk = splitCSV(f.get('toolkitIds'));
+    if (tk) body.toolkitIds = tk;
+    const ctx = buildContext('ctx', f);
+    if (ctx) body.context = ctx;
+    send('POST', '/agents', body);
+  });
+
+  document.getElementById('form-get').addEventListener('submit', e => {
+    e.preventDefault();
+    const f = new FormData(e.target);
+    const id = f.get('agentId');
+    const inc = f.get('include');
+    let path = '/agents/' + encodeURIComponent(id);
+    if (inc) path += '?include=' + inc;
+    send('GET', path);
+  });
+
+  document.getElementById('form-update').addEventListener('submit', e => {
+    e.preventDefault();
+    const f = new FormData(e.target);
+    const id = f.get('agentId');
+    const body = {};
+    const name = f.get('name');
+    if (name) body.name = name;
+    const prompt = f.get('prompt');
+    if (prompt) body.prompt = prompt;
+    const sys = f.get('systemMessage');
+    if (sys) body.systemMessage = sys;
+    const tk = splitCSV(f.get('toolkitIds'));
+    if (tk) body.toolkitIds = tk;
+    const ctx = buildContext('ctx', f);
+    if (ctx) body.context = ctx;
+    send('PUT', '/agents/' + encodeURIComponent(id), body);
+  });
+
+  document.getElementById('form-delete').addEventListener('submit', e => {
+    e.preventDefault();
+    const f = new FormData(e.target);
+    send('DELETE', '/agents/' + encodeURIComponent(f.get('agentId')));
+  });
+
+  document.getElementById('form-search').addEventListener('submit', e => {
+    e.preventDefault();
+    const f = new FormData(e.target);
+    const body = {};
+    const filters = f.get('filters');
+    if (filters) {
+      try { body.filters = JSON.parse(filters); }
+      catch { alert('Invalid JSON in filters'); return; }
+    }
+    const sort = f.get('sort');
+    if (sort) body.sort = sort;
+    const order = f.get('order');
+    if (order) body.order = order;
+    const limit = f.get('limit');
+    if (limit) body.limit = Number(limit);
+    const offset = f.get('offset');
+    if (offset !== '' && offset !== null) {
+      const n = Number(offset);
+      if (!isNaN(n)) body.offset = n;
+    }
+    send('POST', '/agents/search', body);
+  });
+
+  document.getElementById('form-context').addEventListener('submit', e => {
+    e.preventDefault();
+    const f = new FormData(e.target);
+    const id = f.get('agentId');
+    const body = {};
+    const add = buildContext('add', f);
+    if (add) body.add = add;
+    const rm = buildContext('rm', f);
+    if (rm) body.remove = rm;
+    send('PATCH', '/agents/' + encodeURIComponent(id) + '/context', body);
+  });
+
+  // ── AI Services form handlers ─────────────────────────────────────
+  document.getElementById('form-ai-chat').addEventListener('submit', e => {
+    e.preventDefault();
+    send('POST', '/ai-services/chat', aiBody(new FormData(e.target)));
+  });
+
+  document.getElementById('form-ai-stream').addEventListener('submit', e => {
+    e.preventDefault();
+    sendStream('/ai-services/chat/stream', aiBody(new FormData(e.target)));
+  });
+
+  document.getElementById('form-ai-generate').addEventListener('submit', e => {
+    e.preventDefault();
+    send('POST', '/ai-services/generate', aiBody(new FormData(e.target)));
+  });
+
+  document.getElementById('form-ai-summarize').addEventListener('submit', e => {
+    e.preventDefault();
+    const f = new FormData(e.target);
+    const body = aiBody(f);
+    const style = f.get('outputStyle');
+    if (style) body.outputStyle = style;
+    send('POST', '/ai-services/summarize', body);
+  });
+
+  document.getElementById('form-ai-sql').addEventListener('submit', e => {
+    e.preventDefault();
+    const f = new FormData(e.target);
+    const body = aiBody(f);
+    const opt = f.get('sqlRequestOption');
+    if (opt) body.sqlRequestOption = opt;
+    const schemas = f.get('dataSourceSchemas');
+    if (schemas) {
+      try { body.dataSourceSchemas = JSON.parse(schemas); }
+      catch { alert('Invalid JSON in dataSourceSchemas'); return; }
+    }
+    send('POST', '/ai-services/sql', body);
+  });
+
+  document.getElementById('form-ai-beastmode').addEventListener('submit', e => {
+    e.preventDefault();
+    const f = new FormData(e.target);
+    const body = aiBody(f);
+    const schemas = f.get('dataSourceSchemas');
+    if (schemas) {
+      try { body.dataSourceSchemas = JSON.parse(schemas); }
+      catch { alert('Invalid JSON in dataSourceSchemas'); return; }
+    }
+    send('POST', '/ai-services/beastmode', body);
+  });
+
+  // ── Agent Execute (Stream) ──────────────────────────────────────
+  document.getElementById('gen-uuid-exec').addEventListener('click', () => {
+    document.querySelector('#form-execute input[name="sessionId"]').value = crypto.randomUUID();
+  });
+
+  document.getElementById('gen-uuid-resume').addEventListener('click', () => {
+    document.querySelector('#form-resume input[name="sessionId"]').value = crypto.randomUUID();
+  });
+
+  document.getElementById('form-execute').addEventListener('submit', e => {
+    e.preventDefault();
+    const f = new FormData(e.target);
+    const agentId = f.get('agentId');
+    const body = { input: f.get('input'), sessionId: f.get('sessionId') };
+    const model = f.get('model');
+    if (model) body.model = model;
+    const agentType = f.get('agentType');
+    if (agentType) body.agentType = agentType;
+    const ctxRaw = f.get('aiAssistantContext');
+    if (ctxRaw) {
+      try { body.aiAssistantContext = JSON.parse(ctxRaw); }
+      catch { alert('Invalid JSON in AI Assistant Context'); return; }
+    }
+    sendStream('/agents/' + encodeURIComponent(agentId) + '/execute/streaming', body, 'exec-send-btn', 'exec-stop-btn');
+  });
+
+  // ── Agent Resume ────────────────────────────────────────────────
+  document.getElementById('form-resume').addEventListener('submit', e => {
+    e.preventDefault();
+    const f = new FormData(e.target);
+    const agentId = f.get('agentId');
+    let response = f.get('response');
+    try { response = JSON.parse(response); } catch {}
+    const body = {
+      sessionId: f.get('sessionId'),
+      sourceRequestId: f.get('sourceRequestId'),
+      response,
+    };
+    const agentStrategy = f.get('agentStrategy');
+    if (agentStrategy) body.agentStrategy = agentStrategy;
+    sendStream('/agents/' + encodeURIComponent(agentId) + '/resume/streaming', body, 'resume-send-btn', 'resume-stop-btn');
+  });
+
+  // ── Example pill handlers ───────────────────────────────────────
+  const execForm = document.getElementById('form-execute');
+  document.querySelectorAll('.example-pill').forEach(pill => {
+    pill.addEventListener('click', () => {
+      const ex = pill.dataset.example;
+      const inputEl = execForm.querySelector('textarea[name="input"]');
+      const sessionEl = execForm.querySelector('input[name="sessionId"]');
+      const agentTypeEl = execForm.querySelector('select[name="agentType"]');
+      const ctxEl = execForm.querySelector('textarea[name="aiAssistantContext"]');
+
+      // Reset optional fields
+      agentTypeEl.value = '';
+      ctxEl.value = '';
+
+      switch (ex) {
+        case 'greeting':
+          inputEl.value = 'Hello! What can you help me with?';
+          sessionEl.value = crypto.randomUUID();
+          break;
+        case 'data-query':
+          inputEl.value = 'What are the top 5 revenue-generating products?';
+          sessionEl.value = crypto.randomUUID();
+          ctxEl.value = JSON.stringify({ dataSourceIds: ['YOUR_DATASOURCE_ID'] }, null, 2);
+          execForm.querySelector('details').open = true;
+          break;
+        case 'multi-turn':
+          inputEl.value = 'Can you break that down by region?';
+          // Leave sessionId as-is for multi-turn reuse
+          break;
+        case 'agent-type':
+          inputEl.value = 'Run the monthly sales report workflow';
+          sessionEl.value = crypto.randomUUID();
+          agentTypeEl.value = 'REACT';
+          execForm.querySelector('details').open = true;
+          break;
+      }
+    });
+  });
+})();
+</script>
+</body>
+</html>
