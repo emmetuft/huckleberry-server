@@ -135,13 +135,32 @@ export class DomoProxyService {
   }
 
   private buildUrl(path: string, query?: Record<string, string>): string {
-    const url = new URL(path, this.baseUrl);
+    const base = new URL(this.baseUrl);
+
+    let normalizedPath = path || '';
+
+    // Reject protocol-relative paths that could change the target host
+    if (normalizedPath.startsWith('//')) {
+      throw new DomoApiError(400, 'Invalid API path');
+    }
+
+    if (!normalizedPath.startsWith('/')) {
+      normalizedPath = '/' + normalizedPath;
+    }
+
+    // Reject path traversal attempts
+    if (normalizedPath.includes('..')) {
+      throw new DomoApiError(400, 'Invalid API path');
+    }
+
+    base.pathname = normalizedPath;
+
     if (query) {
       for (const [key, value] of Object.entries(query)) {
-        url.searchParams.set(key, value);
+        base.searchParams.set(key, value);
       }
     }
-    return url.toString();
+    return base.toString();
   }
 
   private buildHeaders(extra?: Record<string, string>): Record<string, string> {
