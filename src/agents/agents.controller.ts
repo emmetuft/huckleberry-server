@@ -23,16 +23,29 @@ import { AgentContextUpdateDto } from './dto/agent-context-update.dto.js';
 import { ExecuteAgentDto } from './dto/execute-agent.dto.js';
 import { ResumeAgentDto } from './dto/resume-agent.dto.js';
 import { DomoAuthGuard } from '../common/guards/domo-auth.guard.js';
+import { AgentIdGuard } from '../common/guards/agent-id.guard.js';
 import { AgentInclude } from '../common/types/domo-common.types.js';
 
 @Controller('agents')
-@UseGuards(DomoAuthGuard)
+@UseGuards(DomoAuthGuard, AgentIdGuard)
 export class AgentsController {
   constructor(private readonly agentsService: AgentsService) {}
+
+  @Get()
+  getAvailableAgents() {
+    return this.agentsService.getAvailableAgents();
+  }
 
   @Post()
   create(@Body() dto: CreateAgentDto) {
     return this.agentsService.create(dto);
+  }
+
+  @Post('refresh')
+  @HttpCode(HttpStatus.OK)
+  async refreshAgents() {
+    await this.agentsService.refreshAgents();
+    return { count: this.agentsService.getAvailableAgents().length };
   }
 
   @Get(':agentId')

@@ -70,10 +70,20 @@ describe('AiServicesController', () => {
       getReader: jest.fn(),
       [Symbol.asyncIterator]: jest.fn(),
     };
-    const mockResponse = { body: mockBody } as unknown as Response;
+    const mockHeaders = new Headers({
+      'content-type': 'text/event-stream',
+      'cache-control': 'no-cache',
+      connection: 'keep-alive',
+    });
+    const mockResponse = {
+      body: mockBody,
+      status: 200,
+      headers: mockHeaders,
+    } as unknown as Response;
     service.chatStream.mockResolvedValue(mockResponse);
 
     const res = {
+      status: jest.fn().mockReturnThis(),
       setHeader: jest.fn(),
     } as unknown as ExpressResponse;
 
@@ -86,12 +96,13 @@ describe('AiServicesController', () => {
     await controller.chatStream(dto as any, res);
 
     expect(service.chatStream).toHaveBeenCalledWith(dto);
+    expect(res.status).toHaveBeenCalledWith(200);
     expect(res.setHeader).toHaveBeenCalledWith(
-      'Content-Type',
+      'content-type',
       'text/event-stream',
     );
-    expect(res.setHeader).toHaveBeenCalledWith('Cache-Control', 'no-cache');
-    expect(res.setHeader).toHaveBeenCalledWith('Connection', 'keep-alive');
+    expect(res.setHeader).toHaveBeenCalledWith('cache-control', 'no-cache');
+    expect(res.setHeader).toHaveBeenCalledWith('connection', 'keep-alive');
     expect(fromWebSpy).toHaveBeenCalledWith(mockBody);
     expect(mockReadable.pipe).toHaveBeenCalledWith(res);
 

@@ -167,7 +167,7 @@
   <form id="form-get" class="form-grid">
     <div class="field">
       <label>Agent ID <span class="req">*</span></label>
-      <input type="text" name="agentId" required />
+      <select name="agentId" required class="agent-select"><option value="">Loading agents...</option></select>
     </div>
     <div class="field">
       <label>Include</label>
@@ -189,7 +189,7 @@
   <form id="form-update" class="form-grid">
     <div class="field">
       <label>Agent ID <span class="req">*</span></label>
-      <input type="text" name="agentId" required />
+      <select name="agentId" required class="agent-select"><option value="">Loading agents...</option></select>
     </div>
     <div class="field">
       <label>Name</label>
@@ -227,7 +227,7 @@
   <form id="form-delete" class="form-grid">
     <div class="field">
       <label>Agent ID <span class="req">*</span></label>
-      <input type="text" name="agentId" required />
+      <select name="agentId" required class="agent-select"><option value="">Loading agents...</option></select>
     </div>
     <div class="actions full">
       <button type="submit" class="submit danger">Delete Agent</button>
@@ -273,7 +273,7 @@
   <form id="form-context" class="form-grid">
     <div class="field full">
       <label>Agent ID <span class="req">*</span></label>
-      <input type="text" name="agentId" required />
+      <select name="agentId" required class="agent-select"><option value="">Loading agents...</option></select>
     </div>
     <div class="context-section full">
       <h4>Add</h4>
@@ -311,7 +311,7 @@
   <form id="form-execute" class="form-grid">
     <div class="field">
       <label>Agent ID <span class="req">*</span></label>
-      <input type="text" name="agentId" required />
+      <select name="agentId" required class="agent-select"><option value="">Loading agents...</option></select>
     </div>
     <div class="field">
       <label>Session ID <span class="req">*</span> <span class="gen-uuid" id="gen-uuid-exec">Generate UUID</span></label>
@@ -355,7 +355,7 @@
   <form id="form-resume" class="form-grid">
     <div class="field">
       <label>Agent ID <span class="req">*</span></label>
-      <input type="text" name="agentId" required />
+      <select name="agentId" required class="agent-select"><option value="">Loading agents...</option></select>
     </div>
     <div class="field">
       <label>Session ID <span class="req">*</span> <span class="gen-uuid" id="gen-uuid-resume">Generate UUID</span></label>
@@ -672,9 +672,29 @@
 
   function fillAgentId(id) {
     lastAgentId = id;
-    document.querySelectorAll('input[name="agentId"]').forEach(el => {
+    document.querySelectorAll('select[name="agentId"]').forEach(el => {
       if (!el.value) el.value = id;
     });
+  }
+
+  async function loadAgents() {
+    const selects = document.querySelectorAll('select.agent-select');
+    try {
+      const res = await fetch('/agents', { headers: authHeaders() });
+      if (!res.ok) throw new Error(res.statusText);
+      const agents = await res.json();
+      const options = '<option value="">-- Select Agent --</option>' +
+        agents.map(a => `<option value="${a.id}">${a.name} (${a.id.slice(0, 8)}...)</option>`).join('');
+      selects.forEach(sel => {
+        const prev = sel.value;
+        sel.innerHTML = options;
+        if (prev) sel.value = prev;
+      });
+    } catch {
+      selects.forEach(sel => {
+        sel.innerHTML = '<option value="">Failed to load agents</option>';
+      });
+    }
   }
 
   function authHeaders() {
@@ -727,6 +747,7 @@
 
     lastResponseText = display;
     responseBody.innerHTML = syntaxHighlight(escapeHtml(display));
+    return status;
   }
 
   // ── SSE stream request ────────────────────────────────────────────
@@ -821,7 +842,7 @@
   }
 
   // ── Agent form handlers ───────────────────────────────────────────
-  document.getElementById('form-create').addEventListener('submit', e => {
+  document.getElementById('form-create').addEventListener('submit', async e => {
     e.preventDefault();
     const f = new FormData(e.target);
     const body = { name: f.get('name'), prompt: f.get('prompt') };
@@ -831,7 +852,11 @@
     if (tk) body.toolkitIds = tk;
     const ctx = buildContext('ctx', f);
     if (ctx) body.context = ctx;
-    send('POST', '/agents', body);
+    const status = await send('POST', '/agents', body);
+    if (status >= 200 && status < 300) {
+      await fetch('/agents/refresh', { method: 'POST', headers: authHeaders() });
+      loadAgents();
+    }
   });
 
   document.getElementById('form-get').addEventListener('submit', e => {
@@ -862,10 +887,14 @@
     send('PUT', '/agents/' + encodeURIComponent(id), body);
   });
 
-  document.getElementById('form-delete').addEventListener('submit', e => {
+  document.getElementById('form-delete').addEventListener('submit', async e => {
     e.preventDefault();
     const f = new FormData(e.target);
-    send('DELETE', '/agents/' + encodeURIComponent(f.get('agentId')));
+    const status = await send('DELETE', '/agents/' + encodeURIComponent(f.get('agentId')));
+    if (status >= 200 && status < 300) {
+      await fetch('/agents/refresh', { method: 'POST', headers: authHeaders() });
+      loadAgents();
+    }
   });
 
   document.getElementById('form-search').addEventListener('submit', e => {
@@ -1035,6 +1064,9 @@
       }
     });
   });
+
+  // Load agent dropdown on startup
+  loadAgents();
 })();
 </script>
 </body>

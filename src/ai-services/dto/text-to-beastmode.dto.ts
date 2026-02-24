@@ -4,29 +4,13 @@ import {
   IsNumber,
   IsObject,
   IsArray,
-  IsEnum,
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import { ReasoningEffort } from '../../common/types/domo-ai-services.types.js';
-
-class ParameterizedPromptTemplateDto {
-  @IsString()
-  template!: string;
-
-  @IsObject()
-  @IsOptional()
-  parameters?: Record<string, string>;
-}
-
-class ReasoningConfigDto {
-  @IsOptional()
-  enabled?: boolean;
-
-  @IsEnum(ReasoningEffort)
-  @IsOptional()
-  effort?: ReasoningEffort;
-}
+import {
+  ParameterizedPromptTemplateDto,
+  ReasoningConfigDto,
+} from './common-ai.dto.js';
 
 class AISchemaColumnDto {
   @IsString()

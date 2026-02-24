@@ -81,6 +81,7 @@ describe('DomoProxyService', () => {
       ok: false,
       status: 403,
       statusText: 'Forbidden',
+      headers: new Headers({ 'content-type': 'text/plain' }),
       text: () => Promise.resolve('Access denied'),
     } as Response);
 

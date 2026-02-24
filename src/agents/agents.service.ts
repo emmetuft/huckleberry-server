@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { DomoProxyService } from '../domo-proxy/domo-proxy.service.js';
 import {
   CustomAgent,
@@ -17,8 +17,41 @@ import { AgentInclude } from '../common/types/domo-common.types.js';
 const AGENTS_BASE = '/api/ai/v1/agents';
 
 @Injectable()
-export class AgentsService {
+export class AgentsService implements OnModuleInit {
+  private readonly logger = new Logger(AgentsService.name);
+  private agentCache = new Map<string, CustomAgent>();
+
   constructor(private readonly domo: DomoProxyService) {}
+
+  async onModuleInit(): Promise<void> {
+    try {
+      await this.refreshAgents();
+    } catch (error) {
+      this.logger.error('Failed to load agent registry on startup', error);
+    }
+  }
+
+  async refreshAgents(): Promise<void> {
+    const response = await this.search({ limit: 1000, offset: 0 });
+    const newCache = new Map<string, CustomAgent>();
+    // Handle both array response and { agents: [...] } wrapper
+    const agents: CustomAgent[] = Array.isArray(response)
+      ? (response as unknown as CustomAgent[])
+      : (response.agents ?? []);
+    for (const agent of agents) {
+      newCache.set(agent.id, agent);
+    }
+    this.agentCache = newCache;
+    this.logger.log(`Agent registry loaded: ${this.agentCache.size} agents`);
+  }
+
+  getAvailableAgents(): CustomAgent[] {
+    return Array.from(this.agentCache.values());
+  }
+
+  isValidAgent(agentId: string): boolean {
+    return this.agentCache.has(agentId);
+  }
 
   async create(dto: CreateCustomAgentRequest): Promise<CustomAgent> {
     return this.domo.post<CustomAgent>(AGENTS_BASE, dto);

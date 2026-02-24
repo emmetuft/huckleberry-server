@@ -10,27 +10,12 @@ import {
 import { Type } from 'class-transformer';
 import {
   OutputStyle,
-  ReasoningEffort,
   SeparatorType,
 } from '../../common/types/domo-ai-services.types.js';
-
-class ParameterizedPromptTemplateDto {
-  @IsString()
-  template!: string;
-
-  @IsObject()
-  @IsOptional()
-  parameters?: Record<string, string>;
-}
-
-class ReasoningConfigDto {
-  @IsOptional()
-  enabled?: boolean;
-
-  @IsEnum(ReasoningEffort)
-  @IsOptional()
-  effort?: ReasoningEffort;
-}
+import {
+  ParameterizedPromptTemplateDto,
+  ReasoningConfigDto,
+} from './common-ai.dto.js';
 
 class SizeBoundaryDto {
   @IsNumber()

@@ -80,7 +80,13 @@ export class DomoProxyService {
 
     if (this.isDev) {
       this.logger.debug(`${method} ${url}`);
-      this.logger.debug(`Headers: ${JSON.stringify(headers)}`);
+      const safeHeaders = { ...headers };
+      for (const key of Object.keys(safeHeaders)) {
+        if (/token|authorization|secret/i.test(key)) {
+          safeHeaders[key] = '[REDACTED]';
+        }
+      }
+      this.logger.debug(`Headers: ${JSON.stringify(safeHeaders)}`);
     }
 
     const response = await fetch(url, {
