@@ -58,6 +58,28 @@ describe('AgentsController', () => {
     expect(controller).toBeDefined();
   });
 
+  it('should return available agents', () => {
+    const agents: CustomAgent[] = [
+      { id: '1', name: 'A', prompt: 'a' },
+      { id: '2', name: 'B', prompt: 'b' },
+    ];
+    service.getAvailableAgents.mockReturnValue(agents);
+
+    expect(controller.getAvailableAgents()).toEqual(agents);
+    expect(service.getAvailableAgents).toHaveBeenCalled();
+  });
+
+  it('should refresh agents and return count', async () => {
+    service.refreshAgents.mockResolvedValue(undefined);
+    service.getAvailableAgents.mockReturnValue([
+      { id: '1', name: 'A', prompt: 'a' },
+    ] as CustomAgent[]);
+
+    const result = await controller.refreshAgents();
+    expect(service.refreshAgents).toHaveBeenCalled();
+    expect(result).toEqual({ count: 1 });
+  });
+
   it('should create an agent', async () => {
     const dto = { name: 'Test', prompt: 'Do stuff' };
     const expected: CustomAgent = {
@@ -177,6 +199,32 @@ describe('AgentsController', () => {
       fromWebSpy.mockRestore();
     });
 
+    it('should throw DomoApiError when response body is null', async () => {
+      const dto = { input: 'hello', sessionId: 'sess-1' } as ExecuteAgentDto;
+      const mockResponse = {
+        ok: true,
+        body: null,
+        status: 200,
+        headers: new Headers(),
+      } as unknown as Response;
+      service.executeStream.mockResolvedValue(mockResponse);
+
+      const res = {
+        status: jest.fn().mockReturnThis(),
+        setHeader: jest.fn(),
+      } as unknown as ExpressResponse;
+
+      await expect(
+        controller.executeStream('agent-1', dto, res),
+      ).rejects.toThrow(DomoApiError);
+      await expect(
+        controller.executeStream('agent-1', dto, res),
+      ).rejects.toMatchObject({
+        statusCode: 502,
+        message: 'Upstream returned no response body',
+      });
+    });
+
     it('should throw DomoApiError on non-2xx response', async () => {
       const dto = {
         input: 'hello',
@@ -252,6 +300,36 @@ describe('AgentsController', () => {
       expect(mockReadable.pipe).toHaveBeenCalledWith(res);
 
       fromWebSpy.mockRestore();
+    });
+
+    it('should throw DomoApiError when response body is null', async () => {
+      const dto = {
+        sessionId: 'sess-1',
+        sourceRequestId: 'req-1',
+        response: 'continue',
+      } as ResumeAgentDto;
+      const mockResponse = {
+        ok: true,
+        body: null,
+        status: 200,
+        headers: new Headers(),
+      } as unknown as Response;
+      service.resumeStream.mockResolvedValue(mockResponse);
+
+      const res = {
+        status: jest.fn().mockReturnThis(),
+        setHeader: jest.fn(),
+      } as unknown as ExpressResponse;
+
+      await expect(
+        controller.resumeStream('agent-1', dto, res),
+      ).rejects.toThrow(DomoApiError);
+      await expect(
+        controller.resumeStream('agent-1', dto, res),
+      ).rejects.toMatchObject({
+        statusCode: 502,
+        message: 'Upstream returned no response body',
+      });
     });
 
     it('should throw DomoApiError on non-2xx response', async () => {

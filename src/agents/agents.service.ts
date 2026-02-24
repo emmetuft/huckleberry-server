@@ -28,13 +28,15 @@ export class AgentsService implements OnModuleInit {
       await this.refreshAgents();
     } catch (error) {
       this.logger.error('Failed to load agent registry on startup', error);
+      throw error;
     }
   }
 
   async refreshAgents(): Promise<void> {
     const response = await this.search({ limit: 1000, offset: 0 });
     const newCache = new Map<string, CustomAgent>();
-    // Handle both array response and { agents: [...] } wrapper
+    // Domo search API returns { agents: [...] } per SearchAgentsResponse, but
+    // some Domo environments have returned a bare array. Handle both defensively.
     const agents: CustomAgent[] = Array.isArray(response)
       ? (response as unknown as CustomAgent[])
       : (response.agents ?? []);
@@ -74,6 +76,7 @@ export class AgentsService implements OnModuleInit {
   }
 
   async search(dto: SearchAgentsRequest): Promise<SearchAgentsResponse> {
+    // TODO: Verify how this works, because API responses are giving me nothing back. Thinking there is some sort of access issue.
     return this.domo.post<SearchAgentsResponse>(`${AGENTS_BASE}/search`, dto);
   }
 
