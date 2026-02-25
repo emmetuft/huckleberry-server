@@ -7,6 +7,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { Request } from 'express';
 import { AppConfig } from '../config/configuration.js';
+import { DomoHeader } from '../constants/http.constants.js';
 
 @Injectable()
 export class DomoAuthGuard implements CanActivate {
@@ -23,8 +24,8 @@ export class DomoAuthGuard implements CanActivate {
       return true;
     }
 
-    const embeddedToken = request.headers['x-domo-embedded-security'];
-    const devToken = request.headers['x-domo-developer-token'];
+    const embeddedToken = request.headers[DomoHeader.EmbeddedSecurity];
+    const devToken = request.headers[DomoHeader.DeveloperToken];
 
     if (!embeddedToken && !devToken) {
       throw new UnauthorizedException('Missing Domo authentication token');

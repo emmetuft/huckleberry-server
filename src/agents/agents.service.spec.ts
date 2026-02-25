@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { AgentsService } from './agents.service';
 import { DomoProxyService } from '../domo-proxy/domo-proxy.service';
+import { AgentInclude } from '../common/types/domo-common.types';
 
 describe('AgentsService', () => {
   let service: AgentsService;
@@ -58,7 +59,7 @@ describe('AgentsService', () => {
     it('should pass include query param', async () => {
       domo.get.mockResolvedValue({});
 
-      await service.findOne('123', 'all' as any);
+      await service.findOne('123', AgentInclude.ALL);
 
       expect(domo.get).toHaveBeenCalledWith('/api/ai/v1/agents/123', {
         query: { include: 'all' },

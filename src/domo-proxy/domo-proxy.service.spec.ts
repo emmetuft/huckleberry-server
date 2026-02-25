@@ -50,7 +50,7 @@ describe('DomoProxyService', () => {
       expect.objectContaining({
         method: 'GET',
         headers: expect.objectContaining({
-          'X-DOMO-Developer-Token': 'test-token',
+          'x-domo-developer-token': 'test-token',
         }),
       }),
     );
@@ -81,6 +81,7 @@ describe('DomoProxyService', () => {
       ok: false,
       status: 403,
       statusText: 'Forbidden',
+      headers: new Headers({ 'content-type': 'text/plain' }),
       text: () => Promise.resolve('Access denied'),
     } as Response);
 

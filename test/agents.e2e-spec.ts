@@ -162,7 +162,7 @@ describe('Agents (e2e)', () => {
   describe('Error mapping', () => {
     it('should return 403 when Domo returns 403', async () => {
       const { DomoApiError } = await import(
-        './../src/common/filters/domo-exception.filter'
+        './../src/common/filters/domo-exception.filter.js'
       );
       mockDomo.post.mockRejectedValue(new DomoApiError(403, 'Access denied'));
 
@@ -178,7 +178,7 @@ describe('Agents (e2e)', () => {
 
     it('should return 409 when Domo returns 409', async () => {
       const { DomoApiError } = await import(
-        './../src/common/filters/domo-exception.filter'
+        './../src/common/filters/domo-exception.filter.js'
       );
       mockDomo.post.mockRejectedValue(new DomoApiError(409, 'Conflict'));
 

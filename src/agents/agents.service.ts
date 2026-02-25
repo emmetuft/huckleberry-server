@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { DomoProxyService } from '../domo-proxy/domo-proxy.service.js';
 import {
   CustomAgent,
@@ -8,13 +8,52 @@ import {
   SearchAgentsRequest,
   SearchAgentsResponse,
 } from '../common/types/domo-agent.types.js';
+import {
+  AssistantExecutionRequest,
+  AgentResumeRequest,
+} from '../common/types/domo-session.types.js';
 import { AgentInclude } from '../common/types/domo-common.types.js';
 
 const AGENTS_BASE = '/api/ai/v1/agents';
 
 @Injectable()
-export class AgentsService {
+export class AgentsService implements OnModuleInit {
+  private readonly logger = new Logger(AgentsService.name);
+  private agentCache = new Map<string, CustomAgent>();
+
   constructor(private readonly domo: DomoProxyService) {}
+
+  async onModuleInit(): Promise<void> {
+    try {
+      await this.refreshAgents();
+    } catch (error) {
+      this.logger.error('Failed to load agent registry on startup', error);
+      throw error;
+    }
+  }
+
+  async refreshAgents(): Promise<void> {
+    const response = await this.search({ limit: 1000, offset: 0 });
+    const newCache = new Map<string, CustomAgent>();
+    // Domo search API returns { agents: [...] } per SearchAgentsResponse, but
+    // some Domo environments have returned a bare array. Handle both defensively.
+    const agents: CustomAgent[] = Array.isArray(response)
+      ? (response as unknown as CustomAgent[])
+      : (response.agents ?? []);
+    for (const agent of agents) {
+      newCache.set(agent.id, agent);
+    }
+    this.agentCache = newCache;
+    this.logger.log(`Agent registry loaded: ${this.agentCache.size} agents`);
+  }
+
+  getAvailableAgents(): CustomAgent[] {
+    return Array.from(this.agentCache.values());
+  }
+
+  isValidAgent(agentId: string): boolean {
+    return this.agentCache.has(agentId);
+  }
 
   async create(dto: CreateCustomAgentRequest): Promise<CustomAgent> {
     return this.domo.post<CustomAgent>(AGENTS_BASE, dto);
@@ -37,6 +76,7 @@ export class AgentsService {
   }
 
   async search(dto: SearchAgentsRequest): Promise<SearchAgentsResponse> {
+    // TODO: Verify how this works, because API responses are giving me nothing back. Thinking there is some sort of access issue.
     return this.domo.post<SearchAgentsResponse>(`${AGENTS_BASE}/search`, dto);
   }
 
@@ -45,5 +85,25 @@ export class AgentsService {
     dto: AgentContextUpdateRequest,
   ): Promise<CustomAgent> {
     return this.domo.put<CustomAgent>(`${AGENTS_BASE}/${agentId}/context`, dto);
+  }
+
+  async executeStream(
+    agentId: string,
+    dto: AssistantExecutionRequest,
+  ): Promise<Response> {
+    return this.domo.postStream(
+      `${AGENTS_BASE}/${agentId}/execute/streaming`,
+      dto,
+    );
+  }
+
+  async resumeStream(
+    agentId: string,
+    dto: AgentResumeRequest,
+  ): Promise<Response> {
+    return this.domo.postStream(
+      `${AGENTS_BASE}/${agentId}/resume/streaming`,
+      dto,
+    );
   }
 }
