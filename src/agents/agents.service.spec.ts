@@ -89,15 +89,59 @@ describe('AgentsService', () => {
   });
 
   describe('search', () => {
-    it('should POST to search endpoint', async () => {
-      const dto = { filters: {}, limit: 10, offset: 0 };
+    it('should transform DTO and POST to search endpoint', async () => {
+      const dto = {
+        sort: 'CREATED',
+        order: 'DESC' as const,
+        search: { NAME: 'test' },
+        limit: 10,
+        offset: 0,
+      };
       const expected = { agents: [], totalCount: 0, limit: 10, offset: 0 };
       domo.post.mockResolvedValue(expected);
 
       const result = await service.search(dto);
 
       expect(result).toEqual(expected);
-      expect(domo.post).toHaveBeenCalledWith('/api/ai/v1/agents/search', dto);
+      expect(domo.post).toHaveBeenCalledWith('/api/ai/v1/agents/search', {
+        sortFieldMap: { CREATED: 'DESC' },
+        searchFieldMap: { NAME: 'test' },
+        limit: 10,
+        offset: 0,
+      });
+    });
+
+    it('should pass through filters array', async () => {
+      const dto = {
+        filters: [
+          { type: 'NAME', not: false, values: ['agent'], operator: 'EQ' },
+        ],
+        limit: 5,
+      };
+      const expected = { agents: [], totalCount: 0, limit: 5, offset: 0 };
+      domo.post.mockResolvedValue(expected);
+
+      await service.search(dto);
+
+      expect(domo.post).toHaveBeenCalledWith('/api/ai/v1/agents/search', {
+        filters: [
+          { type: 'NAME', not: false, values: ['agent'], operator: 'EQ' },
+        ],
+        limit: 5,
+      });
+    });
+
+    it('should send minimal payload when no optional fields', async () => {
+      const dto = { limit: 10, offset: 0 };
+      const expected = { agents: [], totalCount: 0, limit: 10, offset: 0 };
+      domo.post.mockResolvedValue(expected);
+
+      await service.search(dto);
+
+      expect(domo.post).toHaveBeenCalledWith('/api/ai/v1/agents/search', {
+        limit: 10,
+        offset: 0,
+      });
     });
   });
 

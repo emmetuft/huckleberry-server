@@ -70,13 +70,23 @@ export interface AgentContextUpdateRequest {
   remove?: Partial<AgentContext>;
 }
 
-/** Search agents request */
+/** Individual filter for the Domo agent search API */
+export interface SearchFilter {
+  type: string;
+  not: boolean;
+  values: string[];
+  operator: string;
+}
+
+/** Search agents request — matches the Domo POST /agents/search payload */
 export interface SearchAgentsRequest {
-  filters?: Record<string, unknown>;
-  sort?: string;
-  order?: 'ASC' | 'DESC';
   limit?: number;
   offset?: number;
+  sortFieldMap?: Record<string, 'ASC' | 'DESC'>;
+  filters?: SearchFilter[];
+  searchFieldMap?: Record<string, string>;
+  dateFilters?: Record<string, unknown>;
+  groupByMap?: Record<string, unknown>;
 }
 
 /** Paginated search response */

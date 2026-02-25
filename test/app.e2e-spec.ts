@@ -3,6 +3,11 @@ import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
+import { DomoProxyService } from './../src/domo-proxy/domo-proxy.service';
+
+// Ensure auth guard passes in test
+process.env.DEV_TOKEN = 'test-token';
+process.env.NODE_ENV = 'development';
 
 describe('Health (e2e)', () => {
   let app: INestApplication<App>;
@@ -10,7 +15,16 @@ describe('Health (e2e)', () => {
   beforeAll(async () => {
     const moduleFixture = await Test.createTestingModule({
       imports: [AppModule],
-    }).compile();
+    })
+      .overrideProvider(DomoProxyService)
+      .useValue({
+        get: jest.fn(),
+        post: jest.fn().mockResolvedValue({ agents: [], totalCount: 0, limit: 1000, offset: 0 }),
+        put: jest.fn(),
+        delete: jest.fn(),
+        postStream: jest.fn(),
+      })
+      .compile();
 
     app = moduleFixture.createNestApplication();
     app.useGlobalPipes(new ValidationPipe({ whitelist: true }));

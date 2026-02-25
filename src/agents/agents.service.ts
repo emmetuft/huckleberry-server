@@ -13,6 +13,7 @@ import {
   AgentResumeRequest,
 } from '../common/types/domo-session.types.js';
 import { AgentInclude } from '../common/types/domo-common.types.js';
+import { SearchAgentsDto } from './dto/search-agents.dto.js';
 
 const AGENTS_BASE = '/api/ai/v1/agents';
 
@@ -75,9 +76,33 @@ export class AgentsService implements OnModuleInit {
     await this.domo.delete(`${AGENTS_BASE}/${agentId}`);
   }
 
-  async search(dto: SearchAgentsRequest): Promise<SearchAgentsResponse> {
-    // TODO: Verify how this works, because API responses are giving me nothing back. Thinking there is some sort of access issue.
-    return this.domo.post<SearchAgentsResponse>(`${AGENTS_BASE}/search`, dto);
+  async search(dto: SearchAgentsDto): Promise<SearchAgentsResponse> {
+    const payload = this.buildSearchPayload(dto);
+    return this.domo.post<SearchAgentsResponse>(
+      `${AGENTS_BASE}/search`,
+      payload,
+    );
+  }
+
+  private buildSearchPayload(dto: SearchAgentsDto): SearchAgentsRequest {
+    const payload: SearchAgentsRequest = {};
+
+    if (dto.limit != null) payload.limit = dto.limit;
+    if (dto.offset != null) payload.offset = dto.offset;
+
+    if (dto.sort) {
+      payload.sortFieldMap = { [dto.sort]: dto.order ?? 'ASC' };
+    }
+
+    if (dto.filters?.length) {
+      payload.filters = dto.filters;
+    }
+
+    if (dto.search && Object.keys(dto.search).length > 0) {
+      payload.searchFieldMap = dto.search;
+    }
+
+    return payload;
   }
 
   async updateContext(

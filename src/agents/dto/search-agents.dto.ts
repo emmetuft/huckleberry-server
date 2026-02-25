@@ -1,15 +1,47 @@
-import { IsNumber, IsObject, IsOptional, IsString, Min } from 'class-validator';
+import { Type } from 'class-transformer';
+import {
+  IsArray,
+  IsBoolean,
+  IsIn,
+  IsNumber,
+  IsObject,
+  IsOptional,
+  IsString,
+  Min,
+  ValidateNested,
+} from 'class-validator';
+
+export class SearchFilterDto {
+  @IsString()
+  type: string;
+
+  @IsBoolean()
+  not: boolean;
+
+  @IsArray()
+  @IsString({ each: true })
+  values: string[];
+
+  @IsString()
+  operator: string;
+}
 
 export class SearchAgentsDto {
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => SearchFilterDto)
+  @IsOptional()
+  filters?: SearchFilterDto[];
+
   @IsObject()
   @IsOptional()
-  filters?: Record<string, unknown>;
+  search?: Record<string, string>;
 
   @IsString()
   @IsOptional()
   sort?: string;
 
-  @IsString()
+  @IsIn(['ASC', 'DESC'])
   @IsOptional()
   order?: 'ASC' | 'DESC';
 

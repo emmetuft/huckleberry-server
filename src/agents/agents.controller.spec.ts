@@ -126,7 +126,13 @@ describe('AgentsController', () => {
   });
 
   it('should search agents', async () => {
-    const dto = { limit: 10 };
+    const dto: SearchAgentsDto = {
+      sort: 'CREATED',
+      order: 'DESC',
+      search: { NAME: 'test' },
+      limit: 10,
+      offset: 0,
+    };
     const expected: SearchAgentsResponse = {
       agents: [],
       totalCount: 0,
@@ -135,8 +141,9 @@ describe('AgentsController', () => {
     };
     service.search.mockResolvedValue(expected);
 
-    const result = await controller.search(dto as SearchAgentsDto);
+    const result = await controller.search(dto);
     expect(result).toEqual(expected);
+    expect(service.search).toHaveBeenCalledWith(dto);
   });
 
   it('should update agent context', async () => {

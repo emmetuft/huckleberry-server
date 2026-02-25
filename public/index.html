@@ -239,12 +239,16 @@
 <div class="panel" data-group="agents" id="panel-search">
   <form id="form-search" class="form-grid">
     <div class="field full">
-      <label>Filters (JSON)</label>
-      <textarea name="filters" rows="3" placeholder='e.g. {"name": "my-agent"}'></textarea>
+      <label>Search by Name</label>
+      <input type="text" name="searchName" placeholder="e.g. my-agent" />
+    </div>
+    <div class="field full">
+      <label>Filters (JSON array)</label>
+      <textarea name="filters" rows="3" placeholder='e.g. [{"type":"NAME","not":false,"values":["my-agent"],"operator":"EQ"}]'></textarea>
     </div>
     <div class="field">
-      <label>Sort</label>
-      <input type="text" name="sort" placeholder="e.g. name" />
+      <label>Sort Field</label>
+      <input type="text" name="sort" placeholder="e.g. CREATED" />
     </div>
     <div class="field">
       <label>Order</label>
@@ -901,10 +905,15 @@
     e.preventDefault();
     const f = new FormData(e.target);
     const body = {};
+    const searchName = f.get('searchName');
+    if (searchName) body.search = { NAME: searchName };
     const filters = f.get('filters');
     if (filters) {
-      try { body.filters = JSON.parse(filters); }
-      catch { alert('Invalid JSON in filters'); return; }
+      try {
+        const parsed = JSON.parse(filters);
+        if (!Array.isArray(parsed)) { alert('Filters must be a JSON array'); return; }
+        body.filters = parsed;
+      } catch { alert('Invalid JSON in filters'); return; }
     }
     const sort = f.get('sort');
     if (sort) body.sort = sort;

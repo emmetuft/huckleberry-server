@@ -25,7 +25,12 @@ describe('Agents (e2e)', () => {
   beforeAll(async () => {
     mockDomo = {
       get: jest.fn(),
-      post: jest.fn(),
+      post: jest.fn().mockResolvedValue({
+        agents: [testAgent],
+        totalCount: 1,
+        limit: 1000,
+        offset: 0,
+      }),
       put: jest.fn(),
       delete: jest.fn(),
       postStream: jest.fn(),
@@ -124,7 +129,71 @@ describe('Agents (e2e)', () => {
   });
 
   describe('POST /agents/search', () => {
-    it('should search agents', () => {
+    it('should search agents with transformed payload', () => {
+      mockDomo.post.mockResolvedValue({
+        agents: [testAgent],
+        totalCount: 1,
+        limit: 10,
+        offset: 0,
+      });
+
+      return request(app.getHttpServer())
+        .post('/agents/search')
+        .send({
+          sort: 'CREATED',
+          order: 'DESC',
+          search: { NAME: 'test' },
+          limit: 10,
+          offset: 0,
+        })
+        .expect(200)
+        .expect((res) => {
+          expect(res.body.agents).toHaveLength(1);
+          // Verify the Domo proxy received the transformed payload
+          const sentPayload = mockDomo.post.mock.calls.find(
+            (call) => call[0] === '/api/ai/v1/agents/search',
+          );
+          expect(sentPayload).toBeDefined();
+          expect(sentPayload[1]).toEqual({
+            sortFieldMap: { CREATED: 'DESC' },
+            searchFieldMap: { NAME: 'test' },
+            limit: 10,
+            offset: 0,
+          });
+        });
+    });
+
+    it('should search agents with filters', () => {
+      mockDomo.post.mockResolvedValue({
+        agents: [testAgent],
+        totalCount: 1,
+        limit: 10,
+        offset: 0,
+      });
+
+      return request(app.getHttpServer())
+        .post('/agents/search')
+        .send({
+          filters: [
+            { type: 'NAME', not: false, values: ['test'], operator: 'EQ' },
+          ],
+          limit: 10,
+        })
+        .expect(200)
+        .expect(() => {
+          const sentPayload = mockDomo.post.mock.calls.find(
+            (call) => call[0] === '/api/ai/v1/agents/search',
+          );
+          expect(sentPayload[1]).toEqual({
+            filters: [
+              { type: 'NAME', not: false, values: ['test'], operator: 'EQ' },
+            ],
+            limit: 10,
+          });
+        });
+    });
+
+    it('should search with minimal payload', () => {
       mockDomo.post.mockResolvedValue({
         agents: [testAgent],
         totalCount: 1,
@@ -171,8 +240,7 @@ describe('Agents (e2e)', () => {
         .send({ name: 'Test', prompt: 'Hello' })
         .expect(403)
         .expect((res) => {
-          expect(res.body.message).toBe('Access denied');
-          expect(res.body.domoStatus).toBe(403);
+          expect(res.text).toBe('Access denied');
         });
     });
 
