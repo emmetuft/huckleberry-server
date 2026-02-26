@@ -123,6 +123,7 @@
   <button class="tab danger" data-tab="delete">Delete</button>
   <button class="tab" data-tab="search">Search</button>
   <button class="tab" data-tab="context">Update Context</button>
+  <button class="tab" data-tab="huckleberry">Huckleberry</button>
   <button class="tab" data-tab="execute">Execute (Stream)</button>
   <button class="tab" data-tab="resume">Resume</button>
 </div>
@@ -301,6 +302,46 @@
       <button type="submit" class="submit primary">Update Context</button>
     </div>
   </form>
+</div>
+
+<!-- HUCKLEBERRY (named agent) -->
+<div class="panel" data-group="agents" id="panel-huckleberry">
+  <div class="tabs" data-tab-group="huck">
+    <button class="tab active" data-tab="huck-execute">Execute</button>
+    <button class="tab" data-tab="huck-resume">Resume</button>
+  </div>
+
+  <!-- Huckleberry Execute -->
+  <div class="panel active" data-group="huck" id="panel-huck-execute">
+    <form id="form-huck-execute" class="form-grid">
+      <div class="field full">
+        <label>Input <span class="req">*</span></label>
+        <textarea name="input" required rows="3" placeholder="Ask Huckleberry something..."></textarea>
+      </div>
+      <div class="actions full">
+        <button type="submit" class="submit primary" id="huck-exec-send-btn">Execute</button>
+        <button type="button" class="stop-btn" id="huck-exec-stop-btn">Stop</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Huckleberry Resume -->
+  <div class="panel" data-group="huck" id="panel-huck-resume">
+    <form id="form-huck-resume" class="form-grid">
+      <div class="field">
+        <label>Source Request ID <span class="req">*</span></label>
+        <input type="text" name="sourceRequestId" required />
+      </div>
+      <div class="field full">
+        <label>Response <span class="req">*</span></label>
+        <textarea name="response" required rows="3" placeholder="User response for tool approval, etc."></textarea>
+      </div>
+      <div class="actions full">
+        <button type="submit" class="submit primary" id="huck-resume-send-btn">Resume</button>
+        <button type="button" class="stop-btn" id="huck-resume-stop-btn">Stop</button>
+      </div>
+    </form>
+  </div>
 </div>
 
 <!-- EXECUTE (STREAM) -->
@@ -1033,6 +1074,28 @@
     const agentStrategy = f.get('agentStrategy');
     if (agentStrategy) body.agentStrategy = agentStrategy;
     sendStream('/agents/' + encodeURIComponent(agentId) + '/resume/streaming', body, 'resume-send-btn', 'resume-stop-btn');
+  });
+
+  // ── Huckleberry Execute (Stream) ────────────────────────────────
+  document.getElementById('form-huck-execute').addEventListener('submit', e => {
+    e.preventDefault();
+    const f = new FormData(e.target);
+    sendStream('/agents/huckleberry/execute/streaming', {
+      input: f.get('input'),
+      agentType: 'TOOL_CALLING',
+    }, 'huck-exec-send-btn', 'huck-exec-stop-btn');
+  });
+
+  // ── Huckleberry Resume ─────────────────────────────────────────
+  document.getElementById('form-huck-resume').addEventListener('submit', e => {
+    e.preventDefault();
+    const f = new FormData(e.target);
+    let response = f.get('response');
+    try { response = JSON.parse(response); } catch {}
+    sendStream('/agents/huckleberry/resume/streaming', {
+      sourceRequestId: f.get('sourceRequestId'),
+      response,
+    }, 'huck-resume-send-btn', 'huck-resume-stop-btn');
   });
 
   // ── Example pill handlers ───────────────────────────────────────

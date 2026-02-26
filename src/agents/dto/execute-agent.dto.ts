@@ -8,7 +8,8 @@ export class ExecuteAgentDto {
   input!: string;
 
   @IsString()
-  sessionId!: string;
+  @IsOptional()
+  sessionId?: string;
 
   @ValidateNested()
   @Type(() => AgentContextDto)

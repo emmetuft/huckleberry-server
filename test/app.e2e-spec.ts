@@ -19,7 +19,12 @@ describe('Health (e2e)', () => {
       .overrideProvider(DomoProxyService)
       .useValue({
         get: jest.fn(),
-        post: jest.fn().mockResolvedValue({ agents: [], totalCount: 0, limit: 1000, offset: 0 }),
+        post: jest.fn().mockResolvedValue({
+          agents: [],
+          totalCount: 0,
+          limit: 1000,
+          offset: 0,
+        }),
         put: jest.fn(),
         delete: jest.fn(),
         postStream: jest.fn(),

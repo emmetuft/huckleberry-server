@@ -5,6 +5,7 @@ import {
   Get,
   HttpCode,
   HttpStatus,
+  NotFoundException,
   Param,
   Patch,
   Post,
@@ -13,6 +14,7 @@ import {
   Res,
   UseGuards,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import type { Response as ExpressResponse } from 'express';
 import { Readable } from 'node:stream';
 import { AgentsService } from './agents.service.js';
@@ -27,11 +29,21 @@ import { AgentIdGuard } from '../common/guards/agent-id.guard.js';
 import { HttpHeader } from '../common/constants/http.constants.js';
 import { DomoApiError } from '../common/filters/domo-exception.filter.js';
 import { AgentInclude } from '../common/types/domo-common.types.js';
+import { AppConfig } from '../common/config/configuration.js';
 
 @Controller('agents')
 @UseGuards(DomoAuthGuard, AgentIdGuard)
 export class AgentsController {
-  constructor(private readonly agentsService: AgentsService) {}
+  private readonly huckleberryAgentId: string;
+
+  constructor(
+    private readonly agentsService: AgentsService,
+    config: ConfigService,
+  ) {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+    this.huckleberryAgentId =
+      config.getOrThrow<AppConfig>('app').huckleberryAgentId;
+  }
 
   @Get()
   getAvailableAgents() {
@@ -49,6 +61,36 @@ export class AgentsController {
     await this.agentsService.refreshAgents();
     return { count: this.agentsService.getAvailableAgents().length };
   }
+
+  @Post('search')
+  @HttpCode(HttpStatus.OK)
+  search(@Body() dto: SearchAgentsDto) {
+    return this.agentsService.search(dto);
+  }
+
+  // --- Huckleberry named routes (must precede :agentId params) ---
+
+  @Post('huckleberry/execute/streaming')
+  async huckleberryExecuteStream(
+    @Body() dto: ExecuteAgentDto,
+    @Res() res: ExpressResponse,
+  ) {
+    const agentId = this.resolveHuckleberryId();
+    const domoResponse = await this.agentsService.executeStream(agentId, dto);
+    return this.pipeStreamResponse(domoResponse, res);
+  }
+
+  @Post('huckleberry/resume/streaming')
+  async huckleberryResumeStream(
+    @Body() dto: ResumeAgentDto,
+    @Res() res: ExpressResponse,
+  ) {
+    const agentId = this.resolveHuckleberryId();
+    const domoResponse = await this.agentsService.resumeStream(agentId, dto);
+    return this.pipeStreamResponse(domoResponse, res);
+  }
+
+  // --- Parameterized routes ---
 
   @Get(':agentId')
   findOne(
@@ -69,12 +111,6 @@ export class AgentsController {
     return this.agentsService.remove(agentId);
   }
 
-  @Post('search')
-  @HttpCode(HttpStatus.OK)
-  search(@Body() dto: SearchAgentsDto) {
-    return this.agentsService.search(dto);
-  }
-
   @Patch(':agentId/context')
   updateContext(
     @Param('agentId') agentId: string,
@@ -90,29 +126,7 @@ export class AgentsController {
     @Res() res: ExpressResponse,
   ) {
     const domoResponse = await this.agentsService.executeStream(agentId, dto);
-
-    if (!domoResponse.ok) {
-      const text = await domoResponse.text().catch(() => '');
-      throw new DomoApiError(
-        domoResponse.status,
-        text || domoResponse.statusText,
-        domoResponse.headers.get(HttpHeader.ContentType),
-      );
-    }
-
-    if (!domoResponse.body) {
-      throw new DomoApiError(502, 'Upstream returned no response body');
-    }
-
-    res.status(domoResponse.status);
-    domoResponse.headers.forEach((value, key) => {
-      res.setHeader(key, value);
-    });
-
-    const readable = Readable.fromWeb(
-      domoResponse.body as import('node:stream/web').ReadableStream,
-    );
-    readable.pipe(res);
+    return this.pipeStreamResponse(domoResponse, res);
   }
 
   @Post(':agentId/resume/streaming')
@@ -122,7 +136,24 @@ export class AgentsController {
     @Res() res: ExpressResponse,
   ) {
     const domoResponse = await this.agentsService.resumeStream(agentId, dto);
+    return this.pipeStreamResponse(domoResponse, res);
+  }
 
+  // --- Helpers ---
+
+  private resolveHuckleberryId(): string {
+    if (!this.huckleberryAgentId) {
+      throw new NotFoundException(
+        'Huckleberry agent ID is not configured. Set the HUCKLEBERRY_AGENT_ID environment variable.',
+      );
+    }
+    return this.huckleberryAgentId;
+  }
+
+  private async pipeStreamResponse(
+    domoResponse: Response,
+    res: ExpressResponse,
+  ): Promise<void> {
     if (!domoResponse.ok) {
       const text = await domoResponse.text().catch(() => '');
       throw new DomoApiError(

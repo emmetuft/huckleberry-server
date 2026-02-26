@@ -19,12 +19,14 @@ export class DomoProxyService {
   private readonly baseUrl: string;
   private readonly devToken: string;
   private readonly isDev: boolean;
+  private readonly verbose: boolean;
 
   constructor(private readonly config: ConfigService) {
     const appConfig = this.config.get<AppConfig>('app');
     this.baseUrl = appConfig.domoInstanceUrl;
     this.devToken = appConfig.devToken;
     this.isDev = appConfig.nodeEnv === 'development';
+    this.verbose = appConfig.verboseLogging ?? false;
     this.logger.log(
       `isDev=${this.isDev}, nodeEnv=${appConfig.nodeEnv}, hasToken=${!!this.devToken}, baseUrl=${this.baseUrl}`,
     );
@@ -64,7 +66,10 @@ export class DomoProxyService {
     headers[HttpHeader.Accept] = ContentType.SSE;
 
     if (this.isDev) {
-      this.logger.debug(`STREAM POST ${url}`);
+      this.logger.log(`→ STREAM POST ${url}`);
+      if (this.verbose && body !== undefined) {
+        this.logger.log(`  body: ${JSON.stringify(body)}`);
+      }
     }
 
     try {
@@ -92,14 +97,19 @@ export class DomoProxyService {
     const headers = this.buildHeaders(options?.headers);
 
     if (this.isDev) {
-      this.logger.debug(`${method} ${url}`);
-      const safeHeaders = { ...headers };
-      for (const key of Object.keys(safeHeaders)) {
-        if (/token|authorization|secret/i.test(key)) {
-          safeHeaders[key] = '[REDACTED]';
+      this.logger.log(`→ ${method} ${url}`);
+      if (this.verbose) {
+        const safeHeaders = { ...headers };
+        for (const key of Object.keys(safeHeaders)) {
+          if (/token|authorization|secret/i.test(key)) {
+            safeHeaders[key] = '[REDACTED]';
+          }
+        }
+        this.logger.log(`  headers: ${JSON.stringify(safeHeaders)}`);
+        if (body !== undefined) {
+          this.logger.log(`  body:    ${JSON.stringify(body)}`);
         }
       }
-      this.logger.debug(`Headers: ${JSON.stringify(safeHeaders)}`);
     }
 
     let response: Response;

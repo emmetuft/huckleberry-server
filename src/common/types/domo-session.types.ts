@@ -3,8 +3,8 @@ import { AgentContext } from './domo-agent.types.js';
 
 /** Request body for POST /api/ai/v1/agents/{agentId}/execute/streaming */
 export interface AssistantExecutionRequest {
-  input: string;
-  sessionId: string;
+  input?: string;
+  sessionId?: string;
   aiAssistantContext?: AgentContext;
   model?: string;
   agentType?: AgentType;
@@ -12,9 +12,9 @@ export interface AssistantExecutionRequest {
 
 /** Request body for POST /api/ai/v1/agents/{agentId}/resume/streaming */
 export interface AgentResumeRequest {
-  sessionId: string;
-  sourceRequestId: string;
-  response: unknown;
+  sessionId?: string;
+  sourceRequestId?: string;
+  response?: unknown;
   agentStrategy?: AgentType;
 }
 

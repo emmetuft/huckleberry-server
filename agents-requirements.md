@@ -40,6 +40,8 @@ This is a v0 MVP focused on getting to a working product quickly by leveraging w
 
 **User Story:** As a developer, I want a typed service layer for the Domo Agent API, so that the frontend can interact with agents through a clean, well-defined interface.
 
+> **Note:** The CRUD and search endpoints under `/api/ai/v1/agents` operate on **Custom Agents** only (the `CustomAgent` resource in the Domo OpenAPI spec). The execute and resume streaming endpoints, however, work with any agent — custom or otherwise — given its `agentId`.
+
 #### Acceptance Criteria
 
 1. WHEN the app initializes THEN the system SHALL have a `DomoAgentService` that wraps the Domo Agent REST API with typed methods

@@ -44,6 +44,12 @@ describe('AgentsController', () => {
             get: jest.fn().mockReturnValue({
               nodeEnv: 'development',
               devToken: 'test-token',
+              huckleberryAgentId: 'test-huckleberry-id',
+            }),
+            getOrThrow: jest.fn().mockReturnValue({
+              nodeEnv: 'development',
+              devToken: 'test-token',
+              huckleberryAgentId: 'test-huckleberry-id',
             }),
           },
         },
@@ -134,10 +140,8 @@ describe('AgentsController', () => {
       offset: 0,
     };
     const expected: SearchAgentsResponse = {
-      agents: [],
-      totalCount: 0,
-      limit: 10,
-      offset: 0,
+      customAgents: [],
+      pageContext: { count: 0, totalCount: 0, offset: 0 },
     };
     service.search.mockResolvedValue(expected);
 

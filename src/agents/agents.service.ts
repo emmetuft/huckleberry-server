@@ -28,19 +28,34 @@ export class AgentsService implements OnModuleInit {
     try {
       await this.refreshAgents();
     } catch (error) {
-      this.logger.error('Failed to load agent registry on startup', error);
-      throw error;
+      this.logger.warn(
+        'Failed to load agent registry on startup — the server will start with an empty cache. ' +
+          'Call POST /agents/refresh once the environment is ready.',
+      );
+      this.logger.debug(error);
     }
   }
 
   async refreshAgents(): Promise<void> {
     const response = await this.search({ limit: 1000, offset: 0 });
     const newCache = new Map<string, CustomAgent>();
-    // Domo search API returns { agents: [...] } per SearchAgentsResponse, but
-    // some Domo environments have returned a bare array. Handle both defensively.
-    const agents: CustomAgent[] = Array.isArray(response)
-      ? (response as unknown as CustomAgent[])
-      : (response.agents ?? []);
+
+    this.logger.log(
+      `Search response shape: ${Array.isArray(response) ? `array[${(response as unknown as unknown[]).length}]` : `object with keys [${Object.keys(response ?? {}).join(', ')}]`}`,
+    );
+
+    // The Domo OpenAPI spec defines the response as CustomAgentPage with a
+    // `customAgents` array. Fall back to common alternatives defensively.
+    const raw = response as unknown as Record<string, unknown>;
+    let agents: CustomAgent[];
+    if (Array.isArray(response)) {
+      agents = response as unknown as CustomAgent[];
+    } else {
+      agents =
+        (raw.customAgents as CustomAgent[] | undefined) ??
+        (raw.agents as CustomAgent[] | undefined) ??
+        [];
+    }
     for (const agent of agents) {
       newCache.set(agent.id, agent);
     }

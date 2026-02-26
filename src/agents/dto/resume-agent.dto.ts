@@ -3,13 +3,16 @@ import { AgentType } from '../../common/types/domo-common.types.js';
 
 export class ResumeAgentDto {
   @IsString()
-  sessionId!: string;
+  @IsOptional()
+  sessionId?: string;
 
   @IsString()
-  sourceRequestId!: string;
+  @IsOptional()
+  sourceRequestId?: string;
 
   @IsDefined()
-  response!: unknown;
+  @IsOptional()
+  response?: unknown;
 
   @IsEnum(AgentType)
   @IsOptional()

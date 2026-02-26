@@ -3,6 +3,8 @@ export interface AppConfig {
   devToken: string;
   nodeEnv: string;
   port: number;
+  verboseLogging: boolean;
+  huckleberryAgentId: string;
 }
 
 export default (): { app: AppConfig } => ({
@@ -11,5 +13,7 @@ export default (): { app: AppConfig } => ({
     devToken: process.env.DEV_TOKEN || '',
     nodeEnv: process.env.NODE_ENV || 'development',
     port: parseInt(process.env.PORT || '3000', 10),
+    verboseLogging: process.env.VERBOSE_LOGGING === 'true',
+    huckleberryAgentId: process.env.HUCKLEBERRY_AGENT_ID || '',
   },
 });

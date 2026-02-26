@@ -1,98 +1,148 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# Huckleberry Server
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+NestJS Backend-for-Frontend (BFF) that proxies Domo Agent APIs and provides named-agent endpoints for the Huckleberry AI assistant.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+## Prerequisites
 
-## Description
+- Node.js 20+
+- npm 10+
+- A Domo developer token with AI Services access
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+### Required Domo Feature Flags
 
-## Project setup
+The following features must be enabled on the Domo instance (via `tug-eks`) for the Agent APIs to work:
 
 ```bash
-$ npm install
+tug-eks set feature -f ai-services -s true
+tug-eks set feature -f ai-services-assistants -s true
+tug-eks set feature -f ai-services-conversational-agent -s true
+tug-eks set feature -f ai-services-domo-gpt -s true
+tug-eks set feature -f ai-assistant-tool-calling -s true
 ```
 
-## Compile and run the project
+Without these, the agent search/execute endpoints will return `403 Forbidden` with error code `DS-0049` ("Required AI Services features are not all enabled").
+
+## Setup
 
 ```bash
-# development
-$ npm run start
-
-# watch mode
-$ npm run start:dev
-
-# production mode
-$ npm run start:prod
+npm install
+cp .env.example .env
+# Edit .env with your Domo instance URL and developer token
 ```
 
-## Run tests
+### Environment Variables
+
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `DOMO_INSTANCE_URL` | Yes | — | Domo instance base URL (e.g. `https://your-instance.domo.com`) |
+| `DEV_TOKEN` | Yes (dev) | — | Domo developer token for local development |
+| `NODE_ENV` | No | `development` | `development` or `production` |
+| `PORT` | No | `3000` | HTTP listen port |
+| `VERBOSE_LOGGING` | No | `false` | Log request/response bodies for outbound Domo calls and inbound requests |
+| `HUCKLEBERRY_AGENT_ID` | Yes | — | Domo agent GUID for the Huckleberry embedded agent (differs per environment) |
+
+## Running
 
 ```bash
-# unit tests
-$ npm run test
+# Development (watch mode)
+npm run start:dev
 
-# e2e tests
-$ npm run test:e2e
+# Development with verbose request logging
+VERBOSE_LOGGING=true npm run start:dev
 
-# test coverage
-$ npm run test:cov
+# Production
+npm run build
+npm run start:prod
 ```
 
-## Deployment
-
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
-
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+## Testing
 
 ```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
+npm test              # unit tests
+npm run test:e2e      # end-to-end tests
+npm run test:cov      # coverage report
 ```
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+## API Endpoints
 
-## Resources
+### Health
 
-Check out a few resources that may come in handy when working with NestJS:
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/health` | Health check |
 
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
+### Agents — Custom Agent CRUD
 
-## Support
+> These endpoints operate on **Custom Agents** only (the `CustomAgent` resource in the Domo API). They do not list or manage built-in Domo agents.
 
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/agents` | List all custom agents from the in-memory cache |
+| `POST` | `/agents` | Create a new custom agent |
+| `POST` | `/agents/refresh` | Refresh the in-memory agent cache from Domo |
+| `POST` | `/agents/search` | Search custom agents with filters, sort, and pagination |
+| `GET` | `/agents/:agentId` | Get a single agent by ID (supports `?include=all\|context\|toolkits`) |
+| `PUT` | `/agents/:agentId` | Update a custom agent |
+| `DELETE` | `/agents/:agentId` | Delete a custom agent |
+| `PATCH` | `/agents/:agentId/context` | Incrementally add/remove agent context (datasources, cards, etc.) |
 
-## Stay in touch
+### Agents — Execution (Streaming)
 
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
+> Execute and resume work with **any agent** (custom or built-in) given its ID.
 
-## License
+| Method | Path | Description |
+|---|---|---|
+| `POST` | `/agents/:agentId/execute/streaming` | Execute any agent by ID (SSE stream) |
+| `POST` | `/agents/:agentId/resume/streaming` | Resume a paused agent by ID (SSE stream) |
 
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+### Huckleberry — Named Agent
+
+> Convenience endpoints that resolve the Huckleberry agent by name from the cache so the client doesn't need to know the agent GUID (which may differ across environments).
+
+| Method | Path | Description |
+|---|---|---|
+| `POST` | `/agents/huckleberry/execute/streaming` | Execute Huckleberry (SSE stream) |
+| `POST` | `/agents/huckleberry/resume/streaming` | Resume Huckleberry (SSE stream) |
+
+### AI Services
+
+| Method | Path | Description |
+|---|---|---|
+| `POST` | `/ai-services/chat` | One-shot AI chat |
+| `POST` | `/ai-services/chat/stream` | Streaming AI chat (SSE) |
+| `POST` | `/ai-services/generate` | AI text generation |
+| `POST` | `/ai-services/summarize` | AI summarization |
+| `POST` | `/ai-services/sql` | Natural language to SQL |
+| `POST` | `/ai-services/beastmode` | BeastMode calculation generation |
+
+## Authentication
+
+In development (`NODE_ENV=development`), requests are authenticated with the `DEV_TOKEN` environment variable.
+
+In production, the server expects one of:
+- `x-domo-developer-token` header
+- `x-domo-embedded-security` header (for Domo embedded app contexts)
+
+## Architecture
+
+```
+src/
+├── agents/              # Agent CRUD, execution, and Huckleberry named routes
+├── ai-services/         # AI Services proxy (chat, generate, summarize, sql, beastmode)
+├── common/
+│   ├── config/          # Typed app configuration (AppConfig)
+│   ├── constants/       # HTTP headers, agent name constants
+│   ├── filters/         # DomoExceptionFilter — maps Domo errors to NestJS exceptions
+│   ├── guards/          # DomoAuthGuard, AgentIdGuard
+│   ├── interceptors/    # Request logging (verbose mode)
+│   └── types/           # Domo API type definitions (agents, sessions, common)
+├── domo-proxy/          # Global HTTP client for all outbound Domo API calls
+├── health/              # Health check endpoint
+└── main.ts              # Bootstrap, port management, shutdown hooks
+public/
+└── index.html           # Built-in API tester UI (served as static files)
+```
+
+## API Tester
+
+The server includes a built-in API tester at `http://localhost:3000`. It provides a UI for testing all endpoints — including streaming — without needing an external tool like Postman.

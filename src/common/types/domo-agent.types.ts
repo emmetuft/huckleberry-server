@@ -89,10 +89,15 @@ export interface SearchAgentsRequest {
   groupByMap?: Record<string, unknown>;
 }
 
-/** Paginated search response */
-export interface SearchAgentsResponse {
-  agents: CustomAgent[];
+/** Pagination metadata returned by Domo search endpoints */
+export interface PageContext {
+  count: number;
   totalCount: number;
-  limit: number;
   offset: number;
+}
+
+/** Paginated search response (CustomAgentPage in the Domo OpenAPI spec) */
+export interface SearchAgentsResponse {
+  customAgents: CustomAgent[];
+  pageContext: PageContext;
 }
