@@ -14,6 +14,7 @@ import {
   Res,
   UseGuards,
 } from '@nestjs/common';
+import { ApiTags } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
 import type { Response as ExpressResponse } from 'express';
 import { Readable } from 'node:stream';
@@ -25,14 +26,14 @@ import { AgentContextUpdateDto } from './dto/agent-context-update.dto.js';
 import { ExecuteAgentDto } from './dto/execute-agent.dto.js';
 import { ResumeAgentDto } from './dto/resume-agent.dto.js';
 import { DomoAuthGuard } from '../common/guards/domo-auth.guard.js';
-import { AgentIdGuard } from '../common/guards/agent-id.guard.js';
 import { HttpHeader } from '../common/constants/http.constants.js';
 import { DomoApiError } from '../common/filters/domo-exception.filter.js';
 import { AgentInclude } from '../common/types/domo-common.types.js';
 import { AppConfig } from '../common/config/configuration.js';
 
+@ApiTags('Agents')
 @Controller('agents')
-@UseGuards(DomoAuthGuard, AgentIdGuard)
+@UseGuards(DomoAuthGuard)
 export class AgentsController {
   private readonly huckleberryAgentId: string;
 
@@ -40,7 +41,6 @@ export class AgentsController {
     private readonly agentsService: AgentsService,
     config: ConfigService,
   ) {
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
     this.huckleberryAgentId =
       config.getOrThrow<AppConfig>('app').huckleberryAgentId;
   }

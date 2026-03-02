@@ -26,9 +26,10 @@ export class DomoAuthGuard implements CanActivate {
 
     const embeddedToken = request.headers[DomoHeader.EmbeddedSecurity];
     const devToken = request.headers[DomoHeader.DeveloperToken];
+    const epsToken = request.headers[DomoHeader.EpsAuthToken];
 
-    if (!embeddedToken && !devToken) {
-      throw new UnauthorizedException('Missing Domo authentication token');
+    if (!embeddedToken && !devToken && !epsToken) {
+      throw new UnauthorizedException('Missing authentication token');
     }
 
     return true;

@@ -7,6 +7,12 @@ import { DomoProxyModule } from './domo-proxy/domo-proxy.module.js';
 import { HealthModule } from './health/health.module.js';
 import { AgentsModule } from './agents/agents.module.js';
 import { AiServicesModule } from './ai-services/ai-services.module.js';
+import { OntologyModule } from './ontology/ontology.module.js';
+import { PersonasModule } from './personas/personas.module.js';
+import { McpModule } from './mcp/mcp.module.js';
+import { ContextModule } from './context/context.module.js';
+import { PeopleModule } from './people/people.module.js';
+import { DataSourcesModule } from './datasources/datasources.module.js';
 
 @Module({
   imports: [
@@ -16,12 +22,18 @@ import { AiServicesModule } from './ai-services/ai-services.module.js';
     }),
     ServeStaticModule.forRoot({
       rootPath: join(__dirname, '..', 'public'),
-      exclude: ['/agents{/*path}', '/ai-services{/*path}', '/health{/*path}'],
+      exclude: ['/api{/*path}', '/domo{/*path}', '/health{/*path}'],
     }),
     DomoProxyModule,
     HealthModule,
     AgentsModule,
     AiServicesModule,
+    OntologyModule,
+    PersonasModule,
+    McpModule,
+    ContextModule,
+    PeopleModule,
+    DataSourcesModule,
   ],
 })
 export class AppModule {}

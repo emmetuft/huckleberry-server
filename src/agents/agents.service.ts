@@ -1,4 +1,4 @@
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { DomoProxyService } from '../domo-proxy/domo-proxy.service.js';
 import {
   CustomAgent,
@@ -18,23 +18,11 @@ import { SearchAgentsDto } from './dto/search-agents.dto.js';
 const AGENTS_BASE = '/api/ai/v1/agents';
 
 @Injectable()
-export class AgentsService implements OnModuleInit {
+export class AgentsService {
   private readonly logger = new Logger(AgentsService.name);
   private agentCache = new Map<string, CustomAgent>();
 
   constructor(private readonly domo: DomoProxyService) {}
-
-  async onModuleInit(): Promise<void> {
-    try {
-      await this.refreshAgents();
-    } catch (error) {
-      this.logger.warn(
-        'Failed to load agent registry on startup — the server will start with an empty cache. ' +
-          'Call POST /agents/refresh once the environment is ready.',
-      );
-      this.logger.debug(error);
-    }
-  }
 
   async refreshAgents(): Promise<void> {
     const response = await this.search({ limit: 1000, offset: 0 });

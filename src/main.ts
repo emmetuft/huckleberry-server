@@ -1,10 +1,12 @@
 import { NestFactory } from '@nestjs/core';
 import { Logger, ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { execSync } from 'node:child_process';
 import { AppModule } from './app.module.js';
 import { DomoExceptionFilter } from './common/filters/domo-exception.filter.js';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor.js';
+import { ResponseEnvelopeInterceptor } from './common/interceptors/response-envelope.interceptor.js';
 import { AppConfig } from './common/config/configuration.js';
 
 /**
@@ -39,6 +41,10 @@ function freePort(port: number): void {
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
+  app.setGlobalPrefix('api', {
+    exclude: ['health', 'domo/datasources/v1', 'domo/datasources/v1/*path'],
+  });
+
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
@@ -51,7 +57,29 @@ async function bootstrap() {
   app.useGlobalFilters(new DomoExceptionFilter());
 
   const config = app.get(ConfigService);
-  app.useGlobalInterceptors(new LoggingInterceptor(config));
+  app.useGlobalInterceptors(
+    new LoggingInterceptor(config),
+    new ResponseEnvelopeInterceptor(),
+  );
+
+  // Swagger / OpenAPI
+  const swaggerConfig = new DocumentBuilder()
+    .setTitle('Huckleberry Server')
+    .setDescription(
+      'BFF for the Huckleberry AI platform — agents, ontology, context, personas, MCP',
+    )
+    .setVersion('0.1.0')
+    .addApiKey(
+      { type: 'apiKey', name: 'x-domo-developer-token', in: 'header' },
+      'domo-dev-token',
+    )
+    .addApiKey(
+      { type: 'apiKey', name: 'x-eps-auth-token', in: 'header' },
+      'eps-auth-token',
+    )
+    .build();
+  const document = SwaggerModule.createDocument(app, swaggerConfig);
+  SwaggerModule.setup('docs', app, document);
 
   const port = config.get<AppConfig>('app')?.port ?? 3000;
 

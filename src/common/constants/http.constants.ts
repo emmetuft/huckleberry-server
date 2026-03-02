@@ -14,4 +14,5 @@ export enum HttpHeader {
 export enum DomoHeader {
   DeveloperToken = 'x-domo-developer-token',
   EmbeddedSecurity = 'x-domo-embedded-security',
+  EpsAuthToken = 'x-eps-auth-token',
 }

@@ -15,10 +15,12 @@ import { ChatCompletionDto } from './dto/chat-completion.dto.js';
 import { TextSummarizationDto } from './dto/text-summarization.dto.js';
 import { TextToSqlDto } from './dto/text-to-sql.dto.js';
 import { TextToBeastModeDto } from './dto/text-to-beastmode.dto.js';
+import { ApiTags } from '@nestjs/swagger';
 import { DomoAuthGuard } from '../common/guards/domo-auth.guard.js';
 import { HttpHeader } from '../common/constants/http.constants.js';
 import { DomoApiError } from '../common/filters/domo-exception.filter.js';
 
+@ApiTags('AI Services')
 @Controller('ai-services')
 @UseGuards(DomoAuthGuard)
 export class AiServicesController {

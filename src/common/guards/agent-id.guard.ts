@@ -13,7 +13,7 @@ export class AgentIdGuard implements CanActivate {
 
   canActivate(context: ExecutionContext): boolean {
     const request = context.switchToHttp().getRequest<Request>();
-    const agentId = request.params.agentId;
+    const agentId = request.params.agentId as string | undefined;
 
     if (!agentId) {
       return true;

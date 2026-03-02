@@ -1,0 +1,31 @@
+import { Controller, Get, Param, UseGuards } from '@nestjs/common';
+import { ApiTags } from '@nestjs/swagger';
+import { PeopleService } from './people.service.js';
+import { DomoAuthGuard } from '../common/guards/domo-auth.guard.js';
+
+@ApiTags('People')
+@Controller()
+@UseGuards(DomoAuthGuard)
+export class PeopleController {
+  constructor(private readonly peopleService: PeopleService) {}
+
+  @Get('users')
+  getUsers() {
+    return this.peopleService.getUsers();
+  }
+
+  @Get('users/:id')
+  getUserById(@Param('id') id: string) {
+    return this.peopleService.getUserById(id);
+  }
+
+  @Get('groups')
+  getGroups() {
+    return this.peopleService.getGroups();
+  }
+
+  @Get('groups/:id')
+  getGroupById(@Param('id') id: string) {
+    return this.peopleService.getGroupById(id);
+  }
+}
