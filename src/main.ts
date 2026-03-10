@@ -1,5 +1,5 @@
 import { NestFactory } from '@nestjs/core';
-import { Logger, ValidationPipe } from '@nestjs/common';
+import { Logger, RequestMethod, ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { execSync } from 'node:child_process';
@@ -39,10 +39,18 @@ function freePort(port: number): void {
 }
 
 async function bootstrap() {
+  // Allow self-signed certificates when targeting a local Domo instance in dev
+  if (process.env.NODE_ENV === 'development') {
+    process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+  }
+
   const app = await NestFactory.create(AppModule);
 
   app.setGlobalPrefix('api', {
-    exclude: ['health', 'domo/datasources/v1', 'domo/datasources/v1/*path'],
+    exclude: [
+      { path: 'health', method: RequestMethod.ALL },
+      { path: 'domo/(.*)', method: RequestMethod.ALL },
+    ],
   });
 
   app.useGlobalPipes(

@@ -1,7 +1,6 @@
 import {
   Body,
   Controller,
-  HttpCode,
   HttpStatus,
   Post,
   Res,
@@ -33,11 +32,5 @@ export class ContextController {
     res.status(HttpStatus.OK);
 
     stream.pipe(res);
-  }
-
-  @Post('assemble')
-  @HttpCode(HttpStatus.OK)
-  async assemble(@Body() dto: QueryContextDto) {
-    return this.contextService.assembleContext(dto);
   }
 }

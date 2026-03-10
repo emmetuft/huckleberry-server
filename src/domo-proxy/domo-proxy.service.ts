@@ -79,7 +79,12 @@ export class DomoProxyService {
         body: body ? JSON.stringify(body) : undefined,
       });
     } catch (error) {
-      this.logger.error(`Stream fetch failed: ${String(error)}`);
+      const cause =
+        error instanceof Error && 'cause' in error ? error.cause : undefined;
+      this.logger.error(
+        `Stream fetch failed: ${String(error)}`,
+        cause ? String(cause) : undefined,
+      );
       throw new DomoApiError(
         503,
         `Domo API unavailable: ${error instanceof Error ? error.message : String(error)}`,

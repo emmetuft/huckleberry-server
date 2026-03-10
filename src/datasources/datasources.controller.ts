@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, HttpStatus, Param, Post, Query, UseGuards } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { DataSourcesService } from './datasources.service.js';
 import { DomoAuthGuard } from '../common/guards/domo-auth.guard.js';
@@ -30,5 +30,21 @@ export class DataSourcesController {
   @Get(':id/schema')
   getSchema(@Param('id') id: string) {
     return this.dataSourcesService.getSchema(id);
+  }
+
+  @Post(':id/data')
+  @HttpCode(HttpStatus.OK)
+  queryData(
+    @Param('id') id: string,
+    @Query('page') page?: string,
+    @Query('size') size?: string,
+    @Body() body?: any,
+  ) {
+    return this.dataSourcesService.queryData(
+      id,
+      body,
+      parseInt(page || '0', 10),
+      parseInt(size || '100', 10),
+    );
   }
 }

@@ -5,7 +5,11 @@ import { DomoProxyService } from '../domo-proxy/domo-proxy.service.js';
 export class DataSourcesService {
   constructor(private readonly domo: DomoProxyService) {}
 
-  async list(offset: number, limit: number, nameLike?: string): Promise<unknown> {
+  async list(
+    offset: number,
+    limit: number,
+    nameLike?: string,
+  ): Promise<unknown> {
     const query: Record<string, string> = {
       offset: String(offset),
       limit: String(limit),
@@ -13,10 +17,21 @@ export class DataSourcesService {
     if (nameLike) {
       query.nameLike = nameLike;
     }
-    return this.domo.get('/api/data/v1/datasources', { query });
+    return this.domo.get('/api/data/v3/datasources', { query });
   }
 
   async getSchema(dataSourceId: string): Promise<unknown> {
-    return this.domo.get(`/api/data/v1/datasources/${dataSourceId}/schema`);
+    return this.domo.get(`/api/data/v3/datasources/${dataSourceId}/schema`);
+  }
+
+  async queryData(
+    dataSourceId: string,
+    body: unknown,
+    page: number,
+    pageSize: number,
+  ): Promise<unknown> {
+    return this.domo.post(`/api/v2/domo/datasets/${dataSourceId}/data`, body, {
+      query: { page: String(page), size: String(pageSize) },
+    });
   }
 }

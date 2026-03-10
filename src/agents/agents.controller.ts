@@ -150,6 +150,19 @@ export class AgentsController {
     return this.huckleberryAgentId;
   }
 
+  /** Headers managed by Node/Express that must not be copied from upstream. */
+  private static readonly HOP_BY_HOP_HEADERS = new Set([
+    'connection',
+    'keep-alive',
+    'transfer-encoding',
+    'content-length',
+    'content-encoding',
+    'host',
+    'te',
+    'trailer',
+    'upgrade',
+  ]);
+
   private async pipeStreamResponse(
     domoResponse: Response,
     res: ExpressResponse,
@@ -169,12 +182,27 @@ export class AgentsController {
 
     res.status(domoResponse.status);
     domoResponse.headers.forEach((value, key) => {
-      res.setHeader(key, value);
+      if (!AgentsController.HOP_BY_HOP_HEADERS.has(key.toLowerCase())) {
+        res.setHeader(key, value);
+      }
     });
 
     const readable = Readable.fromWeb(
       domoResponse.body as import('node:stream/web').ReadableStream,
     );
-    readable.pipe(res);
+
+    await new Promise<void>((resolve, reject) => {
+      readable.on('error', (err) => {
+        if (!res.headersSent) {
+          reject(
+            new DomoApiError(502, `Upstream stream error: ${String(err)}`),
+          );
+        } else {
+          res.end();
+          resolve();
+        }
+      });
+      readable.pipe(res).on('finish', resolve);
+    });
   }
 }

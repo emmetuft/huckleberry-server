@@ -18,6 +18,7 @@ export class Neo4jService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(Neo4jService.name);
   private driver!: Driver;
   private database: string;
+  private connected = false;
 
   constructor(private readonly config: ConfigService) {
     const appConfig = this.config.get<AppConfig>('app')!;
@@ -40,10 +41,15 @@ export class Neo4jService implements OnModuleInit, OnModuleDestroy {
     this.driver = neo4j.driver(uri, neo4j.auth.basic(user, password));
     try {
       await this.driver.verifyConnectivity();
+      this.connected = true;
       this.logger.log(`Connected to Neo4j at ${uri}`);
     } catch (error) {
       this.logger.warn(`Neo4j connectivity check failed: ${String(error)}`);
     }
+  }
+
+  isConnected(): boolean {
+    return this.connected;
   }
 
   async onModuleDestroy(): Promise<void> {

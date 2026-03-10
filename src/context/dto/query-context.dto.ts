@@ -1,18 +1,25 @@
-import { IsNumber, IsOptional, IsString } from 'class-validator';
+import { IsArray, IsOptional, IsString } from 'class-validator';
 
 export class QueryContextDto {
   @IsString()
-  input!: string;
+  userInput!: string;
+
+  @IsOptional()
+  userId?: any;
 
   @IsString()
   @IsOptional()
   sessionId?: string;
 
-  @IsString()
+  @IsArray()
   @IsOptional()
-  personaId?: string;
+  tools?: any[];
 
-  @IsNumber()
+  @IsArray()
   @IsOptional()
-  ontologyDepth?: number;
+  files?: any[];
+
+  @IsArray()
+  @IsOptional()
+  dataSources?: any[];
 }
