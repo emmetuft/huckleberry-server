@@ -1,5 +1,7 @@
-import { IsDefined, IsEnum, IsOptional, IsString } from 'class-validator';
-import { AgentType } from '../../common/types/domo-common.types.js';
+import { IsOptional, IsString, ValidateNested } from 'class-validator';
+import { AgentContextDto } from './agent-context.dto.js';
+import { Type } from 'class-transformer';
+import { ElicitationResponseDto } from './elicitation-response.dto.js';
 
 export class ResumeAgentDto {
   @IsString()
@@ -8,13 +10,23 @@ export class ResumeAgentDto {
 
   @IsString()
   @IsOptional()
+  batchId?: string;
+
+  @IsString()
+  @IsOptional()
   sourceRequestId?: string;
 
-  @IsDefined()
+  @IsString()
   @IsOptional()
-  response?: unknown;
+  input?: string;
 
-  @IsEnum(AgentType)
+  @ValidateNested()
+  @Type(() => AgentContextDto)
   @IsOptional()
-  agentStrategy?: AgentType;
+  aiAssistantContext?: AgentContextDto;
+
+  @ValidateNested()
+  @Type(() => ElicitationResponseDto)
+  @IsOptional()
+  response?: ElicitationResponseDto;
 }

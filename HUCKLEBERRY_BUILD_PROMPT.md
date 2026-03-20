@@ -28,6 +28,7 @@ huckleberry-server/src/
 ```
 
 The existing NestJS module pattern to follow (controller / service / module):
+
 - Reference `src/agents/agents.controller.ts`, `agents.service.ts`, `agents.module.ts`
 - All modules use `DomoProxyService` for Domo API calls or their own HTTP/DB clients
 - DTOs use `class-validator` decorators, typed with `class-transformer`
@@ -46,15 +47,16 @@ calls these at `/api/ontology/*`. This module moves that logic server-side as a 
 
 **Endpoints to implement:**
 
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/ontology/labels` | Fetch all node labels from the graph |
-| POST | `/ontology/nodes` | Fetch nodes with optional label, filter, and relationship options |
-| GET | `/ontology/subgraph/:nodeId` | Fetch a subgraph starting from a node (depth, limit params) |
-| GET | `/ontology/search` | Full-text node search (query, limit params) |
-| GET | `/ontology/property-values/:label/:property` | Fetch unique property values for a label/property |
+| Method | Path                                         | Description                                                       |
+| ------ | -------------------------------------------- | ----------------------------------------------------------------- |
+| GET    | `/ontology/labels`                           | Fetch all node labels from the graph                              |
+| POST   | `/ontology/nodes`                            | Fetch nodes with optional label, filter, and relationship options |
+| GET    | `/ontology/subgraph/:nodeId`                 | Fetch a subgraph starting from a node (depth, limit params)       |
+| GET    | `/ontology/search`                           | Full-text node search (query, limit params)                       |
+| GET    | `/ontology/property-values/:label/:property` | Fetch unique property values for a label/property                 |
 
 **Service contract (from `neo4j.ts`):**
+
 ```typescript
 // POST /ontology/nodes body shape
 interface FetchNodesParams {
@@ -77,6 +79,7 @@ interface FetchNodesParams {
 **Response shape:** All endpoints return `{ success: boolean, data: GraphData | any, error?: string }`
 
 **Implementation notes:**
+
 - The ontology service should connect to a Neo4j instance via environment variables:
   `NEO4J_URI`, `NEO4J_USER`, `NEO4J_PASSWORD`
 - Use the official `neo4j-driver` npm package (`npm install neo4j-driver`)
@@ -117,33 +120,35 @@ and receives a stream of `StreamMessage` events.
 
 **Endpoints to implement:**
 
-| Method | Path | Description |
-|--------|------|-------------|
-| POST | `/context/query-stream` | Assemble context + execute Huckleberry agent, SSE stream |
-| POST | `/context/assemble` | Assemble context for a query (no execution, returns context block) |
+| Method | Path                    | Description                                                        |
+| ------ | ----------------------- | ------------------------------------------------------------------ |
+| POST   | `/context/query-stream` | Assemble context + execute Huckleberry agent, SSE stream           |
+| POST   | `/context/assemble`     | Assemble context for a query (no execution, returns context block) |
 
 **Request/Response contracts (from `context.ts` and `models/interfaces/userRequest`):**
+
 ```typescript
 // POST /context/query-stream body
 interface UserRequest {
   input: string;
   sessionId?: string;
-  personaId?: string;      // optional: which persona to use
-  ontologyDepth?: number;  // how deep to traverse ontology for context (default 2)
+  personaId?: string; // optional: which persona to use
+  ontologyDepth?: number; // how deep to traverse ontology for context (default 2)
 }
 
 // SSE stream events yielded
 interface StreamMessage {
-  type: StreamType;           // CONTEXT | THINKING | TOOL_STARTED | TOOL_COMPLETED | ANSWER | ERROR
+  type: StreamType;
   content?: string;
   message?: string;
-  context?: GraphContext;     // assembled ontology + persona snapshot
+  context?: GraphContext; // assembled ontology + persona snapshot
   step?: ProcessStep;
   tool?: ToolEventData;
 }
 ```
 
 **What context assembly does:**
+
 1. Take the user's `input`
 2. Search the ontology graph for relevant nodes (`searchNodes(input)`)
 3. Load the active persona (by `personaId` or default)
@@ -154,9 +159,15 @@ interface StreamMessage {
    with the assembled context snapshot
 
 **Context assembly output shape:**
+
 ```typescript
 interface GraphContext {
-  entities: Array<{ id: string; label: string; name: string; properties: Record<string, any> }>;
+  entities: Array<{
+    id: string;
+    label: string;
+    name: string;
+    properties: Record<string, any>;
+  }>;
   relationships: Array<{ from: string; to: string; type: string }>;
   intent: string;
   persona?: {
@@ -169,6 +180,7 @@ interface GraphContext {
 ```
 
 **Implementation notes:**
+
 - `ContextService` depends on `OntologyService` (for graph search) and `PersonasService` (for persona lookup)
 - The assembled context strings get passed as additional fields in `AssistantExecutionRequest.context`
 - For the initial intent classifier, use simple string matching on keywords:
@@ -190,33 +202,34 @@ this module makes them persistent and manageable server-side.
 
 **Endpoints to implement:**
 
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/personas` | List all personas |
-| POST | `/personas` | Create a new persona |
-| GET | `/personas/:id` | Get a persona by ID |
-| PUT | `/personas/:id` | Update a persona |
-| DELETE | `/personas/:id` | Delete a persona |
-| GET | `/personas/default` | Get the default persona |
-| PATCH | `/personas/:id/default` | Set a persona as default |
+| Method | Path                    | Description              |
+| ------ | ----------------------- | ------------------------ |
+| GET    | `/personas`             | List all personas        |
+| POST   | `/personas`             | Create a new persona     |
+| GET    | `/personas/:id`         | Get a persona by ID      |
+| PUT    | `/personas/:id`         | Update a persona         |
+| DELETE | `/personas/:id`         | Delete a persona         |
+| GET    | `/personas/default`     | Get the default persona  |
+| PATCH  | `/personas/:id/default` | Set a persona as default |
 
 **Persona shape (from `persona.ts` and `models/interfaces/persona.ts`):**
+
 ```typescript
 interface Persona {
-  id: string;                 // UUID
-  name: string;               // display name for the persona
-  role: string;               // e.g. "Chief Marketing Officer"
-  level: RoleLevel;           // C_LEVEL | VP | DIRECTOR | MANAGER | INDIVIDUAL_CONTRIBUTOR
-  department: string;         // from groupedDepartments list
+  id: string; // UUID
+  name: string; // display name for the persona
+  role: string; // e.g. "Chief Marketing Officer"
+  level: RoleLevel; // C_LEVEL | VP | DIRECTOR | MANAGER | INDIVIDUAL_CONTRIBUTOR
+  department: string; // from groupedDepartments list
   team?: string;
-  focusAreas: string[];       // from focusAreas list in constants/persona.ts
-  strengths: string[];        // from strengthsList
-  weaknesses: string[];       // from weaknessesList
-  goals: string;              // free text goal statement
+  focusAreas: string[]; // from focusAreas list in constants/persona.ts
+  strengths: string[]; // from strengthsList
+  weaknesses: string[]; // from weaknessesList
+  goals: string; // free text goal statement
   isDefault: boolean;
-  usePersona: boolean;        // whether to inject this persona into agent context
-  useActivity: boolean;       // whether to inject user activity context
-  useData: boolean;           // whether to inject data context
+  usePersona: boolean; // whether to inject this persona into agent context
+  useActivity: boolean; // whether to inject user activity context
+  useData: boolean; // whether to inject data context
   createdAt: string;
   updatedAt: string;
 }
@@ -226,12 +239,13 @@ enum RoleLevel {
   VP = 'VP',
   DIRECTOR = 'DIRECTOR',
   MANAGER = 'MANAGER',
-  INDIVIDUAL_CONTRIBUTOR = 'INDIVIDUAL_CONTRIBUTOR'
+  INDIVIDUAL_CONTRIBUTOR = 'INDIVIDUAL_CONTRIBUTOR',
 }
 ```
 
 **Persona → prompt string serialization:**
 When assembling context, a persona should be serialized to a prompt-friendly string:
+
 ```
 Role: Chief Marketing Officer (C-Level)
 Department: Marketing | Team: Marketing
@@ -241,6 +255,7 @@ Goals: Attract 3 major news publishers for Domopalooza 2026
 ```
 
 **Implementation notes:**
+
 - Use in-memory storage initially (a `Map<string, Persona>`) with a seed default persona
   matching the `defaultPersona` from `~/dev/huckleberry/src/constants/persona.ts`
 - Later: persist to a database (SQLite via TypeORM is a lightweight option)
@@ -258,34 +273,35 @@ Huckleberry's capabilities. The frontend currently calls these at `/api/mcp/*`.
 
 **Endpoints to implement — Server management:**
 
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/mcp/servers` | List all MCP servers (optional `?enabled=true`) |
-| POST | `/mcp/servers` | Register a new MCP server |
-| GET | `/mcp/servers/:id` | Get a server by ID |
-| PUT | `/mcp/servers/:id` | Update a server |
-| DELETE | `/mcp/servers/:id` | Delete a server |
-| POST | `/mcp/servers/:id/test` | Test connection to a server |
-| POST | `/mcp/servers/:id/sync` | Sync tool definitions from a server |
-| PATCH | `/mcp/servers/:id/toggle` | Enable or disable a server |
+| Method | Path                      | Description                                     |
+| ------ | ------------------------- | ----------------------------------------------- |
+| GET    | `/mcp/servers`            | List all MCP servers (optional `?enabled=true`) |
+| POST   | `/mcp/servers`            | Register a new MCP server                       |
+| GET    | `/mcp/servers/:id`        | Get a server by ID                              |
+| PUT    | `/mcp/servers/:id`        | Update a server                                 |
+| DELETE | `/mcp/servers/:id`        | Delete a server                                 |
+| POST   | `/mcp/servers/:id/test`   | Test connection to a server                     |
+| POST   | `/mcp/servers/:id/sync`   | Sync tool definitions from a server             |
+| PATCH  | `/mcp/servers/:id/toggle` | Enable or disable a server                      |
 
 **Endpoints to implement — Tools:**
 
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/mcp/tools` | List all tools from all enabled servers |
-| POST | `/mcp/tools/execute` | Execute a tool on a specific server |
+| Method | Path                 | Description                             |
+| ------ | -------------------- | --------------------------------------- |
+| GET    | `/mcp/tools`         | List all tools from all enabled servers |
+| POST   | `/mcp/tools/execute` | Execute a tool on a specific server     |
 
 **Endpoints to implement — OAuth2:**
 
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/mcp/oauth2/authorize/:serverId` | Initiate OAuth2 authorization flow |
-| POST | `/mcp/oauth2/revoke/:serverId` | Revoke OAuth2 credentials |
-| GET | `/mcp/oauth2/status/:serverId` | Get OAuth2 authorization status |
-| POST | `/mcp/oauth2/discover/:serverId` | Discover OAuth2 configuration |
+| Method | Path                              | Description                        |
+| ------ | --------------------------------- | ---------------------------------- |
+| GET    | `/mcp/oauth2/authorize/:serverId` | Initiate OAuth2 authorization flow |
+| POST   | `/mcp/oauth2/revoke/:serverId`    | Revoke OAuth2 credentials          |
+| GET    | `/mcp/oauth2/status/:serverId`    | Get OAuth2 authorization status    |
+| POST   | `/mcp/oauth2/discover/:serverId`  | Discover OAuth2 configuration      |
 
 **Type contracts (from `models/interfaces/mcpServer.ts`):**
+
 ```typescript
 interface MCPServerConfig {
   id: string;
@@ -321,6 +337,7 @@ interface MCPToolResult {
 ```
 
 **Implementation notes:**
+
 - Use in-memory storage initially (`Map<string, MCPServerConfig>`)
 - Tool execution: make a POST to the MCP server's tool endpoint following the MCP protocol spec
 - Connection test: attempt to fetch the server's tool list and return success/failure
@@ -381,26 +398,28 @@ Build in this dependency order (later modules depend on earlier ones):
 
 All in `~/dev/huckleberry/`:
 
-| Reference file | What it tells you |
-|---|---|
-| `src/services/neo4j.ts` | Ontology API contracts and query patterns |
-| `src/services/context.ts` | Context streaming shape and UserRequest type |
-| `src/services/mcp.ts` | Full MCP API surface and OAuth2 flows |
-| `src/constants/persona.ts` | Persona structure, defaults, and vocabulary lists |
-| `src/constants/mapping.ts` | Data alias and schema mapping patterns |
-| `src/models/enums/stream.ts` | StreamType enum values |
-| `src/models/interfaces/` | All TypeScript interface definitions |
+| Reference file               | What it tells you                                 |
+| ---------------------------- | ------------------------------------------------- |
+| `src/services/neo4j.ts`      | Ontology API contracts and query patterns         |
+| `src/services/context.ts`    | Context streaming shape and UserRequest type      |
+| `src/services/mcp.ts`        | Full MCP API surface and OAuth2 flows             |
+| `src/constants/persona.ts`   | Persona structure, defaults, and vocabulary lists |
+| `src/constants/mapping.ts`   | Data alias and schema mapping patterns            |
+| `src/models/enums/stream.ts` | StreamType enum values                            |
+| `src/models/interfaces/`     | All TypeScript interface definitions              |
 
 ---
 
 ## Existing NestJS Patterns to Follow
 
 In `~/dev/huckleberry-server/src/agents/`:
+
 - `agents.controller.ts` — controller pattern with guards, DTOs, streaming
 - `agents.service.ts` — service pattern with `OnModuleInit`, logging, typed returns
 - `agents.module.ts` — module wiring pattern
 
 In `~/dev/huckleberry-server/src/common/`:
+
 - `guards/domo-auth.guard.ts` — apply `@UseGuards(DomoAuthGuard)` to all new controllers
 - `filters/domo-exception.filter.ts` — use `DomoApiError` for upstream errors
 - `config/configuration.ts` — add new env vars here following the existing typed pattern

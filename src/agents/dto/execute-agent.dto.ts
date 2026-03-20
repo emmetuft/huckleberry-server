@@ -5,11 +5,15 @@ import { AgentContextDto } from './agent-context.dto.js';
 
 export class ExecuteAgentDto {
   @IsString()
-  input!: string;
-
-  @IsString()
   @IsOptional()
   sessionId?: string;
+
+  @IsString()
+  input!: string;
+
+  @IsEnum(AgentType)
+  @IsOptional()
+  agentType?: AgentType;
 
   @ValidateNested()
   @Type(() => AgentContextDto)
@@ -19,8 +23,4 @@ export class ExecuteAgentDto {
   @IsString()
   @IsOptional()
   model?: string;
-
-  @IsEnum(AgentType)
-  @IsOptional()
-  agentType?: AgentType;
 }

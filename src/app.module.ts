@@ -10,7 +10,7 @@ import { AiServicesModule } from './ai-services/ai-services.module.js';
 import { OntologyModule } from './ontology/ontology.module.js';
 import { PersonasModule } from './personas/personas.module.js';
 import { McpModule } from './mcp/mcp.module.js';
-import { ContextModule } from './context/context.module.js';
+import { HuckleberryModule } from './huckleberry/huckleberry.module.js';
 import { PeopleModule } from './people/people.module.js';
 import { DataSourcesModule } from './datasources/datasources.module.js';
 
@@ -31,7 +31,7 @@ import { DataSourcesModule } from './datasources/datasources.module.js';
     OntologyModule,
     PersonasModule,
     McpModule,
-    ContextModule,
+    HuckleberryModule,
     PeopleModule,
     DataSourcesModule,
   ],
