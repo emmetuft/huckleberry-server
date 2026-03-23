@@ -13,6 +13,8 @@ import { McpModule } from './mcp/mcp.module.js';
 import { HuckleberryModule } from './huckleberry/huckleberry.module.js';
 import { PeopleModule } from './people/people.module.js';
 import { DataSourcesModule } from './datasources/datasources.module.js';
+import { SessionsModule } from './sessions/sessions.module.js';
+import { ToolkitsModule } from './toolkits/toolkits.module.js';
 
 @Module({
   imports: [
@@ -34,6 +36,8 @@ import { DataSourcesModule } from './datasources/datasources.module.js';
     HuckleberryModule,
     PeopleModule,
     DataSourcesModule,
+    SessionsModule,
+    ToolkitsModule,
   ],
 })
 export class AppModule {}
