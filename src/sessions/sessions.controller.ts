@@ -1,7 +1,18 @@
-import { Controller, Get, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Param,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { SessionsService } from './sessions.service.js';
 import { DomoAuthGuard } from '../common/guards/domo-auth.guard.js';
+import { SearchSessionsDto } from './dto/search-sessions.dto.js';
 
 @ApiTags('Sessions')
 @Controller('sessions')
@@ -9,8 +20,27 @@ import { DomoAuthGuard } from '../common/guards/domo-auth.guard.js';
 export class SessionsController {
   constructor(private readonly sessionsService: SessionsService) {}
 
-  @Get()
-  getSessions() {
-    return this.sessionsService.getSessions();
+  @Post()
+  @HttpCode(HttpStatus.OK)
+  getSessions(@Body() dto: SearchSessionsDto) {
+    return this.sessionsService.getSessions(dto);
+  }
+
+  @Get(':sessionId')
+  @HttpCode(HttpStatus.OK)
+  getSession(@Param('sessionId') sessionId: string) {
+    return this.sessionsService.getSession(sessionId);
+  }
+
+  @Get(':sessionId/events')
+  @HttpCode(HttpStatus.OK)
+  getSessionEvents(@Param('sessionId') sessionId: string) {
+    return this.sessionsService.getSessionEvents(sessionId);
+  }
+
+  @Delete(':sessionId')
+  @HttpCode(HttpStatus.OK)
+  deleteSession(@Param('sessionId') sessionId: string) {
+    return this.sessionsService.deleteSession(sessionId);
   }
 }

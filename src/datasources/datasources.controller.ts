@@ -1,4 +1,14 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Param, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Param,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { DataSourcesService } from './datasources.service.js';
 import { DomoAuthGuard } from '../common/guards/domo-auth.guard.js';
@@ -9,7 +19,7 @@ import { DomoAuthGuard } from '../common/guards/domo-auth.guard.js';
  * outside the /api global prefix to match that path.
  */
 @ApiTags('DataSources')
-@Controller('domo/datasources/v1')
+@Controller('datasources')
 @UseGuards(DomoAuthGuard)
 export class DataSourcesController {
   constructor(private readonly dataSourcesService: DataSourcesService) {}

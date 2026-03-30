@@ -30,6 +30,7 @@ export class DataSourcesService {
     page: number,
     pageSize: number,
   ): Promise<unknown> {
+    // This doesn't work, need another endpoint
     return this.domo.post(`/api/v2/domo/datasets/${dataSourceId}/data`, body, {
       query: { page: String(page), size: String(pageSize) },
     });
