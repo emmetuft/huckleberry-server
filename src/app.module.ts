@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import configuration from './common/config/configuration.js';
 import { AgentsModule } from './agents/agents.module.js';
 import { AiServicesModule } from './ai-services/ai-services.module.js';
+import { ConnectorsModule } from './connectors/connectors.module.js';
 import { DataSourcesModule } from './datasources/datasources.module.js';
 import { DomoProxyModule } from './domo-proxy/domo-proxy.module.js';
 import { GraphModule } from './graph/graph.module.js';
@@ -28,6 +29,7 @@ import { ToolkitsModule } from './toolkits/toolkits.module.js';
     }),
     AgentsModule,
     AiServicesModule,
+    ConnectorsModule,
     DataSourcesModule,
     DomoProxyModule,
     GraphModule,

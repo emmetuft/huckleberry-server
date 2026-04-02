@@ -56,6 +56,30 @@ export class DomoProxyService {
     return this.request<T>('DELETE', path, undefined, options);
   }
 
+  async getStream(path: string, options?: DomoRequestOptions): Promise<Response> {
+    const url = this.buildUrl(path, options?.query);
+    const headers = this.buildHeaders(options?.headers);
+
+    if (this.isDev) {
+      this.logger.log(`→ STREAM GET ${url}`);
+    }
+
+    try {
+      return await fetch(url, { method: 'GET', headers });
+    } catch (error) {
+      const cause =
+        error instanceof Error && 'cause' in error ? error.cause : undefined;
+      this.logger.error(
+        `Stream fetch failed: ${String(error)}`,
+        cause ? String(cause) : undefined,
+      );
+      throw new DomoApiError(
+        503,
+        `Domo API unavailable: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+
   async postStream(
     path: string,
     body?: unknown,
