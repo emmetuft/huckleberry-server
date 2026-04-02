@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { DomoProxyService } from '../domo-proxy/domo-proxy.service.js';
 import { SearchSessionsDto } from './dto/search-sessions.dto.js';
 
+const SESSION_BASE = '/api/ai/v1/sessions';
 const GROUP = 'ASSISTANT';
 const GROUP_ENTITY_ID = 'huckleberry';
 
@@ -19,14 +20,14 @@ export class SessionsService {
   }
 
   async getSession(sessionId: string) {
-    return this.domo.get(`/api/ai/v1/sessions/${sessionId}`);
+    return this.domo.get(`${SESSION_BASE}/${sessionId}`);
   }
 
   async getSessionEvents(sessionId: string) {
-    return this.domo.get(`/api/ai/v1/sessions/${sessionId}/events`);
+    return this.domo.get(`${SESSION_BASE}/${sessionId}/events`);
   }
 
   async deleteSession(sessionId: string) {
-    return this.domo.delete(`/api/ai/v1/sessions/${sessionId}`);
+    return this.domo.delete(`${SESSION_BASE}/${sessionId}`);
   }
 }
