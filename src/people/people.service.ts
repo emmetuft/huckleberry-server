@@ -7,18 +7,25 @@ export class PeopleService {
   constructor(private readonly domo: DomoProxyService) {}
 
   async getUsers(): Promise<DomoUser[]> {
-    return this.domo.get<DomoUser[]>('/api/v1/users');
+    return this.domo.get<DomoUser[]>('/api/identity/v1/users');
   }
 
   async getUserById(id: string): Promise<DomoUser> {
-    return this.domo.get<DomoUser>(`/api/v1/users/${id}`);
+    return this.domo.get<DomoUser>(`/api/content/v3/users?id=${id}`);
   }
 
-  async getGroups(): Promise<DomoGroup[]> {
-    return this.domo.get<DomoGroup[]>('/api/v1/groups');
+  async getGroups(limit = 100, offset?: number): Promise<DomoGroup[]> {
+    const query: Record<string, string> = {
+      ascending: 'true',
+      limit: String(limit),
+    };
+    if (offset != null) query.offset = String(offset);
+    return this.domo.get<DomoGroup[]>('/api/content/v2/groups/grouplist', {
+      query,
+    });
   }
 
   async getGroupById(id: string): Promise<DomoGroup> {
-    return this.domo.get<DomoGroup>(`/api/v1/groups/${id}`);
+    return this.domo.get<DomoGroup>(`/api/content/v2/groups/${id}`);
   }
 }

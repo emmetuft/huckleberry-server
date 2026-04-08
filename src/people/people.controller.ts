@@ -1,4 +1,4 @@
-import { Controller, Get, Param, UseGuards } from '@nestjs/common';
+import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { PeopleService } from './people.service.js';
 import { DomoAuthGuard } from '../common/guards/domo-auth.guard.js';
@@ -20,8 +20,14 @@ export class PeopleController {
   }
 
   @Get('groups')
-  getGroups() {
-    return this.peopleService.getGroups();
+  getGroups(
+    @Query('limit') limit?: string,
+    @Query('offset') offset?: string,
+  ) {
+    return this.peopleService.getGroups(
+      limit != null ? Number(limit) : undefined,
+      offset != null ? Number(offset) : undefined,
+    );
   }
 
   @Get('groups/:id')

@@ -12,10 +12,6 @@ export class PersonasService {
   /** Maps userId -> persona ID for the legacy /persona/:userId route */
   private readonly userPersonaMap = new Map<string, string>();
 
-  constructor() {
-    this.seed();
-  }
-
   findAll(): Persona[] {
     return Array.from(this.store.values());
   }
@@ -46,7 +42,13 @@ export class PersonasService {
    * Save/update a persona for a specific user.
    * If the user already has a persona, update it. Otherwise, create one.
    */
-  saveForUser(userId: string, data: Omit<Persona, 'id' | 'isDefault' | 'createdAt' | 'updatedAt' | 'name'>): Persona {
+  saveForUser(
+    userId: string,
+    data: Omit<
+      Persona,
+      'id' | 'isDefault' | 'createdAt' | 'updatedAt' | 'name'
+    >,
+  ): Persona {
     const existingId = this.userPersonaMap.get(userId);
     const now = new Date().toISOString();
 
@@ -134,7 +136,11 @@ export class PersonasService {
         this.store.set(p.id, { ...p, isDefault: false });
       }
     }
-    const updated = { ...persona, isDefault: true, updatedAt: new Date().toISOString() };
+    const updated = {
+      ...persona,
+      isDefault: true,
+      updatedAt: new Date().toISOString(),
+    };
     this.store.set(id, updated);
     return updated;
   }
@@ -152,33 +158,5 @@ export class PersonasService {
       `Goals: ${persona.goals}`,
     ];
     return lines.join('\n');
-  }
-
-  private seed(): void {
-    const now = new Date().toISOString();
-    const defaultPersona: Persona = {
-      id: randomUUID(),
-      name: 'Default CMO',
-      role: 'Chief Marketing Officer',
-      level: RoleLevel.C_LEVEL,
-      department: 'Marketing',
-      team: 'Marketing',
-      focusAreas: [
-        'Campaign Performance',
-        'Customer Segmentation',
-        'Time to Market',
-      ],
-      strengths: ['Leadership', 'Collaboration', 'Decision Making'],
-      weaknesses: ['Overcommitting'],
-      goals: 'Attract 3 major news publishers for Domopalooza 2026',
-      isDefault: true,
-      usePersona: true,
-      useActivity: true,
-      useData: true,
-      createdAt: now,
-      updatedAt: now,
-    };
-    this.store.set(defaultPersona.id, defaultPersona);
-    this.logger.log(`Seeded default persona: ${defaultPersona.id}`);
   }
 }

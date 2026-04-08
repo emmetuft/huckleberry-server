@@ -10,6 +10,7 @@ import { DataSourcesModule } from './datasources/datasources.module.js';
 import { DomoProxyModule } from './domo-proxy/domo-proxy.module.js';
 import { GraphModule } from './graph/graph.module.js';
 import { HealthModule } from './health/health.module.js';
+import { IdentityModule } from './identity/identity.module.js';
 import { HuckleberryModule } from './huckleberry/huckleberry.module.js';
 import { McpModule } from './mcp/mcp.module.js';
 import { PeopleModule } from './people/people.module.js';
@@ -35,6 +36,7 @@ import { ToolkitsModule } from './toolkits/toolkits.module.js';
     GraphModule,
     HealthModule,
     HuckleberryModule,
+    IdentityModule,
     McpModule,
     PersonasModule,
     PeopleModule,
