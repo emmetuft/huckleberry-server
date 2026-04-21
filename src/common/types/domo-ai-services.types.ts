@@ -104,20 +104,6 @@ export interface TextGenerationRequest {
   responseFormat?: JsonResponseFormat;
 }
 
-export interface ChatCompletionRequest {
-  input: string;
-  sessionId?: string;
-  model?: string;
-  system?: string;
-  promptTemplate?: ParameterizedPromptTemplate;
-  parameters?: Record<string, unknown>;
-  modelConfiguration?: Record<string, unknown>;
-  temperature?: number;
-  maxTokens?: number;
-  reasoningConfig?: ReasoningConfig;
-  responseFormat?: JsonResponseFormat;
-}
-
 export interface TextSummarizationRequest {
   input: string;
   sessionId?: string;
@@ -146,18 +132,4 @@ export interface TextToSQLRequest {
   reasoningConfig?: ReasoningConfig;
   dataSourceSchemas?: AIDataSourceSchema[];
   sqlRequestOption?: SqlRequestOption;
-}
-
-export interface TextToBeastModeRequest {
-  input: string;
-  sessionId?: string;
-  model?: string;
-  system?: string;
-  promptTemplate?: ParameterizedPromptTemplate;
-  parameters?: Record<string, unknown>;
-  modelConfiguration?: Record<string, unknown>;
-  temperature?: number;
-  maxTokens?: number;
-  reasoningConfig?: ReasoningConfig;
-  dataSourceSchemas?: AIDataSourceSchema[];
 }
