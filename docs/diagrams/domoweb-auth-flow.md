@@ -1,6 +1,12 @@
-# Domo Web Auth Flow — TODAY
+# Domo Web Auth Flow — RETIRED
 
-What we actually build first. Uses Domo's internal `/api/domoweb/auth/login` endpoint, which accepts plaintext username + password and returns an instance session token usable against `/api/ai/v1/*`, `/api/recall/v1/*`, etc.
+> **🪦 Retired.** This flow was a fallback for when we thought Domo had no user-facing OAuth. Confirmed against `~/dev/heimdall` that Heimdall supports authorization-code OAuth with confidential clients today, so Huckleberry uses that instead. See `oauth-flow.md`.
+>
+> Kept only as historical context for the design decision. Do not implement.
+
+---
+
+What we *would* have built first if Heimdall were not available. Uses Domo's internal `/api/domoweb/auth/login` endpoint, which accepts plaintext username + password and returns an instance session token usable against `/api/ai/v1/*`, `/api/recall/v1/*`, etc.
 
 > **Caveats** (see fuller discussion in conversation history):
 > - This is the OAuth 2.0 ROPC anti-pattern: Huckleberry holds plaintext credentials in flight

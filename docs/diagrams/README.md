@@ -6,9 +6,9 @@ Current scope: **MVP for internal use.** Schema and services are deliberately mi
 |---|---|---|
 | `system-overview.md` | High-level: Huckleberry, AWS services, Domo surfaces, third-party | MVP |
 | `aurora-integration.md` | Aurora connectivity, surrounding AWS, ER, ops decisions | MVP |
-| `auth-architecture.md` | NestJS services, Aurora tables, provider seam, deferred items | MVP |
-| `auth-providers.md` | `DomoAuthProvider` interface, swap mechanics | MVP |
-| `domoweb-auth-flow.md` | `/api/domoweb/auth/login` sequence — what we build first | **Today** |
-| `oauth-flow-future.md` | Authorization-code + PKCE sequence | Future (blocked on Domo) |
+| `auth-architecture.md` | NestJS services, Aurora tables, deferred items | MVP |
+| `auth-providers.md` | Heimdall OAuth client shape (single provider) | MVP |
+| `oauth-flow.md` | Authorization-code + PKCE sequence via Heimdall, scopes, registration | **Today** |
+| `domoweb-auth-flow.md` | Plaintext-creds fallback | Retired (kept for context) |
 
 Read order: `system-overview.md` for the box-and-wire view → `auth-architecture.md` for service/table detail → `auth-providers.md` for the swap seam → pick a flow doc for the provider you care about.

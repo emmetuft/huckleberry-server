@@ -2,7 +2,7 @@
 
 Minimal schema for the v1 auth model: one user, one Domo instance, one identity. Multi-tenancy, multi-instance per user, and multi-IdP are deferred until we have a shared understanding of the post-MVP product.
 
-The `DomoAuthProvider` block is the **swappable seam** — `domoweb` today (`/api/domoweb/auth/login`, plaintext creds), `oauth` once Domo ships authorization-code on instance APIs. See `auth-providers.md` for the interface and `domoweb-auth-flow.md` / `oauth-flow-future.md` for the per-provider flows.
+**Auth via Heimdall.** Huckleberry registers as `domo:internal:huckleberry` in Heimdall (Domo's internal OAuth2 server) and uses authorization-code flow with a confidential client. See `oauth-flow.md` for the sequence and `auth-providers.md` for the auth-service shape. The earlier "swappable provider" seam is retired — single provider.
 
 Stateless proxy services (AI, Graph, DataSources, Connectors, Toolkits, Huckleberry) are collapsed into a single "Domo proxy services" node — they hold no local state and exist only to forward through DomoProxy.
 
@@ -24,12 +24,12 @@ graph LR
         MCP[MCP]
         PROXY_SVCS[Domo proxy services<br/>AI · Graph · DataSources<br/>Connectors · Toolkits · Huckleberry]
         PROXY[DomoProxy]
-        PROVIDER{{DomoAuthProvider<br/>domoweb · oauth}}
+        HEIMDALL_CLIENT{{Heimdall OAuth Client<br/>authorize · token · refresh · revoke}}
     end
 
     subgraph "Aurora MySQL — MVP"
         T_USERS[(users)]
-        T_TOKENS[(domo_sessions<br/>access_token encrypted<br/>refresh_token NULL under domoweb)]
+        T_TOKENS[(domo_sessions<br/>access_token encrypted 1h TTL<br/>refresh_token encrypted 2y TTL)]
         T_PERSONAS[(personas)]
         T_AGENTS[(agents_meta · agent_sessions)]
         T_MCP[(mcp_servers · mcp_oauth_tokens)]
@@ -38,8 +38,8 @@ graph LR
     SM[Secrets Manager]
     REDIS[(Redis<br/>sessions + token cache)]
 
-    DOMO[Domo Instance APIs<br/>Identity · AI · Data<br/>Recall · Toolkits]
-    DOMO_AUTH["Domo Auth Endpoint<br/>domoweb — /api/domoweb/auth/login<br/>oauth — /oauth/authorize + /oauth/token"]
+    DOMO[Domo Instance APIs<br/>Identity · AI · Data<br/>Recall · Toolkits<br/>Bearer JWT auth]
+    HEIMDALL[Heimdall<br/>/api/oauth2/authorize<br/>/api/oauth2/token<br/>/api/oauth2/revoke]
 
     UI --> AUTH
     UI --> PROXY_SVCS
@@ -49,8 +49,8 @@ graph LR
     AUTH --> T_TOKENS
     AUTH --> SM
     AUTH --> REDIS
-    AUTH --> PROVIDER
-    PROVIDER --> DOMO_AUTH
+    AUTH --> HEIMDALL_CLIENT
+    HEIMDALL_CLIENT --> HEIMDALL
 
     IDENT --> T_USERS
     PERS --> T_PERSONAS
@@ -82,9 +82,10 @@ users
 
 domo_sessions       (1:1 with users)
   user_id         BINARY(16) PK FK → users
-  access_token    VARBINARY        -- KMS envelope encrypted
-  refresh_token   VARBINARY NULL   -- NULL under domoweb provider
-  expires_at      DATETIME
+  access_token    VARBINARY        -- KMS envelope encrypted, 1h TTL JWT
+  refresh_token   VARBINARY        -- KMS envelope encrypted, 2y TTL, no rotation
+  expires_at      DATETIME         -- access_token expiry
+  scope           VARCHAR(255)     -- granted scopes from Heimdall
   updated_at
 
 (optional) sessions   -- only if using server-side sessions; skip if stateless JWT

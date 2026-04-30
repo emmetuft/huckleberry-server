@@ -1,110 +1,176 @@
-# Auth Provider Abstraction
+# Auth Service — Heimdall OAuth (single provider)
 
-The Auth service depends on a `DomoAuthProvider` interface. Today's implementation wraps `/api/domoweb/auth/login` (see `domoweb-auth-flow.md`); the future implementation wraps OAuth authorization-code + PKCE (see `oauth-flow-future.md`). Everything above the seam — controllers, sessions, token storage, DomoProxy — is provider-agnostic.
+> **Note:** earlier drafts of this document defined a `DomoAuthProvider` interface with two implementations (`DomoWebAuthProvider`, `DomoOAuthProvider`) so today's plaintext-credential path could be swapped for OAuth later. **That seam is no longer needed.** Heimdall (Domo's internal OAuth2 server, `~/dev/heimdall`) supports authorization-code flow with confidential clients today. Huckleberry registers as `domo:internal:huckleberry` and uses Heimdall directly.
+>
+> The retired `domoweb-auth-flow.md` is kept only as historical context.
 
-## The seam
+## Auth service shape
+
+Single OAuth2 client implementation against Heimdall. No abstraction over alternate providers — there's only one.
 
 ```mermaid
 graph TB
-    subgraph "Provider-agnostic (stable)"
+    subgraph "Auth service (NestJS)"
         CTRL[Auth Controllers<br/>/auth/login · /auth/callback · /auth/logout]
-        SESS_MGR[Session Manager<br/>JWT + Redis]
-        TOKEN_STORE[Token Store<br/>oauth_tokens table]
-        PROXY[DomoProxy<br/>injects bearer per-request]
+        SESS_MGR[Session Manager<br/>JWT cookie + Redis]
+        TOKEN_STORE[Token Store<br/>domo_sessions table]
+        OAUTH_CLIENT[Heimdall OAuth Client<br/>authorize, token, refresh, revoke]
     end
 
-    IFACE{{DomoAuthProvider interface}}
+    SM[(Secrets Manager<br/>client_secret, JWT signing key,<br/>token encryption key)]
+    REDIS[(Redis<br/>state, sessions, token cache)]
+    H[Heimdall<br/>/api/oauth2/*]
+    D[Domo Instance APIs]
 
-    subgraph "Provider-specific (swappable)"
-        WEB[DomoWebAuthProvider<br/>POST /api/domoweb/auth/login<br/>plaintext creds → session token]
-        OAUTH[DomoOAuthProvider<br/>/oauth/authorize + /oauth/token<br/>auth code + PKCE → access + refresh]
-    end
-
-    CFG[("env AUTH_PROVIDER<br/>domoweb or oauth")]
-
-    CTRL --> IFACE
-    SESS_MGR --> IFACE
-    PROXY --> IFACE
-    IFACE -.selected by.-> CFG
-    IFACE --> WEB
-    IFACE --> OAUTH
-
+    CTRL --> OAUTH_CLIENT
     CTRL --> SESS_MGR
     CTRL --> TOKEN_STORE
-    PROXY --> TOKEN_STORE
+    OAUTH_CLIENT --> SM
+    OAUTH_CLIENT --> H
+    SESS_MGR --> REDIS
+    TOKEN_STORE --> SM
+    TOKEN_STORE --> D
 ```
 
-## Interface
+## Module surface
 
 ```ts
-interface DomoAuthProvider {
-  // Kicks off auth. domoweb: returns Huckleberry login form URL.
-  // oauth: returns Domo /authorize redirect URL.
-  beginLogin(p: { instance: string; returnTo: string }): Promise<{
-    redirectUrl: string;
-    state: string;
-  }>;
+// src/auth/heimdall-oauth.client.ts
+class HeimdallOAuthClient {
+  buildAuthorizeUrl(params: { state: string; codeChallenge: string; scope: string }): string;
+  exchangeCode(params: { code: string; codeVerifier: string }): Promise<TokenResponse>;
+  refresh(params: { refreshToken: string }): Promise<TokenResponse>;
+  revoke(params: { token: string; tokenTypeHint: 'access_token' | 'refresh_token' }): Promise<void>;
+}
 
-  // Completes auth. domoweb: handles password POST. oauth: exchanges code.
-  completeLogin(p: { state: string; payload: unknown }): Promise<{
-    domoUserId: string;
-    instance: string;
-    accessToken: string;
-    refreshToken?: string;     // null under domoweb
-    expiresAt: Date;            // best-effort under domoweb
-  }>;
-
-  // Refresh stored token. domoweb: throws RefreshUnsupportedError → forces re-login.
-  // oauth: standard refresh_token grant.
-  refreshAccessToken(linkedIdentityId: string): Promise<{
-    accessToken: string;
-    expiresAt: Date;
-  }>;
-
-  // Revoke. domoweb: drop our session row. oauth: hit /revoke.
-  revoke(linkedIdentityId: string): Promise<void>;
+interface TokenResponse {
+  accessToken: string;       // RS256 JWT, 1h TTL
+  refreshToken: string;      // 2y TTL, no rotation — same underlying ID
+  expiresAt: Date;
+  scope: string;
+  // decoded from JWT for convenience
+  domoUserId: string;        // sub claim
+  customerId: string;        // cid claim
+  instanceId: string;        // iid claim
 }
 ```
 
-## What stays stable across the swap
+`HeimdallOAuthClient` is the only OAuth implementation. No interface, no factory, no env-flag selection.
 
-| Layer | Stable? | Notes |
-|---|---|---|
-| `users`, `linked_identities`, `oauth_tokens`, `sessions` schema | ✅ | `linked_identities.provider` discriminates rows |
-| Huckleberry session JWT + Redis cache | ✅ | Provider-agnostic |
-| `SessionGuard` | ✅ | Validates Huckleberry session, not Domo |
-| `/auth/login`, `/auth/logout` controller routes | ✅ | Same shape; provider handles internals |
-| `/auth/callback` controller route | ⚠️ | Exists for both, but payload shape differs (form POST vs. `?code&state`) — provider parses `payload` |
-| DomoProxy bearer injection | ✅ | Reads `oauth_tokens.access_token`; doesn't care how it got there |
-| Header name on outbound Domo calls | ❌ | `x-domo-eps-auth-token` (domoweb) vs. `Authorization: Bearer` (oauth) — handled inside provider, not in DomoProxy |
+## Heimdall registration (as proposed)
 
-## What's different per provider
+| Field | Value |
+|---|---|
+| `ID` | `domo:internal:huckleberry` |
+| `Secret` | UUID issued by Heimdall, stored in AWS Secrets Manager |
+| `Name` | `Huckleberry` |
+| `Internal` | `true` |
+| `Confidential` | `true` |
+| `RequireStopScreens` | `true` |
+| `RedirectURIs` | `http://localhost:3000/auth/callback`, staging URL, prod URL |
 
-| Concern | domoweb | oauth |
-|---|---|---|
-| `linked_identities.provider` value | `domoweb` | `domo_oauth` |
-| `oauth_tokens.refresh_token` | NULL | populated |
-| Token expiry source | best-effort / probe | `expires_in` from token response |
-| On 401 from Domo | force user re-login | call `refreshAccessToken` |
-| Outbound auth header | `x-domo-eps-auth-token: <token>` | `Authorization: Bearer <token>` |
-| MFA / SSO instances | unsupported (returns error) | supported |
-| Secrets Manager entries | token encryption key only | + per-instance OAuth client_id/secret |
+Registration mechanism today: PR to Heimdall's `oauth2/client.go` `preApprovedClients` list. (Heimdall has a code TODO to make this dynamic; we'll switch when that lands.)
 
-## Selection
+## Scopes requested
 
-`AUTH_PROVIDER` env var, validated at boot:
-- `domoweb` — today, dev/internal only
-- `oauth` — future, once Domo ships authorization-code on instance APIs
-- (optional later) `developer_token` — paste-a-PAT fallback for power users
+`ai-services content data user-profile` — covers `/api/ai/v1/*`, `/api/recall/v1/*`, `/api/content/v3/*`, `/api/data/v3/*`, and `/users/me`. Avoid `user` and `identity` until we have a feature that mutates users.
 
-Provider is selected once at module init via NestJS dynamic module / factory provider — no per-request branching.
+## Token lifecycle
 
-## Migration when OAuth lands
+| Event | Behavior |
+|---|---|
+| Login completes | Store access_token + refresh_token encrypted in `domo_sessions`, cache access_token in Redis |
+| Request comes in | Validate hb_session cookie, look up access_token (Redis hot-path, DB fallback) |
+| Access token within 1h TTL | Use it directly as `Authorization: Bearer ...` against instance APIs |
+| Access token expired | Call Heimdall `/token` with `grant_type=refresh_token`, persist new access_token, refresh_token value stays the same |
+| User logs out | Call Heimdall `/api/oauth2/revoke` for refresh_token, clear `domo_sessions` row, drop hb_session |
+| Refresh token after 2y | User re-logs in (re-auth via `/api/oauth2/authorize`) |
 
-1. Deploy `DomoOAuthProvider` behind `AUTH_PROVIDER=oauth` in staging
-2. Verify it writes `linked_identities.provider='domo_oauth'` rows correctly
-3. Flip prod `AUTH_PROVIDER` to `oauth`
-4. Existing `domoweb` rows keep working until users re-login; new logins use OAuth
-5. After a grace period, force-expire remaining `domoweb` sessions and remove the provider implementation
+## What was retired from the earlier design
 
-No schema migration. No data backfill. The seam earns its keep here.
+- `DomoAuthProvider` interface — single implementation, no abstraction needed
+- `DomoWebAuthProvider` (plaintext password flow) — Heimdall removes the need
+- `linked_identities.provider` discriminator column — only one provider exists; collapsed onto `users` directly
+- `oauth_tokens` table renamed to `domo_sessions` to be specific about what it holds
+- Per-instance `client_id` / `client_secret` — Huckleberry has one Heimdall registration, period
+
+## Code-level rules (build now, OAuth 2.1 cheap insurance)
+
+These are the "cheap insurance" items from `oauth-flow.md` expressed as code-level requirements. Apply them on the first pass — retrofitting is expensive, getting them right at the start is free.
+
+### Required behaviors
+
+1. **Always overwrite `domo_sessions.refresh_token` from the refresh response.** Heimdall reuses the value today; we treat every refresh response as authoritative. When rotation lands, no code change.
+
+   ```ts
+   // in HeimdallOAuthClient.refresh()
+   await tokenStore.update(userId, {
+     accessToken: resp.access_token,
+     refreshToken: resp.refresh_token,  // overwrite even if unchanged
+     expiresAt: new Date(Date.now() + resp.expires_in * 1000),
+     scope: resp.scope,
+   });
+   ```
+
+2. **Verify RS256 JWT signature before trusting claims.** Fetch Heimdall JWKS at boot, cache, verify on every decode. Never trust `jwt.decode()` output without verification.
+
+   ```ts
+   // src/auth/jwt-verifier.ts
+   export async function verifyAndDecodeAccessToken(jwt: string): Promise<AccessTokenClaims> {
+     const { payload } = await jose.jwtVerify(jwt, jwksRemote, {
+       issuer: HEIMDALL_ISSUER,
+       audience: HUCKLEBERRY_CLIENT_ID,
+     });
+     return payload as AccessTokenClaims;
+   }
+   ```
+
+   This is the **only** path JWT claims are read. No ad-hoc `jwt.decode` anywhere else.
+
+3. **Validate `iss` and `aud` claims** as part of #2 (above). The `jose.jwtVerify` options enforce both. If either fails, throw — don't silently accept.
+
+4. **On refresh failure (401 or `invalid_grant`), kill the Huckleberry session.**
+
+   ```ts
+   try {
+     await heimdall.refresh({ refreshToken: stored.refreshToken });
+   } catch (err) {
+     if (err instanceof HeimdallAuthError) {
+       await sessionStore.invalidate(userId);
+       await tokenStore.delete(userId);
+       throw new UnauthorizedException('Heimdall session ended, re-login required');
+     }
+     throw err;
+   }
+   ```
+
+   Closes the window where a revoked Heimdall token leaves a working `hb_session`.
+
+5. **Single bearer-injection point in DomoProxy.** All outbound Domo calls go through one function that adds `Authorization: Bearer <token>`. When DPoP support is added, this is the only place that grows a second header.
+
+   ```ts
+   // src/domo-proxy/inject-bearer.ts
+   export function injectBearer(req: AxiosRequestConfig, accessToken: string) {
+     req.headers = { ...req.headers, Authorization: `Bearer ${accessToken}` };
+     // future: DPoP header injection lives here
+     return req;
+   }
+   ```
+
+6. **Reject `?access_token=` query parameters.** No controller accepts bearer tokens via URL. NestJS `AuthGuard` reads `Authorization` header only — keep it that way.
+
+7. **Persist `scope` on `domo_sessions`.** Already in schema. On request, if the scope needed for an endpoint isn't in the stored grant, force re-auth rather than silently failing later.
+
+8. **Exact redirect URI on our callback.** Don't loosen routing to accept variants of `/auth/callback` — single exact path, no path params, no trailing-slash tolerance.
+
+### Forbidden patterns
+
+- `jwt.decode()` without verification (use `verifyAndDecodeAccessToken`)
+- Reading `Authorization` header in any service other than auth + DomoProxy
+- Storing access_token or refresh_token in plaintext anywhere — including logs
+- Logging the full JWT — log `jti` claim or first 8 chars only
+- Catching Heimdall errors generically and continuing — auth failures must propagate
+
+### What we are NOT building now (deferred — see `oauth-flow.md` table A–H)
+
+DPoP, front/back-channel logout, periodic introspection, multi-device sessions, discovery doc fetch, mTLS client auth, refresh-token hashing, inbound bearer introspection. Each has a defined trigger to revisit.
