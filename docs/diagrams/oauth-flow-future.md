@@ -11,49 +11,49 @@ Server-side authorization code flow. Huckleberry's NestJS backend is a **confide
 ```mermaid
 sequenceDiagram
     autonumber
-    participant U as User (Browser)
-    participant BFF as Huckleberry BFF<br/>(Auth Service)
+    participant U as User Browser
+    participant BFF as Huckleberry BFF
     participant R as Redis
-    participant DB as Aurora PG
+    participant DB as Aurora MySQL
     participant SM as Secrets Manager
-    participant D as Domo Instance<br/>(OAuth + APIs)
+    participant D as Domo Instance
 
     U->>BFF: GET /auth/login?instance=acme.domo.com
-    BFF->>BFF: generate state, code_verifier<br/>code_challenge = S256(code_verifier)
-    BFF->>R: store {state → code_verifier, instance, returnTo}<br/>TTL 10m
-    BFF-->>U: 302 to Domo /oauth/authorize<br/>?client_id&redirect_uri&state<br/>&code_challenge&code_challenge_method=S256&scope
+    BFF->>BFF: generate state and code_verifier<br/>code_challenge is S256 of code_verifier
+    BFF->>R: store state with code_verifier, instance, returnTo<br/>TTL 10m
+    BFF-->>U: 302 to Domo /oauth/authorize<br/>params: client_id, redirect_uri, state,<br/>code_challenge, code_challenge_method S256, scope
 
     U->>D: follows redirect, logs in, consents
     D-->>U: 302 to BFF /auth/callback?code&state
 
-    U->>BFF: GET /auth/callback?code&state
-    BFF->>R: lookup state → {code_verifier, instance}
-    R-->>BFF: code_verifier (or 400 if missing/expired)
+    U->>BFF: GET /auth/callback with code and state
+    BFF->>R: lookup state, get code_verifier and instance
+    R-->>BFF: code_verifier (or 400 if missing or expired)
     BFF->>SM: get Domo client_secret for instance
     SM-->>BFF: client_secret
 
-    BFF->>D: POST /oauth/token<br/>grant_type=authorization_code<br/>code, redirect_uri, client_id,<br/>client_secret, code_verifier
-    D-->>BFF: {access_token, refresh_token, expires_in}
+    BFF->>D: POST /oauth/token<br/>grant_type authorization_code<br/>plus code, redirect_uri, client_id,<br/>client_secret, code_verifier
+    D-->>BFF: access_token, refresh_token, expires_in
 
-    BFF->>D: GET /api/content/v3/users/me<br/>Authorization: Bearer access_token
-    D-->>BFF: {domo_user_id, email, displayName, ...}
+    BFF->>D: GET /api/content/v3/users/me<br/>with Bearer access_token
+    D-->>BFF: domo_user_id, email, displayName
 
-    BFF->>DB: upsert users + linked_identities<br/>(provider=domo, instance, domo_user_id)
-    BFF->>DB: upsert oauth_tokens<br/>(encrypted access + refresh, expires_at)
+    BFF->>DB: upsert users and linked_identities<br/>provider domo, instance, domo_user_id
+    BFF->>DB: upsert oauth_tokens<br/>encrypted access and refresh, expires_at
     BFF->>BFF: issue Huckleberry session JWT
-    BFF->>R: store session → user_id (TTL = session lifetime)
-    BFF-->>U: 302 to returnTo<br/>Set-Cookie: hb_session=...; HttpOnly; Secure; SameSite=Lax
+    BFF->>R: store session and user_id<br/>TTL is session lifetime
+    BFF-->>U: 302 to returnTo + hb_session cookie<br/>(HttpOnly, Secure, SameSite Lax)
 
-    Note over U,D: --- subsequent API calls ---
-    U->>BFF: GET /api/agents (cookie)
+    Note over U,D: subsequent API calls
+    U->>BFF: GET /api/agents with cookie
     BFF->>R: validate session
-    BFF->>R: get cached access_token for user+instance
+    BFF->>R: get cached access_token for user and instance
     alt token expired or missing
         BFF->>DB: load oauth_tokens
-        BFF->>D: POST /oauth/token<br/>grant_type=refresh_token
+        BFF->>D: POST /oauth/token<br/>grant_type refresh_token
         D-->>BFF: new access_token
         BFF->>DB: update oauth_tokens
-        BFF->>R: cache access_token (TTL < expires_in)
+        BFF->>R: cache access_token (TTL under expires_in)
     end
     BFF->>D: Domo API call with Bearer token
     D-->>BFF: response

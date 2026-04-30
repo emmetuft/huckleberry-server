@@ -20,7 +20,7 @@ graph TB
         OAUTH[DomoOAuthProvider<br/>/oauth/authorize + /oauth/token<br/>auth code + PKCE → access + refresh]
     end
 
-    CFG[(env: AUTH_PROVIDER<br/>= domoweb | oauth)]
+    CFG[("env AUTH_PROVIDER<br/>domoweb or oauth")]
 
     CTRL --> IFACE
     SESS_MGR --> IFACE

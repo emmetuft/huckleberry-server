@@ -39,7 +39,7 @@ graph LR
     REDIS[(Redis<br/>sessions + token cache)]
 
     DOMO[Domo Instance APIs<br/>Identity · AI · Data<br/>Recall · Toolkits]
-    DOMO_AUTH[Domo Auth Endpoint<br/>domoweb: /api/domoweb/auth/login<br/>oauth: /oauth/authorize + /oauth/token]
+    DOMO_AUTH["Domo Auth Endpoint<br/>domoweb — /api/domoweb/auth/login<br/>oauth — /oauth/authorize + /oauth/token"]
 
     UI --> AUTH
     UI --> PROXY_SVCS

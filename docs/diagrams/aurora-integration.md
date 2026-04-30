@@ -81,7 +81,7 @@ graph LR
         AGENTS[Agents]
         SESS[Sessions]
         MCP[MCP]
-        PROXY_SVC[DomoProxy<br/>HOT PATH: token lookup<br/>Redis in front]
+        PROXY_SVC["DomoProxy<br/>HOT PATH — token lookup<br/>Redis in front"]
         HEALTH[Health<br/>readiness ping]
     end
 
@@ -175,9 +175,9 @@ erDiagram
         DATETIME last_login_at
     }
     domo_sessions {
-        BINARY16 user_id PK_FK
+        BINARY16 user_id PK
         VARBINARY access_token
-        VARBINARY refresh_token "NULL under domoweb"
+        VARBINARY refresh_token
         DATETIME expires_at
     }
     sessions {
@@ -187,11 +187,31 @@ erDiagram
         VARCHAR ip
         VARCHAR user_agent
     }
-    personas { BINARY16 id PK, BINARY16 user_id FK, JSON focus_areas }
-    agents_meta { BINARY16 id PK, VARCHAR domo_agent_id, BINARY16 user_id FK }
-    agent_sessions { BINARY16 id PK, BINARY16 user_id FK, VARCHAR domo_session_id }
-    mcp_servers { BINARY16 id PK, BINARY16 user_id FK, VARCHAR url }
-    mcp_oauth_tokens { BINARY16 mcp_server_id PK_FK, VARBINARY access_token, DATETIME expires_at }
+    personas {
+        BINARY16 id PK
+        BINARY16 user_id FK
+        JSON focus_areas
+    }
+    agents_meta {
+        BINARY16 id PK
+        VARCHAR domo_agent_id
+        BINARY16 user_id FK
+    }
+    agent_sessions {
+        BINARY16 id PK
+        BINARY16 user_id FK
+        VARCHAR domo_session_id
+    }
+    mcp_servers {
+        BINARY16 id PK
+        BINARY16 user_id FK
+        VARCHAR url
+    }
+    mcp_oauth_tokens {
+        BINARY16 mcp_server_id PK
+        VARBINARY access_token
+        DATETIME expires_at
+    }
 ```
 
 > **Deferred for post-MVP** (see `auth-architecture.md`): `tenants`, `instances`, `linked_identities`, `tenant_memberships`, `invitations`, `audit_log`. Add when a real feature requires them.

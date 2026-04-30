@@ -21,7 +21,7 @@ graph LR
         end
 
         subgraph "Data"
-            AURORA[(Aurora MySQL<br/>users · tenants · personas<br/>oauth_tokens · sessions<br/>agents_meta · mcp_servers)]
+            AURORA[(Aurora MySQL<br/>users · personas<br/>domo_sessions · sessions<br/>agents_meta · mcp_servers)]
             REDIS[(ElastiCache Redis<br/>sessions + token cache)]
         end
 
@@ -34,7 +34,7 @@ graph LR
     end
 
     subgraph "Domo — Per Customer Instance"
-        DOMO_AUTH[Auth Surface<br/>domoweb: /api/domoweb/auth/login<br/>oauth: /oauth/authorize + /oauth/token<br/>future]
+        DOMO_AUTH["Auth Surface<br/>domoweb — /api/domoweb/auth/login<br/>oauth — /oauth/authorize + /oauth/token (future)"]
         DOMO_INST[Instance APIs<br/>/api/ai/v1/agents<br/>/api/ai/v1/sessions<br/>/api/ai/v1/text<br/>/api/ai/v1/toolkits<br/>/api/recall/v1/nodes<br/>/api/content/v3/users<br/>/api/identity/v1/users<br/>/api/data/v3/datasources]
         DOMO_PUB[Public API<br/>api.domo.com<br/>client_credentials only]
     end
@@ -59,7 +59,7 @@ graph LR
 
     BFF --> DOMO_AUTH
     BFF --> DOMO_INST
-    BFF -.future / limited.-> DOMO_PUB
+    BFF -.future or limited.-> DOMO_PUB
     BFF --> MCP_EXT
 ```
 

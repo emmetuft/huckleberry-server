@@ -14,46 +14,46 @@ What we actually build first. Uses Domo's internal `/api/domoweb/auth/login` end
 ```mermaid
 sequenceDiagram
     autonumber
-    participant U as User (Browser)
-    participant BFF as Huckleberry BFF<br/>(Auth Service)
+    participant U as User Browser
+    participant BFF as Huckleberry BFF
     participant R as Redis
-    participant DB as Aurora PG
+    participant DB as Aurora MySQL
     participant SM as Secrets Manager
-    participant D as Domo Instance<br/>(/api/domoweb/auth)
+    participant D as Domo Instance
 
-    U->>BFF: GET /auth/login?instance=acme.domo.com&returnTo=/
+    U->>BFF: GET /auth/login with instance and returnTo
     BFF->>BFF: generate CSRF state, render login form
-    BFF->>R: store {state → instance, returnTo} TTL 10m
-    BFF-->>U: 200 HTML login form (Huckleberry-hosted)<br/>fields: username, password, hidden state
+    BFF->>R: store state with instance, returnTo (TTL 10m)
+    BFF-->>U: 200 HTML login form<br/>fields username, password, hidden state
 
-    U->>BFF: POST /auth/domoweb<br/>{username, password, state}
-    BFF->>R: validate state → instance
+    U->>BFF: POST /auth/domoweb<br/>username, password, state
+    BFF->>R: validate state, get instance
     R-->>BFF: instance (or 400 if expired)
 
-    BFF->>D: POST /api/domoweb/auth/login<br/>{username, password}
+    BFF->>D: POST /api/domoweb/auth/login<br/>with username and password
     alt success
-        D-->>BFF: 200 {sessionToken, userId, ...}
-    else MFA / SSO required
+        D-->>BFF: 200 with sessionToken and userId
+    else MFA or SSO required
         D-->>BFF: 4xx — flow unsupported on this instance
-        BFF-->>U: error: "this instance requires SSO, contact admin"
+        BFF-->>U: error response, instance requires SSO
     end
 
-    BFF->>D: GET /api/content/v3/users/me<br/>x-domo-eps-auth-token: sessionToken
-    D-->>BFF: {domoUserId, email, displayName, roleId}
+    BFF->>D: GET /api/content/v3/users/me<br/>header x-domo-eps-auth-token sessionToken
+    D-->>BFF: domoUserId, email, displayName, roleId
 
     BFF->>SM: get token-encryption key
-    BFF->>DB: upsert users + linked_identities<br/>(provider=domoweb, instance, domoUserId)
-    BFF->>DB: upsert oauth_tokens<br/>(access_token=sessionToken (encrypted),<br/>refresh_token=NULL, expires_at≈best-guess)
+    BFF->>DB: upsert users and linked_identities<br/>provider domoweb, instance, domoUserId
+    BFF->>DB: upsert oauth_tokens<br/>access_token is encrypted sessionToken<br/>refresh_token NULL, expires_at best-guess
     BFF->>BFF: issue Huckleberry session JWT
-    BFF->>R: store hb_session → user_id (TTL = session lifetime)
-    BFF-->>U: 302 to returnTo<br/>Set-Cookie: hb_session=...; HttpOnly; Secure; SameSite=Lax
+    BFF->>R: store hb_session and user_id<br/>TTL is session lifetime
+    BFF-->>U: 302 to returnTo + hb_session cookie<br/>(HttpOnly, Secure, SameSite Lax)
 
-    Note over U,D: --- subsequent API calls ---
-    U->>BFF: GET /api/agents (cookie)
-    BFF->>R: validate hb_session → user_id
-    BFF->>R: get cached Domo session token for user+instance
+    Note over U,D: subsequent API calls
+    U->>BFF: GET /api/agents with cookie
+    BFF->>R: validate hb_session, get user_id
+    BFF->>R: get cached Domo session token for user and instance
     alt token expired or 401 from Domo
-        BFF-->>U: 401 — re-login required<br/>(no refresh path under domoweb provider)
+        BFF-->>U: 401 re-login required<br/>(no refresh path under domoweb provider)
     end
     BFF->>D: Domo API call with x-domo-eps-auth-token
     D-->>BFF: response
