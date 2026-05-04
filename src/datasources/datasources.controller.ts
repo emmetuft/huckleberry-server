@@ -48,13 +48,13 @@ export class DataSourcesController {
     @Param('id') id: string,
     @Query('page') page?: string,
     @Query('size') size?: string,
-    @Body() body?: any,
+    @Body() body?: { columns: string[]; filters?: unknown },
   ) {
     return this.dataSourcesService.queryData(
       id,
-      body,
       parseInt(page || '0', 10),
       parseInt(size || '100', 10),
+      body,
     );
   }
 }

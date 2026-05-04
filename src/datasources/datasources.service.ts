@@ -26,13 +26,21 @@ export class DataSourcesService {
 
   async queryData(
     dataSourceId: string,
-    body: unknown,
     page: number,
     pageSize: number,
+    body?: { columns: string[]; filters?: unknown },
   ): Promise<unknown> {
     // This doesn't work, need another endpoint
-    return this.domo.post(`/api/v2/domo/datasets/${dataSourceId}/data`, body, {
-      query: { page: String(page), size: String(pageSize) },
+    return this.domo.post(`/api/query/v1/execute/${dataSourceId}`, {
+      query: {
+        columns: body?.columns ?? [],
+        groupByColumns: [],
+        having: null,
+        limit: { limit: pageSize, offset: page * pageSize },
+        orderByColumns: [],
+        where: null,
+      },
+      querySource: 'data_table',
     });
   }
 }

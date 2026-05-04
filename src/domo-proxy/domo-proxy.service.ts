@@ -56,7 +56,10 @@ export class DomoProxyService {
     return this.request<T>('DELETE', path, undefined, options);
   }
 
-  async getStream(path: string, options?: DomoRequestOptions): Promise<Response> {
+  async getStream(
+    path: string,
+    options?: DomoRequestOptions,
+  ): Promise<Response> {
     const url = this.buildUrl(path, options?.query);
     const headers = this.buildHeaders(options?.headers);
 
