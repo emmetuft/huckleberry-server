@@ -2,7 +2,7 @@
 
 Minimal schema for the v1 auth model: one user, one Domo instance, one identity. Multi-tenancy, multi-instance per user, and multi-IdP are deferred until we have a shared understanding of the post-MVP product.
 
-**Auth via Heimdall.** Huckleberry registers as `domo:internal:huckleberry` in Heimdall (Domo's internal OAuth2 server) and uses authorization-code flow with a confidential client. See `oauth-flow.md` for the sequence and `auth-providers.md` for the auth-service shape. The earlier "swappable provider" seam is retired — single provider.
+**Auth via Gatekeeper OAuth 2.1.** Huckleberry registers as a confidential client in Gatekeeper (Domo's new internal OAuth 2.1 server, replacing the older Heimdall) and uses authorization-code flow with PKCE. See `oauth-flow.md` for the sequence and `auth-providers.md` for the auth-service shape. The earlier "swappable provider" seam is retired — single provider.
 
 Stateless proxy services (AI, Graph, DataSources, Connectors, Toolkits, Huckleberry) are collapsed into a single "Domo proxy services" node — they hold no local state and exist only to forward through DomoProxy.
 
@@ -24,7 +24,7 @@ graph LR
         MCP[MCP]
         PROXY_SVCS[Domo proxy services<br/>AI · Graph · DataSources<br/>Connectors · Toolkits · Huckleberry]
         PROXY[DomoProxy]
-        HEIMDALL_CLIENT{{Heimdall OAuth Client<br/>authorize · token · refresh · revoke}}
+        GATEKEEPER_CLIENT{{Gatekeeper OAuth Client<br/>authorize · token · refresh · revoke}}
     end
 
     subgraph "Aurora MySQL — MVP"
@@ -39,7 +39,7 @@ graph LR
     REDIS[(Redis<br/>sessions + token cache)]
 
     DOMO[Domo Instance APIs<br/>Identity · AI · Data<br/>Recall · Toolkits<br/>Bearer JWT auth]
-    HEIMDALL[Heimdall<br/>/api/oauth2/authorize<br/>/api/oauth2/token<br/>/api/oauth2/revoke]
+    GATEKEEPER[Gatekeeper<br/>/oauth/authorize<br/>/oauth/token<br/>/oauth/revoke]
 
     UI --> AUTH
     UI --> PROXY_SVCS
@@ -49,8 +49,8 @@ graph LR
     AUTH --> T_TOKENS
     AUTH --> SM
     AUTH --> REDIS
-    AUTH --> HEIMDALL_CLIENT
-    HEIMDALL_CLIENT --> HEIMDALL
+    AUTH --> GATEKEEPER_CLIENT
+    GATEKEEPER_CLIENT --> GATEKEEPER
 
     IDENT --> T_USERS
     PERS --> T_PERSONAS
@@ -85,7 +85,7 @@ domo_sessions       (1:1 with users)
   access_token    VARBINARY        -- KMS envelope encrypted, 1h TTL JWT
   refresh_token   VARBINARY        -- KMS envelope encrypted, 2y TTL, no rotation
   expires_at      DATETIME         -- access_token expiry
-  scope           VARCHAR(255)     -- granted scopes from Heimdall
+  scope           VARCHAR(255)     -- granted scopes from Gatekeeper
   updated_at
 
 (optional) sessions   -- only if using server-side sessions; skip if stateless JWT

@@ -33,9 +33,19 @@ graph LR
         end
     end
 
-    subgraph "Domo — Per Customer Instance"
-        DOMO_AUTH["Auth Surface<br/>domoweb — /api/domoweb/auth/login<br/>oauth — /oauth/authorize + /oauth/token (future)"]
-        DOMO_INST[Instance APIs<br/>/api/ai/v1/agents<br/>/api/ai/v1/sessions<br/>/api/ai/v1/text<br/>/api/ai/v1/toolkits<br/>/api/recall/v1/nodes<br/>/api/content/v3/users<br/>/api/identity/v1/users<br/>/api/data/v3/datasources]
+    subgraph "Domo Platform"
+        GATEKEEPER[Gatekeeper OAuth 2.1<br/>/oauth/authorize + /oauth/token<br/>auth-code + PKCE]
+
+        subgraph "Mako — Agent Platform"
+            MAKO_AGENT[Agent Runtime<br/>ai-assistant-app<br/>execute · resume · streaming]
+            INTENT_ENGINE[mako-intent-engine<br/>intent classification<br/>working memory<br/>context assembly]
+            MEMORY_APP[memory-app<br/>capture · extract · retrieve<br/>customer-scoped]
+            MAKO_AI[AI Services<br/>generate · summarize · embed]
+            MAKO_GRAPH[Graph Device<br/>Domo-hosted graph]
+            MAKO_DB[(MongoDB<br/>session history +<br/>memory entities/facts)]
+        end
+
+        DOMO_INST[Instance APIs<br/>/api/content/v3/users<br/>/api/identity/v1/users<br/>/api/data/v3/datasources]
         DOMO_PUB[Public API<br/>api.domo.com<br/>client_credentials only]
     end
 
@@ -57,7 +67,14 @@ graph LR
     BFF --> CW
     BFF -.pulls image.-> ECR
 
-    BFF --> DOMO_AUTH
+    BFF --> GATEKEEPER
+    BFF --> MAKO_AGENT
+    MAKO_AGENT --> INTENT_ENGINE
+    INTENT_ENGINE --> MEMORY_APP
+    MAKO_AGENT --> MAKO_AI
+    MEMORY_APP --> MAKO_DB
+    MEMORY_APP --> MAKO_GRAPH
+    MAKO_AGENT --> MAKO_DB
     BFF --> DOMO_INST
     BFF -.future or limited.-> DOMO_PUB
     BFF --> MCP_EXT
@@ -78,17 +95,19 @@ graph LR
 | Observability | CloudWatch + OpenTelemetry | Logs, metrics, traces |
 | Image registry | ECR | BFF container images |
 
-### Domo (per-instance, customer-owned)
+### Domo Platform
 
 | Surface | Auth | What Huckleberry uses it for |
 |---|---|---|
-| `/api/domoweb/auth/login` | plaintext creds (today) | User authentication — domoweb provider |
-| `/oauth/authorize` + `/oauth/token` (instance) | auth code + PKCE (future) | User authentication — oauth provider |
-| `/api/ai/v1/*` | session / dev token | Agents, sessions, text generation, toolkits |
-| `/api/recall/v1/*` | session / dev token | Knowledge graph nodes |
-| `/api/content/v3/*`, `/api/identity/v1/*` | session / dev token | Users, groups, current user |
-| `/api/data/v3/*` | session / dev token | Datasources, schemas, queries |
-| `api.domo.com` (public) | `client_credentials` OAuth | Limited — does not expose AI/recall endpoints |
+| Gatekeeper `/oauth/authorize` + `/oauth/token` | auth code + PKCE (OAuth 2.1) | User authentication; Bearer JWT for downstream calls |
+| Mako: `/api/ai/v1/agents/*` | Bearer JWT (Gatekeeper) | Agent execute, resume, streaming, CRUD |
+| Mako: `/api/ai/v1/memory/*` | Bearer JWT, Bedrock customer-scoped | Memory admin (read what's remembered, right-to-forget) |
+| Mako: `/api/ai/v1/text/*` | Bearer JWT | Text generation, summarization, text-to-SQL |
+| Mako: `/api/ai/v1/toolkits/*` | Bearer JWT | Toolkit CRUD |
+| Mako: `/api/recall/v1/*` | Bearer JWT | Knowledge graph nodes (read path) |
+| `/api/content/v3/*`, `/api/identity/v1/*` | Bearer JWT | Users, groups, current user |
+| `/api/data/v3/*` | Bearer JWT | Datasources, schemas, queries |
+| `api.domo.com` (public) | `client_credentials` OAuth | Limited — does not expose AI/memory/recall endpoints |
 
 ### Third-party
 
@@ -99,7 +118,8 @@ graph LR
 ## Things this diagram is deliberately not showing
 
 - The internal NestJS module breakdown — see `auth-architecture.md`
-- Auth sequence details — see `domoweb-auth-flow.md` and `oauth-flow-future.md`
-- The provider seam — see `auth-providers.md`
+- Auth sequence details — see `oauth-flow.md`
+- OAuth client shape — see `auth-providers.md`
+- Memory architecture detail (capture, extraction, retrieval pipeline) — see `memory-architecture.md`
 - CI/CD pipeline (GitHub Actions → ECR → ECS) — out of scope for system context
-- Neo4j / mem0 — referenced in config but not currently wired into the running system
+- Mako's internal module composition (ai-app, ai-assistant-app, recall-app, synapse-app, etc.)

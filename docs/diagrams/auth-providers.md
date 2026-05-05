@@ -1,12 +1,10 @@
-# Auth Service — Heimdall OAuth (single provider)
+# Auth Service — Gatekeeper OAuth 2.1 (single provider)
 
-> **Note:** earlier drafts of this document defined a `DomoAuthProvider` interface with two implementations (`DomoWebAuthProvider`, `DomoOAuthProvider`) so today's plaintext-credential path could be swapped for OAuth later. **That seam is no longer needed.** Heimdall (Domo's internal OAuth2 server, `~/dev/heimdall`) supports authorization-code flow with confidential clients today. Huckleberry registers as `domo:internal:huckleberry` and uses Heimdall directly.
->
-> The retired `domoweb-auth-flow.md` is kept only as historical context.
+> **Note:** Gatekeeper is Domo's new internal OAuth 2.1 authorization server, replacing the older Heimdall. Huckleberry registers as a confidential client and uses authorization-code flow with PKCE. Earlier drafts referenced Heimdall and a `DomoAuthProvider` swappable seam — both are retired.
 
 ## Auth service shape
 
-Single OAuth2 client implementation against Heimdall. No abstraction over alternate providers — there's only one.
+Single OAuth 2.1 client implementation against Gatekeeper. No abstraction over alternate providers — there's only one.
 
 ```mermaid
 graph TB
@@ -14,12 +12,12 @@ graph TB
         CTRL[Auth Controllers<br/>/auth/login · /auth/callback · /auth/logout]
         SESS_MGR[Session Manager<br/>JWT cookie + Redis]
         TOKEN_STORE[Token Store<br/>domo_sessions table]
-        OAUTH_CLIENT[Heimdall OAuth Client<br/>authorize, token, refresh, revoke]
+        OAUTH_CLIENT[Gatekeeper OAuth Client<br/>authorize, token, refresh, revoke]
     end
 
     SM[(Secrets Manager<br/>client_secret, JWT signing key,<br/>token encryption key)]
     REDIS[(Redis<br/>state, sessions, token cache)]
-    H[Heimdall<br/>/api/oauth2/*]
+    H[Gatekeeper<br/>/oauth/*]
     D[Domo Instance APIs]
 
     CTRL --> OAUTH_CLIENT
@@ -36,7 +34,7 @@ graph TB
 
 ```ts
 // src/auth/heimdall-oauth.client.ts
-class HeimdallOAuthClient {
+class GatekeeperOAuthClient {
   buildAuthorizeUrl(params: { state: string; codeChallenge: string; scope: string }): string;
   exchangeCode(params: { code: string; codeVerifier: string }): Promise<TokenResponse>;
   refresh(params: { refreshToken: string }): Promise<TokenResponse>;
@@ -55,21 +53,21 @@ interface TokenResponse {
 }
 ```
 
-`HeimdallOAuthClient` is the only OAuth implementation. No interface, no factory, no env-flag selection.
+`GatekeeperOAuthClient` is the only OAuth implementation. No interface, no factory, no env-flag selection.
 
-## Heimdall registration (as proposed)
+## Gatekeeper registration (as proposed)
 
 | Field | Value |
 |---|---|
-| `ID` | `domo:internal:huckleberry` |
-| `Secret` | UUID issued by Heimdall, stored in AWS Secrets Manager |
+| `ID` | `huckleberry` (or per Gatekeeper naming convention — confirm) |
+| `Secret` | UUID issued by Gatekeeper, stored in AWS Secrets Manager |
 | `Name` | `Huckleberry` |
 | `Internal` | `true` |
 | `Confidential` | `true` |
 | `RequireStopScreens` | `true` |
 | `RedirectURIs` | `http://localhost:3000/auth/callback`, staging URL, prod URL |
 
-Registration mechanism today: PR to Heimdall's `oauth2/client.go` `preApprovedClients` list. (Heimdall has a code TODO to make this dynamic; we'll switch when that lands.)
+Registration mechanism: confirm with Gatekeeper team — registration flow may differ from Heimdall's static `preApprovedClients` list. As OAuth 2.1, Gatekeeper may support dynamic client registration (RFC 7591).
 
 ## Scopes requested
 
@@ -82,28 +80,28 @@ Registration mechanism today: PR to Heimdall's `oauth2/client.go` `preApprovedCl
 | Login completes | Store access_token + refresh_token encrypted in `domo_sessions`, cache access_token in Redis |
 | Request comes in | Validate hb_session cookie, look up access_token (Redis hot-path, DB fallback) |
 | Access token within 1h TTL | Use it directly as `Authorization: Bearer ...` against instance APIs |
-| Access token expired | Call Heimdall `/token` with `grant_type=refresh_token`, persist new access_token, refresh_token value stays the same |
-| User logs out | Call Heimdall `/api/oauth2/revoke` for refresh_token, clear `domo_sessions` row, drop hb_session |
-| Refresh token after 2y | User re-logs in (re-auth via `/api/oauth2/authorize`) |
+| Access token expired | Call Gatekeeper `/token` with `grant_type=refresh_token`, persist new access_token, refresh_token value stays the same |
+| User logs out | Call Gatekeeper `/oauth/revoke` for refresh_token, clear `domo_sessions` row, drop hb_session |
+| Refresh token after 2y | User re-logs in (re-auth via `/oauth/authorize`) |
 
 ## What was retired from the earlier design
 
 - `DomoAuthProvider` interface — single implementation, no abstraction needed
-- `DomoWebAuthProvider` (plaintext password flow) — Heimdall removes the need
+- `DomoWebAuthProvider` (plaintext password flow) — Gatekeeper removes the need
 - `linked_identities.provider` discriminator column — only one provider exists; collapsed onto `users` directly
 - `oauth_tokens` table renamed to `domo_sessions` to be specific about what it holds
-- Per-instance `client_id` / `client_secret` — Huckleberry has one Heimdall registration, period
+- Per-instance `client_id` / `client_secret` — Huckleberry has one Gatekeeper registration, period
 
-## Code-level rules (build now, OAuth 2.1 cheap insurance)
+## Code-level rules (Gatekeeper is OAuth 2.1; these are correctness requirements)
 
-These are the "cheap insurance" items from `oauth-flow.md` expressed as code-level requirements. Apply them on the first pass — retrofitting is expensive, getting them right at the start is free.
+Gatekeeper is OAuth 2.1 native, so the cheap-insurance/build-now distinctions from the earlier Heimdall era collapse — these are simply correctness requirements. Apply them on the first pass.
 
 ### Required behaviors
 
-1. **Always overwrite `domo_sessions.refresh_token` from the refresh response.** Heimdall reuses the value today; we treat every refresh response as authoritative. When rotation lands, no code change.
+1. **Always overwrite `domo_sessions.refresh_token` from the refresh response.** OAuth 2.1 mandates rotation; treat every refresh response as authoritative.
 
    ```ts
-   // in HeimdallOAuthClient.refresh()
+   // in GatekeeperOAuthClient.refresh()
    await tokenStore.update(userId, {
      accessToken: resp.access_token,
      refreshToken: resp.refresh_token,  // overwrite even if unchanged
@@ -112,13 +110,13 @@ These are the "cheap insurance" items from `oauth-flow.md` expressed as code-lev
    });
    ```
 
-2. **Verify RS256 JWT signature before trusting claims.** Fetch Heimdall JWKS at boot, cache, verify on every decode. Never trust `jwt.decode()` output without verification.
+2. **Verify RS256 JWT signature before trusting claims.** Fetch Gatekeeper JWKS at boot, cache, verify on every decode. Never trust `jwt.decode()` output without verification.
 
    ```ts
    // src/auth/jwt-verifier.ts
    export async function verifyAndDecodeAccessToken(jwt: string): Promise<AccessTokenClaims> {
      const { payload } = await jose.jwtVerify(jwt, jwksRemote, {
-       issuer: HEIMDALL_ISSUER,
+       issuer: GATEKEEPER_ISSUER,
        audience: HUCKLEBERRY_CLIENT_ID,
      });
      return payload as AccessTokenClaims;
@@ -135,16 +133,16 @@ These are the "cheap insurance" items from `oauth-flow.md` expressed as code-lev
    try {
      await heimdall.refresh({ refreshToken: stored.refreshToken });
    } catch (err) {
-     if (err instanceof HeimdallAuthError) {
+     if (err instanceof GatekeeperAuthError) {
        await sessionStore.invalidate(userId);
        await tokenStore.delete(userId);
-       throw new UnauthorizedException('Heimdall session ended, re-login required');
+       throw new UnauthorizedException('Gatekeeper session ended, re-login required');
      }
      throw err;
    }
    ```
 
-   Closes the window where a revoked Heimdall token leaves a working `hb_session`.
+   Closes the window where a revoked Gatekeeper token leaves a working `hb_session`.
 
 5. **Single bearer-injection point in DomoProxy.** All outbound Domo calls go through one function that adds `Authorization: Bearer <token>`. When DPoP support is added, this is the only place that grows a second header.
 
@@ -169,8 +167,8 @@ These are the "cheap insurance" items from `oauth-flow.md` expressed as code-lev
 - Reading `Authorization` header in any service other than auth + DomoProxy
 - Storing access_token or refresh_token in plaintext anywhere — including logs
 - Logging the full JWT — log `jti` claim or first 8 chars only
-- Catching Heimdall errors generically and continuing — auth failures must propagate
+- Catching Gatekeeper errors generically and continuing — auth failures must propagate
 
-### What we are NOT building now (deferred — see `oauth-flow.md` table A–H)
+### What we are NOT building now (deferred — see `oauth-flow.md`)
 
-DPoP, front/back-channel logout, periodic introspection, multi-device sessions, discovery doc fetch, mTLS client auth, refresh-token hashing, inbound bearer introspection. Each has a defined trigger to revisit.
+DPoP/sender-constrained tokens, front/back-channel logout, periodic introspection, multi-device sessions, mTLS client auth, refresh-token hashing, inbound bearer introspection. Each has a defined trigger to revisit. Gatekeeper-specific support for these features should be confirmed with the platform team.
