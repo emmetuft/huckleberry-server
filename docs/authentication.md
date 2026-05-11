@@ -127,6 +127,187 @@ dataset:meta:read dataset:meta:write dataset:data:read
 
 Eight scopes total. The consent screen shows what the user is granting the huckleberry app: read their Domo identity, read/write Domo agents, run AI, read dataset metadata and data, plus access huckleberry's own state.
 
+### AWS service authentication (separate from user auth)
+
+There are **two distinct authentication problems** for Category B:
+
+1. **User → huckleberry.** Gatekeeper JWT, covered above. Tells us *which Domo customer + user* is calling.
+2. **Huckleberry → AWS (Aurora, S3, SQS, Bedrock, …).** Tells AWS *that the huckleberry service is allowed to talk to this AWS resource*. AWS knows nothing about Domo customers.
+
+Both must succeed for a Category B request to reach a row. The Gatekeeper-derived `customer_id` is then used inside SQL to scope what huckleberry's DB user can see — that's the multi-tenant isolation problem below. This section is just about how huckleberry authenticates itself to AWS.
+
+#### The root of trust: an IAM task role
+
+Huckleberry runs on ECS Fargate (or EKS via IRSA — same idea, different binding). The pod has **no AWS credentials baked in**. At runtime, AWS gives the pod short-lived credentials automatically:
+
+- **ECS Fargate:** credentials are fetched from `http://169.254.170.2$AWS_CONTAINER_CREDENTIALS_RELATIVE_URI` (env var set by the runtime). The AWS SDK does this transparently — app code just calls `new RDSClient()` and the SDK finds the credentials.
+- **EKS (IRSA):** credentials come via a projected service-account token exchanged for STS credentials.
+
+The role itself has an IAM policy that allowlists the AWS actions and resources huckleberry needs:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "AuroraIAMConnect",
+      "Effect": "Allow",
+      "Action": "rds-db:connect",
+      "Resource": "arn:aws:rds-db:us-east-1:123456789012:dbuser:cluster-ABCDEF/huckleberry_app"
+    }
+  ]
+}
+```
+
+That single statement is what authorizes a connection to Aurora — `Resource` pins it to one specific DB user on one specific cluster. Add a statement per additional AWS service we touch (S3 bucket reads, SQS send/receive, Bedrock invoke, etc.) and the role grows the same way.
+
+This task role is huckleberry's only AWS credential. Everything else flows from it.
+
+#### Aurora: IAM database authentication
+
+With `rds-db:connect` on the role, the connection path is:
+
+```ts
+// pseudocode — actual lives in src/common/aurora/connection.ts (planned)
+import { Signer } from '@aws-sdk/rds-signer';
+import mysql from 'mysql2/promise';
+
+const signer = new Signer({
+  hostname: process.env.AURORA_HOST,   // writer endpoint
+  port: 3306,
+  username: 'huckleberry_app',
+  // region + credentials auto-resolved from the task role
+});
+
+const authToken = await signer.getAuthToken();   // 15-min lifetime
+const conn = await mysql.createConnection({
+  host: process.env.AURORA_HOST,
+  user: 'huckleberry_app',
+  password: authToken,                            // the signed token
+  database: 'huckleberry_app',
+  ssl: { ca: RDS_CA_BUNDLE, rejectUnauthorized: true },
+});
+```
+
+The MySQL side has to be told `huckleberry_app` uses IAM, done once at user-creation time:
+
+```sql
+CREATE USER 'huckleberry_app' IDENTIFIED WITH AWSAuthenticationPlugin AS 'RDS';
+GRANT SELECT, INSERT, UPDATE, DELETE ON huckleberry_app.* TO 'huckleberry_app';
+-- explicitly NOT granted: DROP, ALTER, CREATE, GRANT, SUPER, FILE, PROCESS
+```
+
+Properties of this approach worth being explicit about:
+
+- **No password exists anywhere.** Not in env vars, not in Secrets Manager, not in the container. The auth token is signed on demand from the task role's credentials.
+- **15-minute rotation is automatic.** The pool refreshes the token on each new connection check-out. We never write rotation logic.
+- **Revocation = remove the IAM statement.** Yank the role's `rds-db:connect` permission and every running pod fails its next reconnect within 15 minutes. No password to scramble.
+- **TLS is non-optional.** Aurora's cluster parameter group forces `require_secure_transport=ON`. The RDS CA bundle is baked into the container image at build time and pinned with `rejectUnauthorized: true`.
+- **Connection pool is shared across tenants.** Per-tenant isolation is enforced in SQL (next section), not by separate connections.
+
+Local dev refuses to use IAM auth (we'd need an AWS account every dev has access to). Instead, `DB_AUTH_MODE=password` falls back to a static `.env` password against local MySQL. `nodeEnv === 'production'` rejects anything but `DB_AUTH_MODE=iam` on boot.
+
+#### No connection without a customer_id
+
+Code never reaches the pool directly. All Category B data access goes through a request-scoped `TenantBoundConnection` factory that takes the `RequestPrincipal` as a constructor argument and **throws synchronously** if `principal.customerId` is missing, empty, or not in the known-tenants allowlist. The throw happens before the pool's `acquire()` is ever called, so a connection slot is not even consumed for a malformed request.
+
+```ts
+// pseudocode — src/common/aurora/tenant-bound-connection.ts (planned)
+class TenantBoundConnection {
+  static async acquire(principal: RequestPrincipal): Promise<TenantBoundConnection> {
+    if (!principal?.customerId) throw new UnauthorizedException('no customer_id');
+    if (!knownTenants.has(principal.customerId)) throw new UnauthorizedException('unknown tenant');
+
+    const conn = await pool.getConnection();          // IAM-authed pool
+    try {
+      await conn.query('SET @huckleberry_customer_id = ?', [principal.customerId]);
+    } catch (err) {
+      conn.release();
+      throw err;                                       // 500 — never hand out a tenant-less conn
+    }
+    return new TenantBoundConnection(conn, principal);
+  }
+}
+```
+
+The `SET @huckleberry_customer_id = ?` is part of acquisition, not a later step. If the variable can't be set (driver error, lost connection, null binding), the wrapper releases the connection and the request fails. **The request cannot use a connection that isn't tenant-bound.**
+
+Three things must hold before any byte hits Aurora:
+
+1. The Gatekeeper JWT validated (signature, `iss`, `aud`, `exp`).
+2. `iss` parsed into a known `customer_id`.
+3. The route handler explicitly asked for a `TenantBoundConnection` via DI of the `RequestPrincipal`.
+
+If any of those fails, the request returns 4xx without touching the database.
+
+#### Secrets path summary
+
+| Secret | Where it lives | Lifetime | Rotated by |
+|---|---|---|---|
+| Aurora DB password (prod) | *does not exist* — IAM auth token signed per connection | 15 min | AWS SDK / task role |
+| Aurora DB password (local dev) | `.env` (gitignored) | manual | developer |
+| Task role credentials | ECS credentials endpoint / IRSA projection | minutes | AWS automatic |
+| RDS CA bundle | baked into the container image | per image build | CI rebuild |
+| Gatekeeper client secret (if confidential client) | AWS Secrets Manager, read at boot | per Gatekeeper rotation | Gatekeeper team |
+
+#### Generalizing to other AWS services
+
+The same pattern applies to every AWS resource we add. The task role is the only credential, and each new service is one extra IAM statement:
+
+| Service | Action(s) on the task role | Auth mechanism |
+|---|---|---|
+| Aurora MySQL | `rds-db:connect` on the DB user ARN | IAM auth token via `@aws-sdk/rds-signer` |
+| S3 | `s3:GetObject`, `s3:PutObject` on bucket ARNs | SDK uses task role credentials directly |
+| SQS | `sqs:SendMessage`, `sqs:ReceiveMessage` on queue ARNs | SDK uses task role credentials directly |
+| Bedrock | `bedrock:InvokeModel` on model ARNs | SDK uses task role credentials directly |
+| Secrets Manager | `secretsmanager:GetSecretValue` on specific secret ARNs | SDK uses task role credentials directly |
+
+No new "how do we log in" decision for each service — just an additional statement on the existing role.
+
+**What this section does *not* cover:** which rows the DB user can see. Aurora itself happily returns any row in any tenant's data — the DB user is one identity for the whole service. Preventing customer A from reading customer B's rows is the next section's job.
+
+#### Full end-to-end auth sequence
+
+The two auth tracks (user → huckleberry and huckleberry → AWS) interleave on every Category B request like this:
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant U as User Browser
+    participant FE as Huckleberry UI
+    participant GK as Gatekeeper
+    participant BFF as Huckleberry BFF<br/>(ECS task)
+    participant STS as AWS STS / ECS<br/>credentials endpoint
+    participant RDS as Aurora MySQL
+
+    Note over U,GK: Track 1 — user authenticates to huckleberry (Gatekeeper OAuth 2.1)
+    U->>FE: opens huckleberry
+    FE->>GK: /oauth2/authorize (PKCE)
+    GK-->>FE: code → /oauth2/token → access_token (ES256 JWT)
+    FE->>BFF: GET /personas<br/>Authorization: Bearer <jwt>
+
+    Note over BFF: GatekeeperAuthGuard
+    BFF->>BFF: verify JWT sig vs cached JWKS<br/>check iss, aud, exp
+    BFF->>BFF: parse iss → customer_id<br/>assert in known-tenants allowlist
+    BFF->>BFF: attach RequestPrincipal<br/>{ customerId, sub, scopes }
+
+    Note over BFF,RDS: Track 2 — huckleberry authenticates to AWS (IAM task role)
+    BFF->>STS: SDK auto-fetches task role creds<br/>(cached, refreshed in background)
+    STS-->>BFF: short-lived AWS credentials
+    BFF->>BFF: RDS Signer mints 15-min<br/>auth token for huckleberry_app
+    BFF->>RDS: TLS connect<br/>user=huckleberry_app<br/>password=<signed token>
+    RDS-->>BFF: connection established<br/>(IAM plugin verified token)
+
+    Note over BFF,RDS: Tenant binding — must succeed or request fails
+    BFF->>RDS: SET @huckleberry_customer_id = 'cust1'
+    RDS-->>BFF: OK
+
+    Note over BFF,RDS: Query — tenant-scoped via repository wrapper
+    BFF->>RDS: SELECT * FROM personas<br/>WHERE customer_id = 'cust1' AND user_id = ?
+    RDS-->>BFF: rows
+    BFF-->>FE: 200 OK { personas: [...] }
+```
+
 ### Multi-tenant isolation in Aurora
 
 Category B tables are shared across all customers. **Cross-customer leakage is the highest-severity bug class in this system** — one missing `WHERE customer_id = ?` and customer A reads customer B's chat history. We address this with multiple overlapping layers; any one of them catching a bad query is enough.

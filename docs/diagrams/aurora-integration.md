@@ -26,7 +26,8 @@ graph LR
     end
 
     subgraph "Surrounding AWS"
-        SM[Secrets Manager<br/>DB master + app creds<br/>auto-rotation enabled]
+        TASK_ROLE[Task IAM Role<br/>rds-db:connect → huckleberry_app<br/>no long-lived secrets]
+        SM[Secrets Manager<br/>master cred only<br/>break-glass]
         KMS[KMS CMK<br/>storage + snapshot<br/>encryption]
         S3_BACKUP[(S3<br/>automated backups<br/>+ manual snapshots)]
         PI[Performance Insights]
@@ -46,8 +47,9 @@ graph LR
     WRITER --> STORAGE
     READER --> STORAGE
 
-    PROXY_W --> SM
-    PROXY_R --> SM
+    BFF1 -.IAM auth token.-> TASK_ROLE
+    BFF2 -.IAM auth token.-> TASK_ROLE
+    BFFN -.IAM auth token.-> TASK_ROLE
     STORAGE --> KMS
     STORAGE -.snapshots.-> S3_BACKUP
     WRITER --> PI
@@ -65,7 +67,8 @@ graph LR
 | **Cluster Writer endpoint** | DNS that always points at the current primary instance. Aurora repoints automatically on failover (~30s) — proxy hides the blip from app code |
 | **Cluster Reader endpoint** | DNS that round-robins across all replica instances. Read-only. Low replica lag (~10ms) because all instances read from the same shared cluster volume |
 | **Shared cluster volume** | Aurora's distinguishing feature — all instances (writer + readers) share one storage layer. Replicas don't replicate via redo log shipping; they just read pages from the same volume. Storage scales independently of compute |
-| **Secrets Manager + rotation** | DB password rotates on a schedule; BFF reads creds at boot and on rotation event. Never hardcoded, never in env files |
+| **Task IAM role + IAM database auth** | BFF connects to Aurora using a 15-minute auth token signed from the ECS task role's `rds-db:connect` permission. **No DB password exists** — not in env, not in Secrets Manager, not in the container. Revocation = remove the IAM statement. See `../authentication.md` § AWS service authentication |
+| **Secrets Manager (break-glass only)** | Holds the Aurora master credential for one-off admin access. App tier never reads from it. App-cred rotation is not needed because there is no app password to rotate |
 | **KMS CMK** | Storage-level encryption for the cluster volume + automated snapshots. Customer-managed key, not AWS-managed, so we control rotation and access |
 | **Performance Insights** | Query-level telemetry. Surfaces slow queries before they page someone |
 | **CloudWatch alarms** | CPU, connection count, replica lag, free storage, deadlock rate |
@@ -224,7 +227,8 @@ erDiagram
 | MySQL version | 8.0+ | Required for `JSON` improvements, `BINARY(16)` UUID ergonomics, window functions |
 | Connection layer | RDS Proxy mandatory | Fargate autoscale + per-task pools blow connection limits without it |
 | Migrations | Versioned SQL via `drizzle-kit` or `umzug` | Run from BFF container at deploy time with `GET_LOCK('hb_migrate', 30)` |
-| Secrets | Secrets Manager + 30-day rotation | Lambda rotation function ships with RDS Proxy integration |
+| App-tier DB auth | **IAM database authentication** via the ECS task role | No password to rotate; 15-min token signed per connection. See `../authentication.md` § AWS service authentication |
+| Secrets Manager scope | Master credential only (break-glass admin access) | App tier never reads it; no rotation impact on running pods |
 | Backup | 35-day automated retention + weekly manual snapshot | Manual snapshot survives cluster delete; automated does not |
 | Encryption | KMS CMK at rest + TLS in transit (`?ssl={"rejectUnauthorized":true}`) | Token columns also encrypted at column level via KMS envelope encryption — defense in depth |
 | Read replicas | 1 reader minimum, autoscaled by CPU | Cheap insurance for failover + offload of audit/analytics reads |
