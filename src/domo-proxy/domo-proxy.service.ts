@@ -11,6 +11,18 @@ import { DomoApiError } from '../common/filters/domo-exception.filter.js';
 export interface DomoRequestOptions {
   headers?: Record<string, string>;
   query?: Record<string, string>;
+  /**
+   * Per-request target host. Multi-tenant callers pass `req.user.issuer` so
+   * the request reaches the same instance that issued the token. Falls back
+   * to the configured `DOMO_INSTANCE_URL` when omitted (dev / single-tenant).
+   */
+  targetHost?: string;
+  /**
+   * Per-request bearer token. Callers pass `req.user.rawToken` so the user's
+   * own Gatekeeper JWT flows downstream and Domo enforces fine-grained access.
+   * When omitted in dev, the legacy `x-domo-developer-token` header is sent.
+   */
+  bearer?: string;
 }
 
 @Injectable()
@@ -60,8 +72,8 @@ export class DomoProxyService {
     path: string,
     options?: DomoRequestOptions,
   ): Promise<Response> {
-    const url = this.buildUrl(path, options?.query);
-    const headers = this.buildHeaders(options?.headers);
+    const url = this.buildUrl(path, options?.query, options?.targetHost);
+    const headers = this.buildHeaders(options?.headers, options?.bearer);
 
     if (this.isDev) {
       this.logger.log(`→ STREAM GET ${url}`);
@@ -88,8 +100,8 @@ export class DomoProxyService {
     body?: unknown,
     options?: DomoRequestOptions,
   ): Promise<Response> {
-    const url = this.buildUrl(path, options?.query);
-    const headers = this.buildHeaders(options?.headers);
+    const url = this.buildUrl(path, options?.query, options?.targetHost);
+    const headers = this.buildHeaders(options?.headers, options?.bearer);
     headers[HttpHeader.Accept] = ContentType.SSE;
 
     if (this.isDev) {
@@ -125,8 +137,8 @@ export class DomoProxyService {
     body?: unknown,
     options?: DomoRequestOptions,
   ): Promise<T> {
-    const url = this.buildUrl(path, options?.query);
-    const headers = this.buildHeaders(options?.headers);
+    const url = this.buildUrl(path, options?.query, options?.targetHost);
+    const headers = this.buildHeaders(options?.headers, options?.bearer);
 
     if (this.isDev) {
       this.logger.log(`→ ${method} ${url}`);
@@ -176,8 +188,12 @@ export class DomoProxyService {
     return (await response.text()) as unknown as T;
   }
 
-  private buildUrl(path: string, query?: Record<string, string>): string {
-    const base = new URL(this.baseUrl);
+  private buildUrl(
+    path: string,
+    query?: Record<string, string>,
+    targetHost?: string,
+  ): string {
+    const base = new URL(targetHost || this.baseUrl);
 
     let normalizedPath = path || '';
 
@@ -205,12 +221,20 @@ export class DomoProxyService {
     return base.toString();
   }
 
-  private buildHeaders(extra?: Record<string, string>): Record<string, string> {
+  private buildHeaders(
+    extra?: Record<string, string>,
+    bearer?: string,
+  ): Record<string, string> {
     const headers: Record<string, string> = {
       [HttpHeader.ContentType]: ContentType.JSON,
     };
 
-    if (this.isDev && this.devToken) {
+    // Multi-tenant: forward the caller's Gatekeeper JWT verbatim. Downstream
+    // Domo verifies the same signature and enforces fine-grained access.
+    if (bearer) {
+      headers[HttpHeader.Authorization] = `Bearer ${bearer}`;
+    } else if (this.isDev && this.devToken) {
+      // Dev fallback: x-domo-developer-token works against a single instance.
       headers[DomoHeader.DeveloperToken] = this.devToken;
     }
 

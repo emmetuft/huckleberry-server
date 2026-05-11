@@ -2,348 +2,271 @@
 
 ## What we're doing (the layman version)
 
-Huckleberry is a backend that sits between client apps and a bunch of Domo services. Today every request is waved through with a dev token or a simple header check — fine for development, not fine for anything real.
+Huckleberry is a **standalone SaaS product** at `huckleberry.com`. It's not embedded in Domo, doesn't run on a Domo subdomain, and a user visiting huckleberry has no existing Domo session to lean on.
 
-We're going to put a proper lock on the front door. Domo has a new in-house OAuth 2.1 service called **Gatekeeper** (it replaces the older Heimdall flow). Gatekeeper hands out signed access tokens that prove *who* is calling and *what* they're allowed to do. Huckleberry's job is to:
+That means we own the front-door identity. Users sign up to huckleberry with their own credential. After they're signed in, they **link one or more Domo instances** to their huckleberry account via OAuth. Huckleberry then talks to Domo on the user's behalf using the linked credential.
 
-1. **Check the token on every request** — make sure it's real, not expired, and was signed by Gatekeeper.
-2. **Read who the user is** out of the token (user id, tenant, scopes) and make that available to the rest of the app.
-3. **Pass the token downstream** when we call other Domo services, so the user's identity flows end-to-end instead of being laundered through a service account.
+Two separate auth layers, never confused:
 
-We are a *consumer* of Gatekeeper, not a builder of it. We don't issue tokens, we don't host login pages, we don't manage signing keys. We verify what shows up in the `Authorization` header and act on it.
+1. **Layer A — Huckleberry identity.** Magic-link sign-in only — no passwords. A users table, single-use email tokens, HttpOnly session cookies. This is the lock on huckleberry's front door. (Self-service signup is not exposed; users are seeded via vetted operator tooling — see "Onboarding flow" below.)
+2. **Layer B — Domo OAuth linkage** (per-instance, per-user). Standard OAuth 2.1 authorization-code + PKCE against `https://{customer}.domo.com/oauth2/authorize`. We are a **confidential OAuth client** with Gatekeeper — the BFF holds the `client_secret`, runs the code-exchange server-side, and stores the user's Domo refresh token encrypted in Aurora. When the BFF needs to call Domo on the user's behalf, it pulls a fresh access token from the refresh and forwards it.
 
-The token itself is a JWT signed with ES256. Gatekeeper publishes its public keys at `/oauth2/jwks` on the tenant host (`https://{customer}.domo.com/oauth2/jwks`). We fetch those keys, cache them, and use them to verify signatures locally — no network round-trip per request.
+A user can link N Domo instances under one huckleberry account. The active instance is part of the user's session state and can be switched without re-authing.
 
-Scopes (e.g. `ai:execute`, `dataset:data:read`) are the unit of permission. Each endpoint declares the scope it requires; the guard rejects calls whose token doesn't carry it.
+## Why this model, and what was retired
 
-## Implementation plan
+The earlier design assumed huckleberry runs inside Domo (`customer.domo.com/huckleberry`) so the user's existing Domo session was already there. Under that assumption the frontend itself could be the OAuth client, the BFF could be stateless, and tokens never touched the server.
 
-Sprint 1 lays the seam so the rest of the project can keep moving under the dev-token guard while we wait for Gatekeeper to be reachable from our environment. Real verification flips on later.
+Standalone huckleberry.com breaks all three assumptions. There is no ambient Domo session, the SPA can't run a silent re-OAuth on every page load, and we need a stable huckleberry identity that survives Domo session expiries. So:
 
-1. **Add a JWKS client** → verify: unit test fetches keys from a mock JWKS URL and caches them with TTL + `kid` lookup.
-2. **Write a `GatekeeperAuthGuard`** that verifies JWT signature, `iss`, `aud`, `exp`, and extracts claims → verify: spec covers valid token, expired token, wrong issuer, unknown `kid`, missing/invalid signature.
-3. **Define a `RequestPrincipal`** type (user id, tenant, scopes, raw token) and attach it to `request.user` → verify: controller test reads the principal off the request.
-4. **Add a `@Scopes(...)` decorator + scope check** in the guard → verify: spec rejects tokens missing a required scope with `403`, accepts when present.
-5. **Wire config** (`GATEKEEPER_ISSUER`, `GATEKEEPER_JWKS_URI`, `GATEKEEPER_AUDIENCE`) into `AppConfig` with validation → verify: app fails fast on boot if any are missing in non-dev.
-6. **Keep `DomoAuthGuard` as the active guard** behind an env flag (`AUTH_PROVIDER=dev|gatekeeper`) so S2–S3 keep shipping while Gatekeeper isn't reachable yet → verify: e2e test passes under both modes.
-7. **Forward the bearer token to `DomoProxyService`** so downstream Domo calls carry the caller's identity instead of a service token → verify: integration test asserts the `Authorization` header reaches the proxied request.
-8. **Map Gatekeeper error shapes** (`invalid_token`, `insufficient_scope`) to NestJS exceptions via the existing `DomoExceptionFilter` pattern → verify: spec confirms `WWW-Authenticate` header is set on 401/403.
-9. **Flip `AUTH_PROVIDER=gatekeeper` in Sprint 4** once Gatekeeper is reachable; remove the dev guard after a soak period → verify: smoke test against a real Gatekeeper-issued token hits a protected endpoint and returns 200.
+- **Restored:** BFF as confidential OAuth client (server-side `/auth/domo/*` endpoints, `client_secret` in AWS Secrets Manager, encrypted token storage in Aurora).
+- **Restored:** A `users` table and a server-issued huckleberry session.
+- **Retired (again):** Frontend-as-OAuth-client model. The SPA never sees Gatekeeper tokens.
+- **Kept:** Multi-tenant. One huckleberry deployment, many customers. `customer_id`-scoped Aurora rows. `GatekeeperAuthGuard` and `JwksService` are kept but their role shifts: instead of guarding *inbound* huckleberry traffic, they verify Gatekeeper-issued tokens *internally* when the BFF processes a Domo OAuth callback or refreshes a token. The job is the same code, just moved one hop inward.
 
-## Two endpoint categories
+## Two-layer flow (the full picture)
 
-Huckleberry's endpoints split into two camps based on where the data actually lives:
+```
+1. Sign up / sign in to huckleberry.com (Layer A)
+2. Link a Domo instance via OAuth (Layer B)
+3. Use the app — BFF mints fresh Domo tokens on demand from stored refresh tokens
+4. Refresh huckleberry session as needed (Layer A)
+5. Sign out of huckleberry — local session cleared; Domo linkage persists for next time
+```
 
-- **Category A — Domo-proxied.** The request is forwarded (or fans out) to a Domo service. The user's Gatekeeper token rides along; the downstream service makes the real access decision. Scope gating uses Gatekeeper's Domo catalog (`ai:*`, `dataset:*`, `identity:*`).
-- **Category B — Huckleberry-owned (Aurora MySQL).** We're the system of record. The data lives in our database — personas, chat sessions, MCP server registrations — keyed by the caller's Domo user id. There is nothing downstream of us for these calls.
+### Layer A — Huckleberry identity (magic-link only)
 
-**Both categories still require a valid Gatekeeper token.** The token is our only source of identity (`sub`, `iss`/tenant); without it we don't know whose Aurora rows to return. The split is about *what scope gates the call*, not whether auth happens.
-
-### Category A: Domo-proxied endpoints (Gatekeeper-scope gated)
-
-Scope per route. The bearer token is forwarded via `DomoProxyService`; downstream Domo enforces fine-grained access on top.
-
-| Huckleberry route | Downstream Domo route | Scope |
+| Operation | Endpoint | What happens |
 |---|---|---|
-| `GET /identity` | `GET /api/content/v3/users/me` | `identity:read` |
-| `GET /users` | `GET /api/identity/v1/users` | `identity:read` |
-| `GET /users/:id` | `GET /api/content/v3/users?id={id}` | `identity:read` |
-| `GET /groups` | `GET /api/content/v2/groups/grouplist` | `identity:read` |
-| `GET /groups/:id` | `GET /api/content/v2/groups/{id}` | `identity:read` |
-| `GET /agents` | `GET /api/ai/v1/agents` | `ai:read` |
-| `GET /agents/:agentId` | `GET /api/ai/v1/agents/{agentId}` | `ai:read` |
-| `POST /agents` | `POST /api/ai/v1/agents` | `ai:write` |
-| `POST /agents/search` | `POST /api/ai/v1/agents/search` | `ai:read` |
-| `POST /agents/refresh` | *(triggers re-pull of `/api/ai/v1/agents`)* | `ai:read` |
-| `PUT /agents/:agentId` | `PUT /api/ai/v1/agents/{agentId}` | `ai:write` |
-| `DELETE /agents/:agentId` | `DELETE /api/ai/v1/agents/{agentId}` | `ai:write` |
-| `PATCH /agents/:agentId/context` | `PATCH /api/ai/v1/agents/{agentId}/context` | `ai:write` |
-| `POST /agents/:agentId/execute/streaming` | `POST /api/ai/v1/agents/{agentId}/execute/streaming` | `ai:execute` |
-| `POST /agents/:agentId/resume/streaming` | `POST /api/ai/v1/agents/{agentId}/resume/streaming` | `ai:execute` |
-| `POST /huckleberry/execute/streaming` | `POST /api/ai/v1/agents/{huckleberryAgentId}/execute/streaming` | `ai:execute` |
-| `POST /huckleberry/resume/streaming` | `POST /api/ai/v1/agents/{huckleberryAgentId}/resume/streaming` | `ai:execute` |
-| `POST /ai/generate` | `POST /api/ai/v1/text/generation` *(or `/text/chat[/streaming]`)* | `ai:execute` |
-| `POST /ai/summarize` | `POST /api/ai/v1/text/summarize` | `ai:execute` |
-| `POST /ai/sql` | `POST /api/ai/v1/text/sql` | `ai:execute` |
-| `GET /toolkits` | `GET /api/ai/v1/toolkits` | `ai:read` |
-| `POST /sessions` (search) | `POST /api/ai/v1/search/sessions` | `ai:read` |
-| `GET /sessions/:sessionId` | `GET /api/ai/v1/sessions/{sessionId}` | `ai:read` |
-| `GET /sessions/:sessionId/events` | `GET /api/ai/v1/sessions/{sessionId}/events` | `ai:read` |
-| `DELETE /sessions/:sessionId` | `DELETE /api/ai/v1/sessions/{sessionId}` | `ai:write` |
-| `GET /connectors/:databaseId/image` | `GET /api/data/v1/connectors/display/{databaseId}/images/320.png` | `dataset:meta:read` |
-| `POST /connectors` (search) | `POST /api/search/v1/query` | `dataset:meta:read` |
-| `GET /datasources` | `GET /api/data/v3/datasources` | `dataset:meta:read` |
-| `GET /datasources/:id/schema` | `GET /api/data/v3/datasources/{id}/schema` | `dataset:meta:read` |
-| `POST /datasources/:id/data` | `POST /api/query/v1/execute/{id}` | `dataset:data:read` |
-| `POST /graph/nodes` | `POST /api/recall/v1/...` *(graph device)* | `dataset:meta:read` *(see open Q4)* |
+| Request sign-in link | `POST /auth/signin/request` | Body: `{ email }`. Looks up `users` by email. If found and `email_verified`, inserts a `magic_links` row (`user_id`, single-use `token_hash`, 15m TTL), sends an email with the link. Always returns `202` regardless of whether the email exists (don't leak account existence). |
+| Consume sign-in link | `GET /auth/signin?token=...` | Validates `token_hash` is unconsumed and unexpired, marks consumed, issues huckleberry session cookie. 302 to `/app` or to forced-OAuth if linkage is not yet completed. |
+| Sign out | `POST /auth/logout` | Invalidates session in Redis; clears cookie. |
+| Me | `GET /auth/me` | Returns the current user + linkage state (`pending_link` vs `active`). |
+| Verify email (operator-issued) | `GET /auth/verify?token=...` | Set during onboarding when the operator creates the user row. Marks `email_verified=1`. The very first magic-link email serves as both verification and first sign-in. |
 
-### Category B: Huckleberry-owned endpoints (Aurora MySQL)
+Session shape — `hb_session` cookie carries an HS256-signed JWT with `{ sub: huckleberryUserId, iat, exp, sid: serverSessionId }`. Signing key in AWS Secrets Manager, rotated periodically. Server session in Redis (`sid → { userId, expiresAt }`) allows immediate revocation. Cookie attributes: `HttpOnly; Secure; SameSite=Lax; Path=/`. CSRF protection via double-submit token on state-changing endpoints.
 
-These read and write huckleberry's own tables in Aurora. They require an authenticated principal but do not gate on a Domo-product scope — there's no Domo resource downstream to align with. We propose a **single coarse scope, `huckleberry:access`**, declared at the application level (not in the Domo catalog), to express "this token may use the huckleberry app." Row-level access is enforced by `customer_id + sub` filtering in the service layer (see [Multi-tenant isolation](#multi-tenant-isolation-in-aurora)).
+Magic-link safety — single-use (consumed flag set atomically with session issuance), 15-minute TTL, token is a high-entropy random value stored hashed (`SHA-256`) so a DB leak doesn't expose live tokens. Rate-limit `/auth/signin/request` per email + per IP.
 
-> Personas and MCP servers are in-memory stubs today (`new Map<>()` in `personas.service.ts` and `mcp.service.ts`). The plan is to back them with Aurora MySQL — these are the endpoints that will land in Category B once that's wired up.
+No passwords are ever stored. No `password_hash` column, no `password_resets` table. If a user can't sign in, they request a new magic link.
 
-| Huckleberry route | Backing table(s) | Scope |
+### Layer B — Domo OAuth linkage
+
+| Operation | Endpoint | What happens |
 |---|---|---|
-| `GET /personas` | `personas` | `huckleberry:access` |
-| `POST /personas` | `personas` | `huckleberry:access` |
-| `GET /personas/default` | `personas` | `huckleberry:access` |
-| `GET /personas/:id` | `personas` | `huckleberry:access` |
-| `PUT /personas/:id` | `personas` | `huckleberry:access` |
-| `DELETE /personas/:id` | `personas` | `huckleberry:access` |
-| `PATCH /personas/:id/default` | `personas` | `huckleberry:access` |
-| `GET /persona/:userId` | `personas` | `huckleberry:access` |
-| `POST /persona/:userId` | `personas` | `huckleberry:access` |
-| `GET /mcp/servers` | `mcp_servers` | `huckleberry:access` |
-| `POST /mcp/servers` | `mcp_servers` | `huckleberry:access` |
-| `GET /mcp/servers/:id` | `mcp_servers` | `huckleberry:access` |
-| `PUT /mcp/servers/:id` | `mcp_servers` | `huckleberry:access` |
-| `DELETE /mcp/servers/:id` | `mcp_servers` | `huckleberry:access` |
-| `PATCH /mcp/servers/:id/toggle` | `mcp_servers` | `huckleberry:access` |
-| `POST /mcp/servers/:id/test` | `mcp_servers` | `huckleberry:access` |
-| `POST /mcp/servers/:id/sync` | `mcp_servers`, `mcp_tools` | `huckleberry:access` |
-| `GET /mcp/tools` | `mcp_tools` | `huckleberry:access` |
-| `POST /mcp/tools/execute` | `mcp_servers`, `mcp_tools` | `huckleberry:access` |
-| `GET /mcp/oauth2/authorize/:serverId` | `mcp_oauth_tokens` | `huckleberry:access` |
-| `POST /mcp/oauth2/revoke/:serverId` | `mcp_oauth_tokens` | `huckleberry:access` |
-| `GET /mcp/oauth2/status/:serverId` | `mcp_oauth_tokens` | `huckleberry:access` |
-| `POST /mcp/oauth2/discover/:serverId` | `mcp_oauth_tokens` | `huckleberry:access` |
+| Start linking | `POST /auth/domo/link/start` | Body: `{ instanceUrl }`. BFF validates instanceUrl shape, generates PKCE `code_verifier` + `state`, stores them in Redis keyed by `state` (TTL 10m), returns the authorize URL to the SPA. |
+| Authorize (browser leg) | Redirect to `{instance}/oauth2/authorize?...` | User signs into Domo (if needed), grants consent, Gatekeeper redirects to `huckleberry.com/auth/domo/callback?code=...&state=...`. |
+| Callback | `GET /auth/domo/callback?code=...&state=...` | BFF looks up `code_verifier` from Redis, exchanges code at `{instance}/oauth2/token`, verifies the returned access token against the instance's JWKS, extracts `cid`, `sub`. Persists a `linked_domo_instances` row + encrypted `domo_oauth_tokens` row. Redirects user back to app. |
+| Refresh (internal) | not user-facing | When the cached Domo access token is expired or missing, BFF calls `{instance}/oauth2/token` with `grant_type=refresh_token`, persists the new pair (rotation enforced — every refresh swaps both tokens), caches the new access token in Redis. |
+| Unlink | `DELETE /auth/domo/link/:linkId` | Calls `{instance}/oauth2/revoke` for the refresh token. Deletes both rows. Subsequent Domo calls for that link fail. |
+| List links | `GET /auth/domo/links` | Returns the user's linked instances with display metadata (customer slug, when linked, last used). |
+| Switch active | `POST /auth/domo/switch` | Sets `activeLinkId` on the huckleberry session. The active link determines which instance subsequent Domo proxy calls target. |
 
-Notes:
-- `customer_id` (parsed from the token's `iss`) and `sub` are the only legal row filters. The guard rejects any token whose `iss` doesn't resolve to a known tenant before any query runs.
-- `POST /mcp/tools/execute` is borderline — it runs code, but the runtime is *ours* (no Domo credit consumption). Keep it under `huckleberry:access`. If a tool call routes through Domo's mako execute endpoints, *that* downstream call uses the user's Gatekeeper token and the Domo side enforces `ai:execute`.
-- `GET /health` is public — no token, no scope.
-
-### Client-side scope request
-
-The frontend (`~/dev/huckleberry`) registers once via DCR and requests:
+### Per-request — putting it together
 
 ```
-huckleberry:access
-ai:read ai:write ai:execute
-identity:read
-dataset:meta:read dataset:meta:write dataset:data:read
+Browser            BFF                              Aurora / Redis            Gatekeeper           Domo API
+   │                │                                       │                       │                  │
+   │── GET /agents─▶│                                       │                       │                  │
+   │   Cookie:      │  HuckleberryAuthGuard:                │                       │                  │
+   │   hb_session   │  - verify cookie JWT signature        │                       │                  │
+   │                │  - look up serverSessionId in Redis ──▶                       │                  │
+   │                │  - reject if revoked                  │                       │                  │
+   │                │  attach { huckleberryUserId, activeLinkId }                   │                  │
+   │                │                                       │                       │                  │
+   │                │  DomoAuthBroker.tokenFor(userId, linkId):                     │                  │
+   │                │  - check Redis for cached access_token─▶                      │                  │
+   │                │  - miss → read encrypted refresh from Aurora                  │                  │
+   │                │  - decrypt via KMS                                            │                  │
+   │                │  - POST /oauth2/token (refresh_token grant)──────────────────▶│                  │
+   │                │                                       │   new access + new    │                  │
+   │                │                                       │   refresh ◀───────────│                  │
+   │                │  - upsert encrypted refresh in Aurora (rotation)              │                  │
+   │                │  - cache new access in Redis                                  │                  │
+   │                │                                       │                       │                  │
+   │                │  DomoProxyService.get(/api/ai/v1/agents,                      │                  │
+   │                │     targetHost=link.issuer, bearer=access)─────────────────────────────────────▶│
+   │                │                                       │                       │   agents ◀───────│
+   │   200 OK ◀─────│                                       │                       │                  │
 ```
 
-Eight scopes total. The consent screen shows what the user is granting the huckleberry app: read their Domo identity, read/write Domo agents, run AI, read dataset metadata and data, plus access huckleberry's own state.
+## Scope mapping (unchanged at the catalog level)
 
-### AWS service authentication (separate from user auth)
+Scopes still come from Gatekeeper's catalog (`{domain}[:{subdomain}]:{action}`), still split into:
 
-There are **two distinct authentication problems** for Category B:
+- **Category A — Domo-proxied.** Scope is whatever the downstream Domo endpoint needs (`ai:read`, `ai:execute`, `dataset:meta:read`, etc.). Enforced server-side by Domo on the forwarded Bearer; the BFF doesn't need to check.
+- **Category B — Huckleberry-owned (Aurora).** Scope is `huckleberry:access` (a huckleberry-internal authorization concept that lives in our `users` and `linked_domo_instances` rows, not Gatekeeper's catalog). Gated by the huckleberry session, not a JWT scope claim.
 
-1. **User → huckleberry.** Gatekeeper JWT, covered above. Tells us *which Domo customer + user* is calling.
-2. **Huckleberry → AWS (Aurora, S3, SQS, Bedrock, …).** Tells AWS *that the huckleberry service is allowed to talk to this AWS resource*. AWS knows nothing about Domo customers.
+What changes from the earlier doc: scope enforcement for Category A now happens entirely *downstream of the BFF* (Domo verifies the token it receives). The BFF doesn't need a `@Scopes('ai:read')` decorator on Category A routes — if the linked Domo account lacks the scope, Domo returns 403 and we surface it. We can still declare expected scopes for documentation, but they're not enforced inline.
 
-Both must succeed for a Category B request to reach a row. The Gatekeeper-derived `customer_id` is then used inside SQL to scope what huckleberry's DB user can see — that's the multi-tenant isolation problem below. This section is just about how huckleberry authenticates itself to AWS.
+Category A routes still require **a valid linked Domo instance** with the active link selected.
 
-#### The root of trust: an IAM task role
+The full per-route mapping (Huck route → Domo route → expected scope) from the earlier version still holds. The semantics change is just: scope enforcement moved from our guard to Domo.
 
-Huckleberry runs on ECS Fargate (or EKS via IRSA — same idea, different binding). The pod has **no AWS credentials baked in**. At runtime, AWS gives the pod short-lived credentials automatically:
+## Multi-tenant + standalone — how customers are recognized
 
-- **ECS Fargate:** credentials are fetched from `http://169.254.170.2$AWS_CONTAINER_CREDENTIALS_RELATIVE_URI` (env var set by the runtime). The AWS SDK does this transparently — app code just calls `new RDSClient()` and the SDK finds the credentials.
-- **EKS (IRSA):** credentials come via a projected service-account token exchanged for STS credentials.
+The huckleberry account is the primary user identity. The Domo customer is a property of the linked instance, not the user. So one huckleberry user can be linked to (`labs`, `customer1`, `customer2`) and switch among them.
 
-The role itself has an IAM policy that allowlists the AWS actions and resources huckleberry needs:
+- `users.id` — huckleberry user id (UUID, our namespace).
+- `linked_domo_instances.user_id` — FK to `users`.
+- `linked_domo_instances.issuer_url` — `https://customer.domo.com`, byte-matches the `iss` Gatekeeper signs.
+- `linked_domo_instances.customer_id` — Gatekeeper's `cid` claim (`labs`, `cust1`, etc.).
+- `linked_domo_instances.domo_sub` — the Domo `sub` from the token, the Domo-side user id within that instance.
 
-```json
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Sid": "AuroraIAMConnect",
-      "Effect": "Allow",
-      "Action": "rds-db:connect",
-      "Resource": "arn:aws:rds-db:us-east-1:123456789012:dbuser:cluster-ABCDEF/huckleberry_app"
-    }
-  ]
-}
-```
+Aurora row-level customer scoping for **huckleberry's own data** (personas, mcp_servers, future memory) uses `(huckleberry_user_id, customer_id)` as the partition. Because one huckleberry user can hold rows in two different customers (e.g., a persona configured against `labs` and a different persona against `customer1`), the index leads with both.
 
-That single statement is what authorizes a connection to Aurora — `Resource` pins it to one specific DB user on one specific cluster. Add a statement per additional AWS service we touch (S3 bucket reads, SQS send/receive, Bedrock invoke, etc.) and the role grows the same way.
+For defense in depth (per direction): primary keys on Category B tables are `(customer_id, huckleberry_user_id, id)`. Cross-tenant scope violations require failure of multiple checks simultaneously.
 
-This task role is huckleberry's only AWS credential. Everything else flows from it.
+## Aurora schema (revised)
 
-#### Aurora: IAM database authentication
-
-With `rds-db:connect` on the role, the connection path is:
-
-```ts
-// pseudocode — actual lives in src/common/aurora/connection.ts (planned)
-import { Signer } from '@aws-sdk/rds-signer';
-import mysql from 'mysql2/promise';
-
-const signer = new Signer({
-  hostname: process.env.AURORA_HOST,   // writer endpoint
-  port: 3306,
-  username: 'huckleberry_app',
-  // region + credentials auto-resolved from the task role
-});
-
-const authToken = await signer.getAuthToken();   // 15-min lifetime
-const conn = await mysql.createConnection({
-  host: process.env.AURORA_HOST,
-  user: 'huckleberry_app',
-  password: authToken,                            // the signed token
-  database: 'huckleberry_app',
-  ssl: { ca: RDS_CA_BUNDLE, rejectUnauthorized: true },
-});
-```
-
-The MySQL side has to be told `huckleberry_app` uses IAM, done once at user-creation time:
+New tables compared to the earlier draft:
 
 ```sql
-CREATE USER 'huckleberry_app' IDENTIFIED WITH AWSAuthenticationPlugin AS 'RDS';
-GRANT SELECT, INSERT, UPDATE, DELETE ON huckleberry_app.* TO 'huckleberry_app';
--- explicitly NOT granted: DROP, ALTER, CREATE, GRANT, SUPER, FILE, PROCESS
+users
+  id                BINARY(16) PK                       -- huckleberry user id
+  email             VARCHAR(255) NOT NULL UNIQUE
+  email_verified    TINYINT(1) NOT NULL DEFAULT 0       -- set true on first successful magic-link consume
+  display_name      VARCHAR(255)
+  status            ENUM('pending_link','active','suspended') NOT NULL DEFAULT 'pending_link'
+  created_at, updated_at, last_login_at
+  INDEX (email)
+
+magic_links
+  token_hash        VARCHAR(64) PK                      -- SHA-256 of the random token (token itself never stored)
+  user_id           BINARY(16) NOT NULL FK -> users(id)
+  expires_at        DATETIME NOT NULL                   -- 15 minutes from issuance
+  consumed_at       DATETIME NULL                       -- atomically set with session issuance
+  ip_issued_from    VARCHAR(45)                         -- audit
+  INDEX (user_id, expires_at)
+
+linked_domo_instances
+  id                BINARY(16) PK
+  user_id           BINARY(16) NOT NULL FK -> users(id)
+  issuer_url        VARCHAR(255) NOT NULL                -- byte-matches iss claim
+  customer_id       VARCHAR(64) NOT NULL                 -- Gatekeeper cid claim
+  domo_sub          VARCHAR(64) NOT NULL                 -- Gatekeeper sub claim
+  scope             VARCHAR(1000) NOT NULL               -- granted scopes
+  linked_at, last_used_at
+  UNIQUE (user_id, issuer_url, domo_sub)
+  INDEX (customer_id)
+
+domo_oauth_tokens
+  link_id           BINARY(16) PK FK -> linked_domo_instances(id)
+  refresh_token     VARBINARY NOT NULL                   -- KMS envelope-encrypted
+  refresh_iv        VARBINARY NOT NULL                   -- AES-GCM IV
+  refresh_dek_id    VARCHAR(255) NOT NULL                -- KMS data-key reference
+  expires_at        DATETIME NULL                        -- access-token expiry, nullable
+  scope             VARCHAR(1000) NOT NULL
+  updated_at
+
+-- Category B tables (huckleberry-owned data, scoped to huckleberry user + customer)
+personas
+  customer_id           VARCHAR(64) NOT NULL
+  user_id               BINARY(16) NOT NULL FK -> users(id)
+  id                    BINARY(16)
+  focus_areas           JSON
+  is_default            TINYINT(1)
+  created_at, updated_at
+  PRIMARY KEY (customer_id, user_id, id)
+  INDEX (customer_id, user_id, is_default)
+
+mcp_servers
+  customer_id           VARCHAR(64) NOT NULL
+  user_id               BINARY(16) NOT NULL FK -> users(id)
+  id                    BINARY(16)
+  name, url, enabled, auth_type, ...
+  PRIMARY KEY (customer_id, user_id, id)
+
+mcp_oauth_tokens
+  customer_id           VARCHAR(64) NOT NULL
+  mcp_server_id         BINARY(16) NOT NULL FK -> mcp_servers(id)
+  access_token          VARBINARY                        -- KMS envelope-encrypted
+  refresh_token         VARBINARY                        -- KMS envelope-encrypted
+  PRIMARY KEY (customer_id, mcp_server_id)
 ```
 
-Properties of this approach worth being explicit about:
+Token columns are envelope-encrypted: a KMS-wrapped data encryption key (DEK) is stored alongside the ciphertext (`refresh_dek_id`), the plaintext DEK is cached in-process for a short window, KMS is called only on cache miss. This keeps KMS call volume sane while making backup leaks unreadable without KMS access.
 
-- **No password exists anywhere.** Not in env vars, not in Secrets Manager, not in the container. The auth token is signed on demand from the task role's credentials.
-- **15-minute rotation is automatic.** The pool refreshes the token on each new connection check-out. We never write rotation logic.
-- **Revocation = remove the IAM statement.** Yank the role's `rds-db:connect` permission and every running pod fails its next reconnect within 15 minutes. No password to scramble.
-- **TLS is non-optional.** Aurora's cluster parameter group forces `require_secure_transport=ON`. The RDS CA bundle is baked into the container image at build time and pinned with `rejectUnauthorized: true`.
-- **Connection pool is shared across tenants.** Per-tenant isolation is enforced in SQL (next section), not by separate connections.
+## Module shape (BFF code)
 
-Local dev refuses to use IAM auth (we'd need an AWS account every dev has access to). Instead, `DB_AUTH_MODE=password` falls back to a static `.env` password against local MySQL. `nodeEnv === 'production'` rejects anything but `DB_AUTH_MODE=iam` on boot.
+```
+src/common/auth/
+├── request-principal.ts              -- HuckleberryPrincipal: { userId, sessionId, activeLinkId, customerId? }
+├── huckleberry-auth.guard.ts         -- Reads hb_session cookie, validates against Redis, attaches principal
+├── public.decorator.ts               -- @Public() bypass
+├── session.service.ts                -- Issue/revoke huckleberry sessions
+├── csrf.guard.ts                     -- Double-submit token check on state-changing routes
+└── domo-auth-broker/
+    ├── jwks.service.ts               -- Existing — verifies Gatekeeper tokens internally
+    ├── known-tenants.service.ts      -- Existing — issuer allowlist for linkage targets
+    ├── gatekeeper-auth.guard.ts      -- KEPT but no longer the front door — used to verify tokens during callback / refresh
+    ├── domo-auth-broker.service.ts   -- tokenFor(userId, linkId) -> Bearer; refresh on demand
+    ├── domo-token-store.service.ts   -- Aurora R/W with KMS envelope encryption
+    └── domo-oauth-client.service.ts  -- buildAuthorizeUrl / exchangeCode / refresh / revoke against Gatekeeper
 
-#### No connection without a customer_id
+src/auth/                             -- new
+├── auth.controller.ts                -- /auth/signin/request, /auth/signin, /auth/logout, /auth/me
+├── auth.service.ts                   -- magic-link issue + atomic consume + session issuance
+├── domo-link.controller.ts           -- /auth/domo/link/start, /callback, /links, /switch, /:id (DELETE)
+└── domo-link.service.ts              -- Drives DomoAuthBroker for link CRUD
 
-Code never reaches the pool directly. All Category B data access goes through a request-scoped `TenantBoundConnection` factory that takes the `RequestPrincipal` as a constructor argument and **throws synchronously** if `principal.customerId` is missing, empty, or not in the known-tenants allowlist. The throw happens before the pool's `acquire()` is ever called, so a connection slot is not even consumed for a malformed request.
+src/email/                            -- new
+└── email.service.ts                  -- SES from day 1
+```
+
+`DomoProxyService` keeps its existing `targetHost` + `bearer` per-request options. Every Category A service call:
 
 ```ts
-// pseudocode — src/common/aurora/tenant-bound-connection.ts (planned)
-class TenantBoundConnection {
-  static async acquire(principal: RequestPrincipal): Promise<TenantBoundConnection> {
-    if (!principal?.customerId) throw new UnauthorizedException('no customer_id');
-    if (!knownTenants.has(principal.customerId)) throw new UnauthorizedException('unknown tenant');
-
-    const conn = await pool.getConnection();          // IAM-authed pool
-    try {
-      await conn.query('SET @huckleberry_customer_id = ?', [principal.customerId]);
-    } catch (err) {
-      conn.release();
-      throw err;                                       // 500 — never hand out a tenant-less conn
-    }
-    return new TenantBoundConnection(conn, principal);
-  }
-}
+const link = await this.domoLink.activeLinkFor(req.user.userId);
+const bearer = await this.domoAuthBroker.tokenFor(link.id);
+return this.domoProxy.get('/api/ai/v1/agents', {
+  targetHost: link.issuerUrl,
+  bearer,
+});
 ```
 
-The `SET @huckleberry_customer_id = ?` is part of acquisition, not a later step. If the variable can't be set (driver error, lost connection, null binding), the wrapper releases the connection and the request fails. **The request cannot use a connection that isn't tenant-bound.**
+## Aurora connection auth (unchanged)
 
-Three things must hold before any byte hits Aurora:
+Everything we documented before — IAM database auth via the ECS task role, no long-lived DB password, TLS required, least-privilege DB user, `TenantBoundConnection` factory that refuses to acquire a connection without a validated `customer_id` — still applies. The Aurora-side auth story is orthogonal to the user-side identity story.
 
-1. The Gatekeeper JWT validated (signature, `iss`, `aud`, `exp`).
-2. `iss` parsed into a known `customer_id`.
-3. The route handler explicitly asked for a `TenantBoundConnection` via DI of the `RequestPrincipal`.
+The one nuance: when a huckleberry user has linked multiple Domo customers, a single huckleberry request only ever touches *one* `customer_id` (the active link). `TenantBoundConnection` is acquired with that customer_id and `SET @huckleberry_customer_id = ?` accordingly. Switching the active link mid-session is a new HTTP request and gets its own bound connection.
 
-If any of those fails, the request returns 4xx without touching the database.
+## MVP decisions (locked)
 
-#### Secrets path summary
+These are settled. Anything not on this list is post-MVP.
 
-| Secret | Where it lives | Lifetime | Rotated by |
-|---|---|---|---|
-| Aurora DB password (prod) | *does not exist* — IAM auth token signed per connection | 15 min | AWS SDK / task role |
-| Aurora DB password (local dev) | `.env` (gitignored) | manual | developer |
-| Task role credentials | ECS credentials endpoint / IRSA projection | minutes | AWS automatic |
-| RDS CA bundle | baked into the container image | per image build | CI rebuild |
-| Gatekeeper client secret (if confidential client) | AWS Secrets Manager, read at boot | per Gatekeeper rotation | Gatekeeper team |
-
-#### Generalizing to other AWS services
-
-The same pattern applies to every AWS resource we add. The task role is the only credential, and each new service is one extra IAM statement:
-
-| Service | Action(s) on the task role | Auth mechanism |
+| # | Decision | Rationale |
 |---|---|---|
-| Aurora MySQL | `rds-db:connect` on the DB user ARN | IAM auth token via `@aws-sdk/rds-signer` |
-| S3 | `s3:GetObject`, `s3:PutObject` on bucket ARNs | SDK uses task role credentials directly |
-| SQS | `sqs:SendMessage`, `sqs:ReceiveMessage` on queue ARNs | SDK uses task role credentials directly |
-| Bedrock | `bedrock:InvokeModel` on model ARNs | SDK uses task role credentials directly |
-| Secrets Manager | `secretsmanager:GetSecretValue` on specific secret ARNs | SDK uses task role credentials directly |
+| 1 | **Magic-link sign-in only.** No password. | Removes password storage, hashing parameters, breach monitoring, and reset flow. Sign-in = "click the link we emailed you" → session cookie. |
+| 2 | **No MFA.** | Internal demo audience. MFA is required before external launch; schema slot kept. |
+| 3 | **12h sliding session.** HS256-signed JWT in `HttpOnly; Secure; SameSite=Lax` cookie. Redis-backed `sid` for instant revocation. | Sliding TTL gives "stay logged in while working" without long-lived bearer-equivalent. |
+| 4 | **Double-submit CSRF token** on all state-changing routes. | SameSite=Lax leaks on top-level GET; double-submit is the standard belt-and-suspenders. |
+| 5 | **AWS SES from day 1**, sandbox mode acceptable for internal demo. | Domain verification before external launch. |
+| 6 | **One linked Domo instance per huckleberry user.** | Vetted onboarding sets the instance; users don't switch. Multi-link is post-MVP. |
+| 7 | **Vetted onboarding creates the Domo instance and seeds the user.** No self-service signup, no instance picker. See "Onboarding flow" below. | Cleanest path to a real demo. The instance question is answered at vetting time, not at runtime. |
 
-No new "how do we log in" decision for each service — just an additional statement on the existing role.
+### Onboarding flow (decision 7 expanded)
 
-**What this section does *not* cover:** which rows the DB user can see. Aurora itself happily returns any row in any tenant's data — the DB user is one identity for the whole service. Preventing customer A from reading customer B's rows is the next section's job.
+There is no public signup form. Customer admins request access out-of-band (sales/support). An internal operator runs onboarding tooling that:
 
-#### Full end-to-end auth sequence
+1. **Provisions the Domo instance** via existing Domo provisioning (not our concern; captures the resulting `issuer_url`, e.g. `https://newcust.domo.com`, and `customer_id` from the response).
+2. **Inserts the huckleberry `users` row** with email + the captured `issuer_url`. The user is created in the `pending_link` state — they have an identity but no functioning Domo connection yet.
+3. **Inserts a `linked_domo_instances` stub** (`user_id`, `issuer_url`, `customer_id`) with no associated `domo_oauth_tokens` row. The link exists in the database but is not yet usable.
+4. **Sends the magic-link onboarding email** to the customer admin.
 
-The two auth tracks (user → huckleberry and huckleberry → AWS) interleave on every Category B request like this:
+The customer admin then:
 
-```mermaid
-sequenceDiagram
-    autonumber
-    participant U as User Browser
-    participant FE as Huckleberry UI
-    participant GK as Gatekeeper
-    participant BFF as Huckleberry BFF<br/>(ECS task)
-    participant STS as AWS STS / ECS<br/>credentials endpoint
-    participant RDS as Aurora MySQL
+5. **Clicks the magic-link** → huckleberry verifies, issues a session, lands them in the app.
+6. **First page is a forced OAuth handoff** to `{issuer_url}/oauth2/authorize` (no UI picker — we already know the instance from the row created in step 3).
+7. After Gatekeeper callback, the `domo_oauth_tokens` row is populated. User state moves from `pending_link` to `active`.
 
-    Note over U,GK: Track 1 — user authenticates to huckleberry (Gatekeeper OAuth 2.1)
-    U->>FE: opens huckleberry
-    FE->>GK: /oauth2/authorize (PKCE)
-    GK-->>FE: code → /oauth2/token → access_token (ES256 JWT)
-    FE->>BFF: GET /personas<br/>Authorization: Bearer <jwt>
+After step 7, the link is complete and standard per-request flow applies. The user cannot change their linked instance — it's pinned at row creation and immutable from the user's perspective. (Operator can re-link via admin tooling if needed.)
 
-    Note over BFF: GatekeeperAuthGuard
-    BFF->>BFF: verify JWT sig vs cached JWKS<br/>check iss, aud, exp
-    BFF->>BFF: parse iss → customer_id<br/>assert in known-tenants allowlist
-    BFF->>BFF: attach RequestPrincipal<br/>{ customerId, sub, scopes }
+Schema implication: the `linked_domo_instances` table is the source of truth for "what instance does this user belong to." There is at most one row per user at MVP. The `users` table doesn't carry an `instance_url` column — it would duplicate state. Joining is cheap and keeps single-link / multi-link symmetric in the code.
 
-    Note over BFF,RDS: Track 2 — huckleberry authenticates to AWS (IAM task role)
-    BFF->>STS: SDK auto-fetches task role creds<br/>(cached, refreshed in background)
-    STS-->>BFF: short-lived AWS credentials
-    BFF->>BFF: RDS Signer mints 15-min<br/>auth token for huckleberry_app
-    BFF->>RDS: TLS connect<br/>user=huckleberry_app<br/>password=<signed token>
-    RDS-->>BFF: connection established<br/>(IAM plugin verified token)
+### What was removed from the open-questions list
 
-    Note over BFF,RDS: Tenant binding — must succeed or request fails
-    BFF->>RDS: SET @huckleberry_customer_id = 'cust1'
-    RDS-->>BFF: OK
-
-    Note over BFF,RDS: Query — tenant-scoped via repository wrapper
-    BFF->>RDS: SELECT * FROM personas<br/>WHERE customer_id = 'cust1' AND user_id = ?
-    RDS-->>BFF: rows
-    BFF-->>FE: 200 OK { personas: [...] }
-```
-
-### Multi-tenant isolation in Aurora
-
-Category B tables are shared across all customers. **Cross-customer leakage is the highest-severity bug class in this system** — one missing `WHERE customer_id = ?` and customer A reads customer B's chat history. We address this with multiple overlapping layers; any one of them catching a bad query is enough.
-
-**Identifying the tenant.** Gatekeeper access tokens carry `iss = https://{customer}.domo.com`. The guard parses the customer subdomain out of `iss` once, validates it against a known-tenants check, and exposes it as `principal.customerId` (a stable string like `cust1`, not the hostname). The raw `iss` is also kept for audit. Tokens whose `iss` doesn't parse to a known tenant are rejected at the guard — no Aurora query ever runs.
-
-**Layer 1 — Schema.** Every Category B table has a non-nullable `customer_id VARCHAR(64)` column. Every index that supports a user-facing query has `customer_id` as its **leading column** (e.g., `(customer_id, user_id, created_at)` on `sessions`). Primary keys are `(customer_id, id)` composite — never a bare UUID. This makes a query without `customer_id` either an index scan or a full table scan; the next layer catches both.
-
-**Layer 2 — Repository wrapper.** All Category B data access goes through a `TenantScopedRepository<T>` that takes `customerId` in its constructor and injects `customer_id = ?` into every `SELECT`, `UPDATE`, and `DELETE` it generates. There is no method that issues an unscoped query. Raw query builders (`dataSource.query(...)`) are linted out of `src/personas`, `src/sessions`, `src/mcp` via an ESLint rule. The repository's constructor is private; it can only be obtained through a request-scoped factory that requires the `RequestPrincipal`.
-
-**Layer 3 — Service-method contract.** Every service method that touches Aurora takes `principal: RequestPrincipal` as its first argument (not optional, not a `customerId` string that could be forged from a body). The method passes `principal.customerId` into the repository. Code review rule: a service method that touches Aurora and doesn't accept a `RequestPrincipal` is rejected.
-
-**Layer 4 — Defense at the connection.** On each request, before any query, we issue `SET @huckleberry_customer_id = ?` on the connection. Aurora MySQL doesn't have native row-level security, but we use this session variable in `CHECK` constraints on write paths (`CHECK (customer_id = @huckleberry_customer_id)` on inserts/updates via triggers). A bug that bypasses the repository wrapper still trips the trigger and the write fails with a constraint error.
-
-**Layer 5 — Path/body cross-checks.** When a path parameter or body field names a `customerId`, `userId`, or resource id that belongs to a customer, the guard or DTO validator asserts it matches `principal.customerId` and `principal.sub`. A request from customer A trying to `GET /sessions/{id}` where `{id}` belongs to customer B returns `404 Not Found` (not `403` — we don't leak existence).
-
-**Layer 6 — Tests.** Every Category B service ships with a `cross-tenant.spec.ts` test that seeds two customers, then asserts every read/write/delete operation by customer A's principal returns zero rows / no effect against customer B's data. CI fails if any Category B service is missing this spec (enforced by a simple file-presence check).
-
-**Layer 7 — Audit logging.** Every Category B request logs `(customer_id, sub, route, row_count_returned)` at INFO. Any query that returns zero rows after a successful auth + scope check logs at WARN (likely a cross-tenant attempt or a stale id). A daily job alerts on any single user generating >N WARN-level cross-tenant hits.
-
-The combination is overkill on purpose. Layers 2 and 3 catch the realistic case (developer forgets `customer_id`). Layer 4 catches a clever bypass. Layer 5 catches enumeration. Layer 6 prevents regression. Layer 7 makes a breach observable in real time.
-
-### Guard implementation
-
-- `GatekeeperAuthGuard` verifies the JWT on every request (both categories) and attaches `RequestPrincipal` (user id, tenant, scopes, raw token).
-- `@Scopes(...)` decorator per route. The guard rejects missing scope with `403 insufficient_scope` (RFC 6750).
-- `@Public()` bypasses the guard (only `/health` today).
-- For Category B, services use the principal's `sub` and tenant to constrain every Aurora query — defense-in-depth even though the scope check already passed.
-
-## Open questions (for the nitty-gritty pass)
-
-1. **`huckleberry:access` — one scope or split?** One coarse scope today; split into `huckleberry:read`/`:write` only if a real use case appears for read-only third-party clients. The frontend doesn't need the split.
-2. **Where does `huckleberry:access` live?** Not in Gatekeeper's Domo catalog. Options: (a) propose it to the Gatekeeper team for the catalog, (b) declare it locally and have our guard accept it without server-side validation. (a) is cleaner long-term; (b) unblocks MVP.
-3. **Aurora row scoping** — confirm every Category B service filters by `tenant + sub` at the query layer. The guard already verified identity, but query-level filtering is the actual safety net against cross-tenant leakage.
-4. **Graph queries** — `POST /graph/nodes` reads Domo's ontology graph (Category A). Catalog has no `graph:*`; `dataset:meta:read` is least-bad. Raise with Gatekeeper team if graph grows.
-5. **Personas in Category B is right** — they're huckleberry-owned user prefs in Aurora, not Domo identity. Confirmed by the split.
-6. **`POST /mcp/tools/execute`** — Category B today (we run the tools). If/when tool execution routes through Domo mako execute endpoints, move to Category A with `ai:execute`.
-7. **Legacy Heimdall tokens during transition** — accept both, or hard cutover at Sprint 4? Default to hard cutover.
-8. **Token forwarding to Domo** — bearer pass-through, or token-exchange (RFC 8693)? Pass-through unless `aud` mismatch forces exchange.
+- **`huckleberry:access` scope** — retired. Inbound auth is the session cookie; no scope gating on Category B routes.
+- **Password reset flow / `password_resets` table** — gone with decision 1. If a magic-link email is lost, we resend.
+- **SSO providers** — post-MVP, not built.
+- **Instance picker / runtime instance selection** — gone with decision 7. There is no "which instance?" question at runtime.
