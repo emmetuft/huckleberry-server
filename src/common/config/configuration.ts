@@ -57,6 +57,23 @@ export interface AppConfig {
    * Gatekeeper puts the issuing client_id in `aud`.
    */
   gatekeeperAudience: string;
+  /**
+   * HS256 signing key for the hb_session cookie. Must be set in any non-dev
+   * environment — the app refuses to start without it when nodeEnv=production.
+   * Generate with `openssl rand -hex 32`.
+   */
+  sessionSigningKey: string;
+  /** Magic-link TTL in seconds. Default 900 (15 min). */
+  magicLinkTtlSeconds: number;
+  /** Huckleberry session TTL in seconds (sliding). Default 43200 (12h). */
+  sessionTtlSeconds: number;
+  /** URL prefix used in magic-link emails (e.g. http://localhost:3000). */
+  magicLinkBaseUrl: string;
+  /**
+   * Shared secret for the operator admin endpoints. Required to hit
+   * `POST /admin/users`. Leave blank in dev to disable admin endpoints.
+   */
+  adminApiKey: string;
 }
 
 const ALLOWED_AUTH_PROVIDERS: readonly AuthProvider[] = ['dev', 'gatekeeper'];
@@ -122,5 +139,10 @@ export default (): { app: AppConfig } => ({
     gatekeeperIssuers: parseIssuers(process.env),
     gatekeeperJwksUriOverrides: parseJwksOverrides(process.env),
     gatekeeperAudience: process.env.GATEKEEPER_AUDIENCE || '',
+    sessionSigningKey: process.env.SESSION_SIGNING_KEY || '',
+    magicLinkTtlSeconds: parseInt(process.env.MAGIC_LINK_TTL_SECONDS || '900', 10),
+    sessionTtlSeconds: parseInt(process.env.SESSION_TTL_SECONDS || '43200', 10),
+    magicLinkBaseUrl: process.env.MAGIC_LINK_BASE_URL || 'http://localhost:3000',
+    adminApiKey: process.env.ADMIN_API_KEY || '',
   },
 });

@@ -399,3 +399,7 @@ Temporary Items
 dist
 .webpack
 .serverless/**/*.zip
+
+# pnpm is the package manager. Don't track competing lockfiles.
+package-lock.json
+yarn.lock

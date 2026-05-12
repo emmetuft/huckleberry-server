@@ -1,0 +1,115 @@
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Inject,
+  Post,
+  Query,
+  Req,
+  Res,
+  UseGuards,
+} from '@nestjs/common';
+import type { Request, Response } from 'express';
+import { ApiTags } from '@nestjs/swagger';
+import { AuthService } from './auth.service.js';
+import { RequestSigninDto } from './dto/request-signin.dto.js';
+import { SessionService } from './session.service.js';
+import { USER_REPOSITORY, type UserRepository } from './user.repository.js';
+import type { HuckleberryPrincipal } from './types.js';
+import { HuckleberryAuthGuard } from '../common/auth/huckleberry-auth.guard.js';
+import { Public } from '../common/auth/decorators/public.decorator.js';
+
+const SESSION_COOKIE = 'hb_session';
+const CSRF_COOKIE = 'csrf_token';
+
+@ApiTags('Auth')
+@Controller('auth')
+@UseGuards(HuckleberryAuthGuard)
+export class AuthController {
+  constructor(
+    private readonly auth: AuthService,
+    private readonly sessions: SessionService,
+    @Inject(USER_REPOSITORY) private readonly users: UserRepository,
+  ) {}
+
+  @Public()
+  @Post('signin/request')
+  @HttpCode(HttpStatus.ACCEPTED)
+  async requestSignin(
+    @Body() dto: RequestSigninDto,
+    @Req() req: Request,
+  ): Promise<{ status: 'accepted' }> {
+    const ip = readClientIp(req);
+    await this.auth.requestMagicLink(dto.email, ip);
+    // Always 202 regardless of whether the email exists — don't leak account existence.
+    return { status: 'accepted' };
+  }
+
+  @Public()
+  @Get('signin')
+  async consumeSignin(
+    @Query('token') token: string,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<{ userId: string; needsLinkage: boolean }> {
+    const { user, needsLinkage } = await this.auth.consumeMagicLink(token);
+    const issued = await this.sessions.issue(user.id);
+
+    res.cookie(SESSION_COOKIE, issued.cookieValue, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      path: '/',
+      expires: issued.expiresAt,
+    });
+    // CSRF cookie is NOT HttpOnly — the SPA reads it and echoes it as X-CSRF-Token.
+    res.cookie(CSRF_COOKIE, issued.csrfToken, {
+      httpOnly: false,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      path: '/',
+      expires: issued.expiresAt,
+    });
+
+    return { userId: user.id, needsLinkage };
+  }
+
+  @Post('logout')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async logout(
+    @Req() req: Request & { user?: HuckleberryPrincipal },
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<void> {
+    if (req.user) {
+      await this.sessions.revoke(req.user.sessionId);
+    }
+    res.clearCookie(SESSION_COOKIE, { path: '/' });
+    res.clearCookie(CSRF_COOKIE, { path: '/' });
+  }
+
+  @Get('me')
+  async me(
+    @Req() req: Request & { user: HuckleberryPrincipal },
+  ): Promise<{
+    id: string;
+    email: string;
+    status: string;
+    displayName: string | null;
+  }> {
+    const user = await this.users.findById(req.user.userId);
+    if (!user) throw new Error('user disappeared mid-session');
+    return {
+      id: user.id,
+      email: user.email,
+      status: user.status,
+      displayName: user.displayName,
+    };
+  }
+}
+
+function readClientIp(req: Request): string | null {
+  const xff = req.headers['x-forwarded-for'];
+  if (typeof xff === 'string') return xff.split(',')[0].trim();
+  return req.socket?.remoteAddress ?? null;
+}

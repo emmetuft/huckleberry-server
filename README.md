@@ -5,7 +5,7 @@ NestJS Backend-for-Frontend (BFF) that proxies Domo Agent APIs and provides name
 ## Prerequisites
 
 - Node.js 20+
-- npm 10+
+- pnpm 8+ (`npm install -g pnpm` if you don't have it)
 - A Domo developer token with AI Services access
 
 ### Required Domo Feature Flags
@@ -25,10 +25,12 @@ Without these, the agent search/execute endpoints will return `403 Forbidden` wi
 ## Setup
 
 ```bash
-npm install
+pnpm install
 cp .env.example .env
 # Edit .env with your Domo instance URL and developer token
 ```
+
+> This project uses **pnpm** exclusively. `pnpm-lock.yaml` is the source of truth; `package-lock.json` and `yarn.lock` are gitignored.
 
 ### Environment Variables
 
@@ -45,22 +47,24 @@ cp .env.example .env
 
 ```bash
 # Development (watch mode)
-npm run start:dev
+pnpm start:dev
 
 # Development with verbose request logging
-VERBOSE_LOGGING=true npm run start:dev
+VERBOSE_LOGGING=true pnpm start:dev
 
 # Production
-npm run build
-npm run start:prod
+pnpm build
+pnpm start:prod
 ```
 
 ## Testing
 
 ```bash
-npm test              # unit tests
-npm run test:e2e      # end-to-end tests
-npm run test:cov      # coverage report
+pnpm test               # unit tests
+pnpm test:e2e           # all end-to-end tests
+pnpm test:auth          # magic-link auth flow e2e only
+pnpm test:cov           # coverage report
+pnpm demo:auth          # live demo of the sign-in flow (needs a running BFF)
 ```
 
 ## API Endpoints
