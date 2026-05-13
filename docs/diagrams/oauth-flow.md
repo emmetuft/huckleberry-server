@@ -5,8 +5,6 @@ Two distinct flows in one diagram set. They serve different purposes and must no
 - **Layer A — Huckleberry identity.** Sign-up, sign-in, session. We own this end-to-end. No Domo involvement.
 - **Layer B — Domo OAuth linkage.** Standard OAuth 2.1 authorization-code + PKCE flow against each customer's Gatekeeper instance. **The BFF is the confidential OAuth client** — `client_secret` lives in AWS Secrets Manager, code exchange is server-side, the user's Domo refresh token is encrypted-at-rest in Aurora.
 
-This replaces the previous "frontend as OAuth client" design — that model assumed huckleberry runs inside Domo, which doesn't hold for standalone `huckleberry.com`.
-
 See `../authentication.md` for the design rationale, table schemas, and module surface.
 
 ## Layer A — Huckleberry sign-in (magic-link)
@@ -234,9 +232,3 @@ Open question: does each Domo customer require us to register separately, or doe
 - Refresh tokens live server-side, so we can do background work (memory extraction, scheduled jobs) on behalf of the user when the browser is closed.
 - The BFF, not the SPA, holds `client_secret` — public-client PKCE flow is unnecessarily exposed for a server-backed product. (PKCE is still used as defense in depth, which Gatekeeper requires.)
 
-## What was retired
-
-- Frontend as OAuth public client (PKCE in-browser, tokens in JS memory).
-- BFF as stateless verifier of inbound Gatekeeper-issued JWTs from end users.
-- `GATEKEEPER_ISSUERS` as the authorization layer for inbound traffic. (It still gates which Domo instances we'll *link to*, but inbound traffic is gated by the huckleberry session.)
-- The `huckleberry:access` scope concept.

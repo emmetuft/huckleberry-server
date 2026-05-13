@@ -1,10 +1,8 @@
-import {
-  IsEnum,
-  IsObject,
-  IsOptional,
-  IsString,
-} from 'class-validator';
-import type { McpAuthType, OAuth2Config } from '../../common/types/mcp.types.js';
+import { IsEnum, IsObject, IsOptional, IsString } from 'class-validator';
+import type {
+  McpAuthType,
+  OAuth2Config,
+} from '../../common/types/mcp.types.js';
 
 export class CreateMcpServerDto {
   @IsString()

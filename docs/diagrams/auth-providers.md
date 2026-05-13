@@ -66,7 +66,7 @@ graph TB
     DAB --> PROXY
 ```
 
-The huckleberry session cookie is the **only** inbound auth. `GatekeeperAuthGuard` is no longer applied to controllers — it's used internally by `DomoOAuthClient` to verify tokens it receives from Gatekeeper during code exchange and refresh.
+The huckleberry session cookie is the **only** inbound auth. `GatekeeperAuthGuard` is internal-only — `DomoOAuthClient` uses it to verify tokens received from Gatekeeper during code exchange and refresh.
 
 ## Files (planned)
 
@@ -77,9 +77,9 @@ The huckleberry session cookie is the **only** inbound auth. `GatekeeperAuthGuar
 | `src/common/auth/session.service.ts` | `issue(userId) → { sid, cookie }`, `revoke(sid)`, `get(sid)`. Redis-backed. |
 | `src/common/auth/csrf.guard.ts` | Double-submit token check on POST/PUT/PATCH/DELETE. |
 | `src/common/auth/decorators/public.decorator.ts` | `@Public()` bypass marker. |
-| `src/common/auth/domo-auth-broker/jwks.service.ts` | **Kept from prior design.** Per-issuer JWKS cache. |
-| `src/common/auth/domo-auth-broker/known-tenants.service.ts` | **Kept from prior design.** Issuer allowlist + pattern matcher. Determines which Domo instances we'll *link to* — no longer the inbound front door. |
-| `src/common/auth/domo-auth-broker/gatekeeper-auth.guard.ts` | **Kept but role narrowed.** Reusable verifier — invoked by `DomoOAuthClient` to validate tokens it receives from Gatekeeper. Not applied to inbound controllers. |
+| `src/common/auth/domo-auth-broker/jwks.service.ts` | Per-issuer JWKS cache. |
+| `src/common/auth/domo-auth-broker/known-tenants.service.ts` | Issuer allowlist + pattern matcher. Determines which Domo instances are valid linkage targets. |
+| `src/common/auth/domo-auth-broker/gatekeeper-auth.guard.ts` | Reusable verifier — invoked by `DomoOAuthClient` to validate tokens received from Gatekeeper. Not applied to inbound controllers. |
 | `src/common/auth/domo-auth-broker/domo-oauth-client.service.ts` | Builds authorize URLs, exchanges codes, refreshes tokens, revokes. Holds the Gatekeeper `client_secret` (fetched from Secrets Manager at boot). |
 | `src/common/auth/domo-auth-broker/domo-token-store.service.ts` | Aurora R/W for `domo_oauth_tokens` and `linked_domo_instances`. KMS envelope encryption on `refresh_token`. |
 | `src/common/auth/domo-auth-broker/domo-auth-broker.service.ts` | `tokenFor(linkId): Promise<string>` — returns a fresh access token, refreshing transparently. Redis cache + Aurora fallback. |
@@ -179,14 +179,10 @@ The integrity rules from the prior design still apply with role shifts:
 6. **Forward, don't relay** — Category A endpoints pass `bearer` to `DomoProxyService` verbatim.
 7. **No fall-through on auth failure** — guards throw, never default.
 
-## Migration from `DomoAuthGuard`
+## Inbound auth boundary
 
-The legacy `src/common/guards/domo-auth.guard.ts` (header-based dev guard) stays in place behind `AUTH_PROVIDER=dev` so single-tenant container/dev work keeps shipping. Sprint 4 flips the switch to `AUTH_PROVIDER=huckleberry` (rename pending) and `HuckleberryAuthGuard` becomes the front door. `GatekeeperAuthGuard` no longer guards anything inbound — it moves into the Domo broker as an internal verifier.
+`HuckleberryAuthGuard` is the front door — it reads the `hb_session` cookie and attaches a principal. `DomoAuthGuard` is a legacy header-passthrough guard kept behind the `AUTH_PROVIDER=dev` switch for header-style callers; flip to `AUTH_PROVIDER=huckleberry` to make session-cookie auth the only inbound mechanism.
 
-## What was retired
+`GatekeeperAuthGuard` is an internal verifier — invoked by `DomoOAuthClient` to validate tokens received from Gatekeeper during code exchange and refresh. It is never applied to controllers.
 
-- Frontend as confidential or public OAuth client. The SPA never runs an OAuth flow.
-- BFF as stateless verifier of end-user Gatekeeper tokens. `GatekeeperAuthGuard` is no longer applied to controllers.
-- `@Scopes('...')` decorator enforcement at the BFF for Category A routes. Scope is now enforced by Domo against the Bearer we forward — the BFF picks the right scope by what it requested at link-time.
-- The `huckleberry:access` scope concept.
-- Treating the inbound `Authorization: Bearer` header as the source of identity. Inbound identity is the `hb_session` cookie.
+The SPA never runs an OAuth flow itself; all OAuth happens server-side. Inbound `Authorization: Bearer` headers are not used for identity — only the session cookie is. Category A scope enforcement is delegated to Domo (the BFF forwards a token, Domo enforces).

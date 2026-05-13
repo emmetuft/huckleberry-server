@@ -16,6 +16,7 @@ import { ApiTags } from '@nestjs/swagger';
 import { AuthService } from './auth.service.js';
 import { RequestSigninDto } from './dto/request-signin.dto.js';
 import { SessionService } from './session.service.js';
+import { SignupService } from './signup.service.js';
 import { USER_REPOSITORY, type UserRepository } from './user.repository.js';
 import type { HuckleberryPrincipal } from './types.js';
 import { HuckleberryAuthGuard } from '../common/auth/huckleberry-auth.guard.js';
@@ -30,10 +31,39 @@ const CSRF_COOKIE = 'csrf_token';
 export class AuthController {
   constructor(
     private readonly auth: AuthService,
+    private readonly signup: SignupService,
     private readonly sessions: SessionService,
     @Inject(USER_REPOSITORY) private readonly users: UserRepository,
   ) {}
 
+  /**
+   * Sign-up: provisions a Domo instance + user via the InstanceProvisioner,
+   * creates the huckleberry user row in `pending_link` status, seeds a
+   * pending Domo-link row, and sends a magic-link email. On first sign-in
+   * the user completes the PKCE auth-code flow to mint the refresh token.
+   *
+   * If the email already exists this is a no-op (existence-oracle
+   * protection — returns 202 either way).
+   */
+  @Public()
+  @Post('signup')
+  @HttpCode(HttpStatus.ACCEPTED)
+  async signupRequest(
+    @Body() dto: RequestSigninDto,
+    @Req() req: Request,
+  ): Promise<{ status: 'accepted' }> {
+    const ip = readClientIp(req);
+    await this.signup.ensureUser(dto.email);
+    await this.auth.requestMagicLink(dto.email, ip);
+    return { status: 'accepted' };
+  }
+
+  /**
+   * Sign-in: sends a magic-link only if a user with this email already
+   * exists. Does NOT provision instances or create accounts — that's
+   * `POST /auth/signup` only. Always returns 202 regardless of whether
+   * the user exists (existence-oracle protection).
+   */
   @Public()
   @Post('signin/request')
   @HttpCode(HttpStatus.ACCEPTED)
@@ -43,7 +73,6 @@ export class AuthController {
   ): Promise<{ status: 'accepted' }> {
     const ip = readClientIp(req);
     await this.auth.requestMagicLink(dto.email, ip);
-    // Always 202 regardless of whether the email exists — don't leak account existence.
     return { status: 'accepted' };
   }
 
@@ -89,9 +118,7 @@ export class AuthController {
   }
 
   @Get('me')
-  async me(
-    @Req() req: Request & { user: HuckleberryPrincipal },
-  ): Promise<{
+  async me(@Req() req: Request & { user: HuckleberryPrincipal }): Promise<{
     id: string;
     email: string;
     status: string;

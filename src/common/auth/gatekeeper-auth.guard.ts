@@ -65,14 +65,14 @@ export class GatekeeperAuthGuard implements CanActivate {
     let unverifiedIss: string | undefined;
     try {
       unverifiedIss = decodeJwt(jwt).iss;
-    } catch (err) {
+    } catch {
       throw new UnauthorizedException({
         error: 'invalid_token',
         error_description: 'malformed JWT',
       });
     }
     this.tenants.assertAllowed(unverifiedIss);
-    const issuer = unverifiedIss as string;
+    const issuer = unverifiedIss;
 
     // Step 3: verify against the issuer's JWKS. jose enforces iss/aud/typ/alg
     // against the values we pin; if any mismatch the throw is unauthenticated.

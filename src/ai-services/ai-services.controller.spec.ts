@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
 import { AiServicesController } from './ai-services.controller';
 import { AiServicesService } from './ai-services.service';
+import { DomoAuthGuard } from '../common/guards/domo-auth.guard';
 import { TextGenerationDto } from './dto/text-generation.dto';
 import { TextSummarizationDto } from './dto/text-summarization.dto';
 import { TextToSqlDto } from './dto/text-to-sql.dto';
@@ -34,7 +35,10 @@ describe('AiServicesController', () => {
           },
         },
       ],
-    }).compile();
+    })
+      .overrideGuard(DomoAuthGuard)
+      .useValue({ canActivate: () => true })
+      .compile();
 
     controller = module.get<AiServicesController>(AiServicesController);
     service = module.get(AiServicesService);

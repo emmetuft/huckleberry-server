@@ -3,10 +3,8 @@ import { AdminController } from './admin.controller.js';
 import { AuthController } from './auth.controller.js';
 import { AuthService } from './auth.service.js';
 import { SessionService } from './session.service.js';
-import {
-  USER_REPOSITORY,
-  InMemoryUserRepository,
-} from './user.repository.js';
+import { SignupService } from './signup.service.js';
+import { USER_REPOSITORY, InMemoryUserRepository } from './user.repository.js';
 import {
   MAGIC_LINK_REPOSITORY,
   InMemoryMagicLinkRepository,
@@ -34,6 +32,7 @@ import { HuckleberryAuthGuard } from '../common/auth/huckleberry-auth.guard.js';
   providers: [
     AuthService,
     SessionService,
+    SignupService,
     HuckleberryAuthGuard,
     { provide: USER_REPOSITORY, useClass: InMemoryUserRepository },
     { provide: MAGIC_LINK_REPOSITORY, useClass: InMemoryMagicLinkRepository },
@@ -43,6 +42,7 @@ import { HuckleberryAuthGuard } from '../common/auth/huckleberry-auth.guard.js';
   exports: [
     AuthService,
     SessionService,
+    SignupService,
     HuckleberryAuthGuard,
     USER_REPOSITORY,
     MAGIC_LINK_REPOSITORY,

@@ -22,11 +22,23 @@ process.env.PORT = '0';
 process.env.SESSION_SIGNING_KEY =
   '0000000000000000000000000000000000000000000000000000000000000001';
 process.env.ADMIN_API_KEY = 'test-admin-key';
-process.env.MAGIC_LINK_BASE_URL = 'http://localhost:3000';
+process.env.MAGIC_LINK_BASE_URL = 'http://localhost:5173';
 process.env.MAGIC_LINK_TTL_SECONDS = '900';
 process.env.SESSION_TTL_SECONDS = '43200';
+// Stub instance-provisioner config — values are not actually used by the
+// e2e because no real Gatekeeper call fires in these tests; they just need
+// to be non-empty so the provisioner doesn't throw ServiceUnavailable.
+process.env.DEV_INSTANCE_ISSUER_URL = 'http://stub.test:443';
+process.env.DEV_INSTANCE_CUSTOMER_ID = 'stub';
+process.env.DEV_INSTANCE_OAUTH_CLIENT_ID = 'stub-client-id';
+process.env.DEV_INSTANCE_OAUTH_CLIENT_SECRET = 'stub-client-secret';
+process.env.DEV_INSTANCE_SCOPES = 'ai:read';
 
-import { INestApplication, RequestMethod, ValidationPipe } from '@nestjs/common';
+import {
+  INestApplication,
+  RequestMethod,
+  ValidationPipe,
+} from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import { AppModule } from '../src/app.module';
@@ -40,8 +52,9 @@ import {
 
 class CapturingEmailService implements EmailService {
   public lastEmail: MagicLinkEmail | null = null;
-  async sendMagicLink(email: MagicLinkEmail): Promise<void> {
+  sendMagicLink(email: MagicLinkEmail): Promise<void> {
     this.lastEmail = email;
+    return Promise.resolve();
   }
 }
 
@@ -84,7 +97,7 @@ describe('Auth flow (e2e)', () => {
   });
 
   it('walks the magic-link flow end-to-end', async () => {
-    const server = app.getHttpServer();
+    const server = app.getHttpServer() as Parameters<typeof request>[0];
 
     // 1. Seed a user.
     const onboard = await request(server)
@@ -92,21 +105,21 @@ describe('Auth flow (e2e)', () => {
       .set('x-admin-api-key', 'test-admin-key')
       .send({
         email: 'e2e@huckleberry.com',
-        issuerUrl: 'http://domo-labs-dev.dev.domo.com:443',
-        customerId: 'labs',
       })
       .expect(201);
     expect(onboard.body.data.userId).toBeTruthy();
 
     // 2. Magic-link captured.
     expect(emails.lastEmail).not.toBeNull();
-    expect(emails.lastEmail!.to).toBe('e2e@huckleberry.com');
-    const url = new URL(emails.lastEmail!.url);
-    expect(url.pathname).toBe('/api/auth/signin');
+    expect(emails.lastEmail.to).toBe('e2e@huckleberry.com');
+    const url = new URL(emails.lastEmail.url);
+    expect(url.origin).toBe('http://localhost:5173');
+    expect(url.pathname).toBe('/auth/signin');
     const token = url.searchParams.get('token');
     expect(token).toBeTruthy();
 
-    // 3. Consume the magic link — should set hb_session + csrf_token cookies.
+    // 3. Simulate the SPA's consume call — POST/GET to the BFF endpoint
+    //    that the SPA's /auth/signin page invokes via fetch.
     const consume = await request(server)
       .get(`/api/auth/signin?token=${token}`)
       .expect(200);
@@ -117,12 +130,13 @@ describe('Auth flow (e2e)', () => {
     expect(sessionCookie).toBeTruthy();
     expect(csrfCookie).toBeTruthy();
     expect(sessionCookie).toMatch(/HttpOnly/);
-    expect(consume.body.data.needsLinkage).toBe(true);
+    // Operator onboarding via /admin/users bootstraps a client_credentials
+    // link and flips the user to status='active' in one shot — no
+    // pending_link / no browser-side OAuth dance.
+    expect(consume.body.data.needsLinkage).toBe(false);
 
-    const cookieHeader = cookies
-      .map((c) => c.split(';')[0])
-      .join('; ');
-    const csrfToken = csrfCookie!.split(';')[0].split('=')[1];
+    const cookieHeader = cookies.map((c) => c.split(';')[0]).join('; ');
+    const csrfToken = csrfCookie.split(';')[0].split('=')[1];
 
     // 4. Use the session.
     const me = await request(server)
@@ -130,7 +144,7 @@ describe('Auth flow (e2e)', () => {
       .set('Cookie', cookieHeader)
       .expect(200);
     expect(me.body.data.email).toBe('e2e@huckleberry.com');
-    expect(me.body.data.status).toBe('pending_link');
+    expect(me.body.data.status).toBe('active');
 
     // 5. Reject reuse of the same magic-link token.
     await request(server).get(`/api/auth/signin?token=${token}`).expect(400);
@@ -150,30 +164,29 @@ describe('Auth flow (e2e)', () => {
   });
 
   it('rejects admin endpoint without the API key', async () => {
-    const server = app.getHttpServer();
+    const server = app.getHttpServer() as Parameters<typeof request>[0];
     await request(server)
       .post('/api/admin/users')
       .send({
         email: 'rogue@huckleberry.com',
-        issuerUrl: 'http://domo-labs-dev.dev.domo.com:443',
-        customerId: 'labs',
       })
       .expect(403);
   });
 
-  it('signin/request 202s for unknown emails (no account leak)', async () => {
-    const server = app.getHttpServer();
-    const before = emails.lastEmail;
+  it('signin/request auto-provisions a new user (freemium signup)', async () => {
+    const server = app.getHttpServer() as Parameters<typeof request>[0];
     await request(server)
       .post('/api/auth/signin/request')
-      .send({ email: 'never-seeded@huckleberry.com' })
+      .send({ email: 'fresh-signup@huckleberry.com' })
       .expect(202);
-    // No new email captured for the unknown address.
-    expect(emails.lastEmail).toBe(before);
+    // The signin/request endpoint find-or-creates the user and emails a
+    // magic-link in both branches — freemium-style. The new user now has
+    // a linked instance via the stub provisioner.
+    expect(emails.lastEmail?.to).toBe('fresh-signup@huckleberry.com');
   });
 
   it('rejects CSRF mismatch on state-changing routes', async () => {
-    const server = app.getHttpServer();
+    const server = app.getHttpServer() as Parameters<typeof request>[0];
 
     // Seed + consume to get a valid session.
     await request(server)
@@ -181,11 +194,9 @@ describe('Auth flow (e2e)', () => {
       .set('x-admin-api-key', 'test-admin-key')
       .send({
         email: 'csrf@huckleberry.com',
-        issuerUrl: 'http://domo-labs-dev.dev.domo.com:443',
-        customerId: 'labs',
       })
       .expect(201);
-    const token = new URL(emails.lastEmail!.url).searchParams.get('token')!;
+    const token = new URL(emails.lastEmail.url).searchParams.get('token');
     const consume = await request(server)
       .get(`/api/auth/signin?token=${token}`)
       .expect(200);

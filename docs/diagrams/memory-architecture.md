@@ -17,7 +17,7 @@ Concretely the intent engine is responsible for:
 
 It is the **brain** that turns raw input into focused, high-signal context. Memory tiers (episodic, semantic, procedural) are the *substrate*; the intent engine is the *operator*.
 
-In Mako, the intent engine ships as the **`mako-intent-engine`** shared module (formerly tracked as "working memory"). The rename reflects the broader scope: working memory is one capability of the intent engine, not the whole thing. Used by `ai-assistant-app`; productized for any future Mako agent.
+In Mako, the intent engine ships as the **`mako-intent-engine`** shared module. Working memory is one capability of the intent engine, not the whole thing. Used by `ai-assistant-app`; productized for any future Mako agent.
 
 ## Tiers
 

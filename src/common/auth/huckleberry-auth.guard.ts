@@ -47,7 +47,10 @@ export class HuckleberryAuthGuard implements CanActivate {
 
     if (STATE_CHANGING.has(req.method)) {
       const headerToken = req.headers[CSRF_HEADER];
-      if (typeof headerToken !== 'string' || headerToken !== session.csrfToken) {
+      if (
+        typeof headerToken !== 'string' ||
+        headerToken !== session.csrfToken
+      ) {
         throw new UnauthorizedException('csrf_token_mismatch');
       }
     }
@@ -78,11 +81,7 @@ export class HuckleberryAuthGuard implements CanActivate {
 }
 
 function readCookie(req: Request, name: string): string | null {
-  // Read from req.cookies if cookie-parser is installed; fall back to header parsing.
-  const fromParser = (req as Request & { cookies?: Record<string, string> })
-    .cookies?.[name];
-  if (fromParser) return fromParser;
-
+  // cookie-parser isn't installed; parse the raw header ourselves.
   const header = req.headers.cookie;
   if (!header) return null;
   for (const pair of header.split(';')) {

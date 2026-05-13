@@ -226,7 +226,7 @@ erDiagram
 | Backup | 35-day automated retention + weekly manual snapshot | Manual snapshot survives cluster delete; automated does not |
 | Encryption | KMS CMK at rest + TLS in transit (`?ssl={"rejectUnauthorized":true}`) | Token columns also encrypted at column level via KMS envelope encryption — defense in depth |
 | Read replicas | 1 reader minimum, autoscaled by CPU | Cheap insurance for failover + offload of audit/analytics reads |
-| Database separation | Single `huckleberry_app` database | Only Category B tables exist in Aurora today; the older `huckleberry_auth` database (for `users` / `domo_sessions` / `sessions`) is retired with the move to frontend-as-OAuth-client |
+| Database separation | Single `huckleberry_app` database | Category B + Layer A/B tables all share one database. Splitting comes later if a feature demands it. |
 | Primary key type | `BINARY(16)` UUIDs via `UUID_TO_BIN(uuid, 1)` | Half the storage of `CHAR(36)`, index-friendly time-prefix ordering. Swap-flag (`1`) reorders timestamp bits for better B-tree locality |
 | ORM | Drizzle (preferred) or TypeORM, MySQL driver | Both support MySQL natively |
 | Multi-AZ | Required in prod | Single-AZ Aurora is not actually HA |

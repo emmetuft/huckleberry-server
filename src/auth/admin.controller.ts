@@ -10,25 +10,22 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { ApiTags } from '@nestjs/swagger';
 import { randomUUID } from 'node:crypto';
-import { IsEmail, IsOptional, IsString, IsUrl, MaxLength } from 'class-validator';
+import { IsEmail, IsOptional, IsString, MaxLength } from 'class-validator';
 import type { AppConfig } from '../common/config/configuration.js';
 import { AuthService } from './auth.service.js';
 import { USER_REPOSITORY, type UserRepository } from './user.repository.js';
 import type { User } from './types.js';
 import { Public } from '../common/auth/decorators/public.decorator.js';
+import { DomoLinkService } from '../common/auth/domo-link/domo-link.service.js';
+import {
+  INSTANCE_PROVISIONER,
+  type InstanceProvisioner,
+} from '../common/auth/domo-link/instance-provisioner.service.js';
 
 class OnboardUserDto {
   @IsEmail()
   @MaxLength(255)
   email!: string;
-
-  @IsUrl({ require_tld: false })
-  @MaxLength(255)
-  issuerUrl!: string;
-
-  @IsString()
-  @MaxLength(64)
-  customerId!: string;
 
   @IsString()
   @IsOptional()
@@ -37,11 +34,15 @@ class OnboardUserDto {
 }
 
 /**
- * Operator admin endpoints — protected by `ADMIN_API_KEY` header (not the
- * huckleberry session). Use these to seed users during onboarding while
- * Aurora isn't wired and there is no persistent store across processes.
+ * Operator admin endpoints — protected by `ADMIN_API_KEY` header.
  *
- * Disabled entirely when `ADMIN_API_KEY` is empty.
+ * `POST /admin/users` is the operator-driven onboarding flow: provisions
+ * a Domo instance + user (stubbed in dev), creates the huckleberry user
+ * row in `pending_link` status, seeds a pending Domo-link row, and sends
+ * the magic-link email. On first sign-in the user runs the PKCE auth-code
+ * flow against Gatekeeper, which mints the refresh token we then store.
+ *
+ * Disabled when `ADMIN_API_KEY` is empty.
  */
 @ApiTags('Admin')
 @Controller('admin')
@@ -51,7 +52,10 @@ export class AdminController {
   constructor(
     config: ConfigService,
     private readonly auth: AuthService,
+    private readonly link: DomoLinkService,
     @Inject(USER_REPOSITORY) private readonly users: UserRepository,
+    @Inject(INSTANCE_PROVISIONER)
+    private readonly provisioner: InstanceProvisioner,
   ) {
     const app = config.get<AppConfig>('app');
     this.adminApiKey = app?.adminApiKey ?? '';
@@ -62,10 +66,21 @@ export class AdminController {
   async onboard(
     @Headers('x-admin-api-key') key: string | undefined,
     @Body() dto: OnboardUserDto,
-  ): Promise<{ userId: string; message: string; magicLinkUrl?: string }> {
+  ): Promise<{
+    userId: string;
+    message: string;
+    instance: { issuerUrl: string; customerId: string };
+    magicLinkUrl?: string;
+  }> {
     this.assertAuthorized(key);
 
-    let user = await this.users.findByEmail(dto.email);
+    // 1. Provision the Domo instance + user (stub in dev — returns the
+    //    configured dev instance metadata).
+    const instance = await this.provisioner.provision(dto.email);
+
+    // 2. Find-or-create the huckleberry user.
+    const existing = await this.users.findByEmail(dto.email);
+    let user = existing;
     let message: string;
     if (user) {
       message = 'user already exists; re-sent magic link';
@@ -81,21 +96,33 @@ export class AdminController {
         updatedAt: now,
         lastLoginAt: null,
       } satisfies User);
-      message = 'user created in pending_link state';
+      message = 'user created and linked to provisioned Domo instance';
     }
 
-    // TODO(layer-b): also seed `linked_domo_instances` stub using
-    //   { dto.issuerUrl, dto.customerId } once the linkage table is wired.
+    // 3. Bootstrap the pending Domo link (no-op if one already exists for
+    //    the same user — MVP allows one link per user). The user completes
+    //    the PKCE flow on first sign-in.
+    const existingLink = await this.link.activeLinkFor(user.id);
+    if (!existingLink) {
+      await this.link.bootstrapLink({
+        userId: user.id,
+        issuerUrl: instance.issuerUrl,
+        customerId: instance.customerId,
+        scope: instance.scope,
+      });
+    }
 
+    // 4. Send magic-link email.
     const url = await this.auth.requestMagicLink(user.email, null);
 
-    // In dev, return the URL so callers (CLI/demo script) don't have to
-    // scrape it out of the BFF logs. In production, omit it — the URL is
-    // a single-use credential and should only travel via SES.
     const includeUrl = process.env.NODE_ENV !== 'production';
     return {
       userId: user.id,
       message,
+      instance: {
+        issuerUrl: instance.issuerUrl,
+        customerId: instance.customerId,
+      },
       ...(includeUrl && url ? { magicLinkUrl: url } : {}),
     };
   }

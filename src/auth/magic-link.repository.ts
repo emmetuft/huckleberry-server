@@ -23,22 +23,22 @@ export const MAGIC_LINK_REPOSITORY = Symbol('MagicLinkRepository');
 export class InMemoryMagicLinkRepository implements MagicLinkRepository {
   private readonly byHash = new Map<string, MagicLink>();
 
-  async insert(link: MagicLink): Promise<MagicLink> {
+  insert(link: MagicLink): Promise<MagicLink> {
     this.byHash.set(link.tokenHash, link);
-    return link;
+    return Promise.resolve(link);
   }
 
-  async consume(tokenHash: string, now: Date): Promise<MagicLink | null> {
+  consume(tokenHash: string, now: Date): Promise<MagicLink | null> {
     const link = this.byHash.get(tokenHash);
-    if (!link) return null;
-    if (link.consumedAt) return null;
-    if (link.expiresAt.getTime() <= now.getTime()) return null;
+    if (!link) return Promise.resolve(null);
+    if (link.consumedAt) return Promise.resolve(null);
+    if (link.expiresAt.getTime() <= now.getTime()) return Promise.resolve(null);
     const consumed = { ...link, consumedAt: now };
     this.byHash.set(tokenHash, consumed);
-    return consumed;
+    return Promise.resolve(consumed);
   }
 
-  async deleteExpired(before: Date): Promise<number> {
+  deleteExpired(before: Date): Promise<number> {
     let removed = 0;
     for (const [hash, link] of this.byHash) {
       if (link.expiresAt.getTime() < before.getTime()) {
@@ -46,6 +46,6 @@ export class InMemoryMagicLinkRepository implements MagicLinkRepository {
         removed++;
       }
     }
-    return removed;
+    return Promise.resolve(removed);
   }
 }

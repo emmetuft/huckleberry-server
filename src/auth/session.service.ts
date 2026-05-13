@@ -90,7 +90,7 @@ export class SessionService {
         algorithms: ['HS256'],
       });
       payload = result.payload;
-    } catch (err) {
+    } catch {
       throw new UnauthorizedException('invalid session');
     }
     const sid = typeof payload.sid === 'string' ? payload.sid : undefined;

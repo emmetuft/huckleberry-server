@@ -29,8 +29,13 @@ function stripSlash(s: string): string {
 
 function parseIssuers(): string[] {
   const csv = process.env.GATEKEEPER_ISSUERS || '';
-  if (csv) return csv.split(',').map((s) => stripSlash(s.trim())).filter(Boolean);
-  const single = process.env.GATEKEEPER_ISSUER || process.env.DOMO_INSTANCE_URL || '';
+  if (csv)
+    return csv
+      .split(',')
+      .map((s) => stripSlash(s.trim()))
+      .filter(Boolean);
+  const single =
+    process.env.GATEKEEPER_ISSUER || process.env.DOMO_INSTANCE_URL || '';
   return single ? [stripSlash(single)] : [];
 }
 
@@ -41,7 +46,10 @@ function parseJwksOverrides(): Record<string, string> {
     process.env.GATEKEEPER_ISSUER || process.env.DOMO_INSTANCE_URL;
   if (legacy && legacyIssuer) overrides[stripSlash(legacyIssuer)] = legacy;
   const csv = process.env.GATEKEEPER_JWKS_URIS || '';
-  for (const pair of csv.split(',').map((s) => s.trim()).filter(Boolean)) {
+  for (const pair of csv
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)) {
     const eq = pair.indexOf('=');
     if (eq <= 0) continue;
     overrides[stripSlash(pair.slice(0, eq).trim())] = pair.slice(eq + 1).trim();
@@ -103,16 +111,16 @@ describeLive('GatekeeperAuthGuard (live Gatekeeper)', () => {
     }>();
 
     expect(req.user).toBeDefined();
-    expect(issuers).toContain(req.user!.issuer);
-    expect(req.user!.customerId).toBeTruthy();
-    expect(req.user!.sub).toBeTruthy();
-    expect(req.user!.rawToken).toBe(token);
-    expect(Array.isArray(req.user!.scopes)).toBe(true);
+    expect(issuers).toContain(req.user.issuer);
+    expect(req.user.customerId).toBeTruthy();
+    expect(req.user.sub).toBeTruthy();
+    expect(req.user.rawToken).toBe(token);
+    expect(Array.isArray(req.user.scopes)).toBe(true);
   });
 
   it('rejects a tampered token (signature mismatch)', async () => {
     const guard = makeGuard();
-    const parts = token!.split('.');
+    const parts = token.split('.');
     const sig = parts[2];
     const flipped = `${sig.slice(0, -1)}${sig.slice(-1) === 'A' ? 'B' : 'A'}`;
     const tampered = `${parts[0]}.${parts[1]}.${flipped}`;

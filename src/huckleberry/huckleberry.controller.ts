@@ -1,10 +1,4 @@
-import {
-  Body,
-  Controller,
-  Post,
-  Res,
-  UseGuards,
-} from '@nestjs/common';
+import { Body, Controller, Post, Res, UseGuards } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import type { Response as ExpressResponse } from 'express';
 import { HuckleberryService } from './huckleberry.service.js';
@@ -27,10 +21,7 @@ export class HuckleberryController {
   }
 
   @Post('resume/streaming')
-  async resumeStream(
-    @Body() dto: ResumeAgentDto,
-    @Res() res: ExpressResponse,
-  ) {
+  async resumeStream(@Body() dto: ResumeAgentDto, @Res() res: ExpressResponse) {
     return this.huckleberryService.resumeStream(dto, res);
   }
 }

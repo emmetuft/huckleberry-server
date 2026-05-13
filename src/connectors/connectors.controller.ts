@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Param, Post, Res, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  Res,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import type { Response as ExpressResponse } from 'express';
 import { Readable } from 'node:stream';
@@ -18,7 +26,8 @@ export class ConnectorsController {
     @Param('databaseId') databaseId: string,
     @Res() res: ExpressResponse,
   ) {
-    const domoResponse = await this.connectorsService.getConnectorImage(databaseId);
+    const domoResponse =
+      await this.connectorsService.getConnectorImage(databaseId);
     if (!domoResponse.ok) {
       throw new DomoApiError(domoResponse.status, domoResponse.statusText);
     }

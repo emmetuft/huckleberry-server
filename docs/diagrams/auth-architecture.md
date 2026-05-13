@@ -193,12 +193,6 @@ Note that **memory tables are not here.** Memory lives in Mako's graph device, a
 
 No password hashes are stored (magic-link only). `magic_links.token_hash` is SHA-256 of the random token; the token itself never lands in the DB. Rate-limit `/auth/signin/request` per email + per IP to stop email-flood abuse.
 
-## What was retired (compared to the immediately prior version)
+## Aurora rollout order
 
-- **`huckleberry:access` scope.** Gone. Replaced by huckleberry's own session.
-- **`GATEKEEPER_ISSUERS` as front-door allowlist.** Demoted to "which Domo instances we'll *link to*" — no longer gates inbound traffic.
-- **`GatekeeperAuthGuard` on controllers.** Now used internally by `DomoOAuthClient` to verify tokens it receives during code exchange and refresh.
-
-## Migration path
-
-Tables ship in order: Layer A (users + identity) → Layer B (linkage + tokens) → Category B reshape (personas / MCP get `user_id` columns added). Aurora wiring is one ticket; the existing in-memory `Map<>` stubs on `personas` and `mcp` are swapped to repository calls in a follow-up.
+Tables ship in order: Layer A (users + identity) → Layer B (linkage + tokens) → Category B (personas / MCP). Aurora wiring is one ticket; the in-memory `Map<>` stubs on `personas` and `mcp` swap to repository calls in a follow-up.

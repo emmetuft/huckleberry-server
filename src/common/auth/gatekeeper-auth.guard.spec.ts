@@ -34,10 +34,10 @@ beforeAll(async () => {
   // Stub JwksService to resolve the correct public key by issuer.
   jest
     .spyOn(JwksService.prototype, 'getKeyResolver')
-    .mockImplementation((issuer: string) => async () => {
+    .mockImplementation((issuer: string) => () => {
       const k = keysByIssuer.get(issuer);
       if (!k) throw new Error(`no keys stubbed for ${issuer}`);
-      return k.pub;
+      return Promise.resolve(k.pub);
     });
 });
 
@@ -75,12 +75,14 @@ async function mintToken(opts: {
   return jwt.sign(keys.priv);
 }
 
-function makeGuard(opts: {
-  audience?: string;
-  issuers?: string[];
-  scopes?: string[];
-  isPublic?: boolean;
-} = {}): GatekeeperAuthGuard {
+function makeGuard(
+  opts: {
+    audience?: string;
+    issuers?: string[];
+    scopes?: string[];
+    isPublic?: boolean;
+  } = {},
+): GatekeeperAuthGuard {
   const config = {
     get: jest.fn().mockReturnValue({
       gatekeeperIssuers: opts.issuers ?? [ISSUER_A, ISSUER_B],
@@ -170,7 +172,7 @@ describe('GatekeeperAuthGuard — multi-tenant', () => {
   it('rejects a token signed with issuer A keys but claiming issuer B', async () => {
     // Mint with A's keys, but set iss to B. After we route by iss to B's
     // JWKS, signature verification against B's keys will fail.
-    const a = keysByIssuer.get(ISSUER_A)!;
+    const a = keysByIssuer.get(ISSUER_A);
     const jwt = await new SignJWT({ scope: 'ai:read' })
       .setProtectedHeader({ alg: 'ES256', kid: a.kid, typ: 'at+jwt' })
       .setIssuer(ISSUER_B)
@@ -264,7 +266,9 @@ describe('GatekeeperAuthGuard — multi-tenant', () => {
     });
     const c = ctx({ authorization: `Bearer ${tok}` });
     await guard.canActivate(c);
-    const req = c.switchToHttp().getRequest<{ user?: { customerId: string } }>();
+    const req = c
+      .switchToHttp()
+      .getRequest<{ user?: { customerId: string } }>();
     expect(req.user?.customerId).toBe('labs');
   });
 
@@ -273,7 +277,9 @@ describe('GatekeeperAuthGuard — multi-tenant', () => {
     const tok = await mintToken({ sub: SUB, iss: ISSUER_A }); // no cid
     const c = ctx({ authorization: `Bearer ${tok}` });
     await guard.canActivate(c);
-    const req = c.switchToHttp().getRequest<{ user?: { customerId: string } }>();
+    const req = c
+      .switchToHttp()
+      .getRequest<{ user?: { customerId: string } }>();
     expect(req.user?.customerId).toBe('cust1');
   });
 

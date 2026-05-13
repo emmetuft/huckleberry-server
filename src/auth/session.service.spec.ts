@@ -4,7 +4,9 @@ import { randomBytes } from 'node:crypto';
 import { SessionService } from './session.service';
 import { InMemorySessionRepository } from './session.repository';
 
-function makeConfig(overrides: Partial<{ key: string; ttl: number; nodeEnv: string }> = {}): ConfigService {
+function makeConfig(
+  overrides: Partial<{ key: string; ttl: number; nodeEnv: string }> = {},
+): ConfigService {
   return {
     get: jest.fn().mockReturnValue({
       sessionSigningKey: overrides.key ?? randomBytes(32).toString('hex'),
@@ -35,7 +37,7 @@ describe('SessionService', () => {
     const issued = await svc.issue('user-1');
 
     const original = await repo.get(issued.sid);
-    const originalExpiry = original!.expiresAt.getTime();
+    const originalExpiry = original.expiresAt.getTime();
     await new Promise((r) => setTimeout(r, 5));
 
     const session = await svc.verifyAndTouch(issued.cookieValue);
@@ -44,9 +46,17 @@ describe('SessionService', () => {
   });
 
   it('rejects a tampered cookie', async () => {
-    const svc = new SessionService(makeConfig(), new InMemorySessionRepository());
+    const svc = new SessionService(
+      makeConfig(),
+      new InMemorySessionRepository(),
+    );
     const { cookieValue } = await svc.issue('user-1');
-    const tampered = cookieValue.slice(0, -1) + (cookieValue.endsWith('A') ? 'B' : 'A');
+    // Flip a byte in the middle of the signature segment. (Trailing-char
+    // flips can land in padding bits and produce the same signature.)
+    const [h, p, sig] = cookieValue.split('.');
+    const mid = Math.floor(sig.length / 2);
+    const flipped = sig[mid] === 'A' ? 'B' : 'A';
+    const tampered = `${h}.${p}.${sig.slice(0, mid)}${flipped}${sig.slice(mid + 1)}`;
 
     await expect(svc.verifyAndTouch(tampered)).rejects.toThrow(
       UnauthorizedException,
@@ -66,9 +76,15 @@ describe('SessionService', () => {
 
   it('rejects a cookie signed by a different key', async () => {
     const repo = new InMemorySessionRepository();
-    const a = new SessionService(makeConfig({ key: randomBytes(32).toString('hex') }), repo);
+    const a = new SessionService(
+      makeConfig({ key: randomBytes(32).toString('hex') }),
+      repo,
+    );
     const issued = await a.issue('user-1');
-    const b = new SessionService(makeConfig({ key: randomBytes(32).toString('hex') }), repo);
+    const b = new SessionService(
+      makeConfig({ key: randomBytes(32).toString('hex') }),
+      repo,
+    );
 
     await expect(b.verifyAndTouch(issued.cookieValue)).rejects.toThrow(
       UnauthorizedException,

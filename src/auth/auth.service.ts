@@ -54,7 +54,9 @@ export class AuthService {
       return null;
     }
     if (user.status === 'suspended') {
-      this.logger.debug(`magic-link request for suspended user ${user.id} (silent)`);
+      this.logger.debug(
+        `magic-link request for suspended user ${user.id} (silent)`,
+      );
       return null;
     }
 
@@ -77,14 +79,14 @@ export class AuthService {
   }
 
   /**
-   * Composes the full magic-link URL. Path is always `/api/auth/signin` —
-   * the BFF route. `baseUrl` (from `MAGIC_LINK_BASE_URL`) supplies the host
-   * portion; the path is owned by the BFF and not configurable to avoid
-   * the email landing at a 404.
+   * Composes the magic-link URL pointing at the SPA's signin route.
+   * The SPA reads `?token=...` and calls the BFF's `/api/auth/signin?token=...`
+   * via fetch — that way the cookie is set on the SPA's origin and stays
+   * same-origin throughout the session.
    */
   private buildMagicLinkUrl(rawToken: string): string {
     const base = this.baseUrl.replace(/\/+$/, '');
-    return `${base}/api/auth/signin?token=${rawToken}`;
+    return `${base}/auth/signin?token=${rawToken}`;
   }
 
   /**

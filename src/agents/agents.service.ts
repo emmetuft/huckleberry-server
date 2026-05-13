@@ -37,7 +37,7 @@ export class AgentsService {
     const raw = response as unknown as Record<string, unknown>;
     let agents: CustomAgent[];
     if (Array.isArray(response)) {
-      agents = response as unknown as CustomAgent[];
+      agents = response;
     } else {
       agents =
         (raw.customAgents as CustomAgent[] | undefined) ??

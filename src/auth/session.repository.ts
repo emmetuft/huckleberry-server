@@ -21,34 +21,35 @@ export const SESSION_REPOSITORY = Symbol('SessionRepository');
 export class InMemorySessionRepository implements SessionRepository {
   private readonly bySid = new Map<string, Session>();
 
-  async get(sid: string): Promise<Session | null> {
+  get(sid: string): Promise<Session | null> {
     const s = this.bySid.get(sid);
-    if (!s) return null;
+    if (!s) return Promise.resolve(null);
     if (s.expiresAt.getTime() <= Date.now()) {
       this.bySid.delete(sid);
-      return null;
+      return Promise.resolve(null);
     }
-    return s;
+    return Promise.resolve(s);
   }
 
-  async insert(session: Session): Promise<Session> {
+  insert(session: Session): Promise<Session> {
     this.bySid.set(session.sid, session);
-    return session;
+    return Promise.resolve(session);
   }
 
-  async touch(sid: string, newExpiresAt: Date): Promise<Session | null> {
+  touch(sid: string, newExpiresAt: Date): Promise<Session | null> {
     const s = this.bySid.get(sid);
-    if (!s) return null;
+    if (!s) return Promise.resolve(null);
     const next = { ...s, expiresAt: newExpiresAt, lastSeenAt: new Date() };
     this.bySid.set(sid, next);
-    return next;
+    return Promise.resolve(next);
   }
 
-  async revoke(sid: string): Promise<void> {
+  revoke(sid: string): Promise<void> {
     this.bySid.delete(sid);
+    return Promise.resolve();
   }
 
-  async revokeAllForUser(userId: string): Promise<number> {
+  revokeAllForUser(userId: string): Promise<number> {
     let removed = 0;
     for (const [sid, s] of this.bySid) {
       if (s.userId === userId) {
@@ -56,6 +57,6 @@ export class InMemorySessionRepository implements SessionRepository {
         removed++;
       }
     }
-    return removed;
+    return Promise.resolve(removed);
   }
 }

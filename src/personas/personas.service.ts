@@ -53,7 +53,7 @@ export class PersonasService {
     const now = new Date().toISOString();
 
     if (existingId && this.store.has(existingId)) {
-      const existing = this.store.get(existingId)!;
+      const existing = this.store.get(existingId);
       const updated: Persona = {
         ...existing,
         ...data,

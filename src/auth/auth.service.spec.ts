@@ -8,12 +8,15 @@ import type { User } from './types';
 
 class TestEmailService implements EmailService {
   public sent: MagicLinkEmail[] = [];
-  async sendMagicLink(email: MagicLinkEmail): Promise<void> {
+  sendMagicLink(email: MagicLinkEmail): Promise<void> {
     this.sent.push(email);
+    return Promise.resolve();
   }
 }
 
-function makeConfig(overrides: Partial<{ ttl: number; baseUrl: string }> = {}): ConfigService {
+function makeConfig(
+  overrides: Partial<{ ttl: number; baseUrl: string }> = {},
+): ConfigService {
   return {
     get: jest.fn().mockReturnValue({
       magicLinkTtlSeconds: overrides.ttl ?? 900,

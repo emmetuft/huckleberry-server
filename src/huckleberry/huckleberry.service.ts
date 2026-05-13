@@ -33,7 +33,7 @@ export class HuckleberryService {
     private readonly agents: AgentsService,
   ) {
     this.huckleberryAgentId =
-      this.config.get<AppConfig>('app')!.huckleberryAgentId;
+      this.config.get<AppConfig>('app').huckleberryAgentId;
   }
 
   async executeStream(

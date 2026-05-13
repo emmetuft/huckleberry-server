@@ -1,5 +1,8 @@
 import { IsObject, IsOptional, IsString } from 'class-validator';
-import type { McpAuthType, OAuth2Config } from '../../common/types/mcp.types.js';
+import type {
+  McpAuthType,
+  OAuth2Config,
+} from '../../common/types/mcp.types.js';
 
 export class UpdateMcpServerDto {
   @IsString()

@@ -22,10 +22,11 @@ export const EMAIL_SERVICE = Symbol('EmailService');
 export class ConsoleEmailService implements EmailService {
   private readonly logger = new Logger(ConsoleEmailService.name);
 
-  async sendMagicLink(email: MagicLinkEmail): Promise<void> {
+  sendMagicLink(email: MagicLinkEmail): Promise<void> {
     this.logger.log(
       `[magic-link] to=${email.to} expires=${email.expiresAt.toISOString()}`,
     );
     this.logger.log(`[magic-link] url=${email.url}`);
+    return Promise.resolve();
   }
 }
