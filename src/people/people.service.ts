@@ -20,6 +20,11 @@ export class PeopleService {
       limit: String(limit),
     };
     if (offset != null) query.offset = String(offset);
+    // TODO: legacy path — Heimdall maps /api/content/ to content:meta:read,
+    // but DomoWeb's groups service enforces identity-domain scopes on top
+    // and returns 403 insufficient_scope. The modern identity-domain path
+    // is unknown — /api/user/groups/ and /api/identity/v1/groups/ both 404.
+    // Need to confirm the correct hostname/path with the Domo identity team.
     return this.domo.get<DomoGroup[]>('/api/content/v2/groups/grouplist', {
       query,
     });

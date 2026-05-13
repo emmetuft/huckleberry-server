@@ -9,7 +9,6 @@ import {
 import { ConfigService } from '@nestjs/config';
 import type { Request } from 'express';
 import { AppConfig } from '../config/configuration.js';
-import { DomoHeader } from '../constants/http.constants.js';
 import { SessionService } from '../../auth/session.service.js';
 import {
   USER_REPOSITORY,
@@ -22,23 +21,16 @@ const SESSION_COOKIE = 'hb_session';
 /**
  * Inbound auth for Category A controllers (Domo-proxied endpoints).
  *
- * Accepts any of these, in order:
- *   1. A valid huckleberry session cookie (`hb_session`). Magic-link
- *      sign-in path used by the SPA. Attaches a `HuckleberryPrincipal`
- *      to `request.user` so downstream services can resolve the user's
- *      linked Domo instance + bearer via `DomoAuthBroker`.
- *   2. A Domo-side bearer-style header (`x-domo-embedded-security`,
- *      `x-domo-developer-token`, `x-domo-eps-auth-token`). Legacy callers
- *      that already hold a Domo credential. No principal attached —
- *      `DomoProxyService` will forward whatever header was sent.
- *   3. In `development` mode only — fall through with no auth as long as
- *      `DEV_TOKEN` is configured server-side. `DomoProxyService` attaches
- *      that token outbound. Useful for local testing without a huckleberry
- *      session.
+ * The only accepted inbound credential is a valid huckleberry session
+ * cookie (`hb_session`). The guard verifies it, attaches a
+ * `HuckleberryPrincipal` to `request.user`, and `DomoContextInterceptor`
+ * downstream resolves the user's linked Domo bearer via `DomoAuthBroker`.
  *
- * Transitional guard. Once every Category A controller is migrated to
- * pull a per-user bearer from `DomoAuthBroker`, the header / dev-token
- * paths can be retired.
+ * In `development` mode, when `DEV_TOKEN` is configured server-side, a
+ * request with no session cookie is allowed through — the proxy attaches
+ * the dev token outbound. This is a local-only convenience and is
+ * unreachable in production. No request value gates this path: it's
+ * controlled entirely by server configuration.
  */
 @Injectable()
 export class DomoAuthGuard implements CanActivate {
@@ -54,7 +46,6 @@ export class DomoAuthGuard implements CanActivate {
     const request = context.switchToHttp().getRequest<Request>();
     const appConfig = this.config.get<AppConfig>('app');
 
-    // 1. Huckleberry session cookie — verify, attach principal, return.
     const cookie = readCookie(request, SESSION_COOKIE);
     if (cookie) {
       try {
@@ -73,21 +64,11 @@ export class DomoAuthGuard implements CanActivate {
         }
         this.logger.debug('hb_session valid but user missing/suspended');
       } catch {
-        // Fall through to other auth options. A stale cookie shouldn't
-        // block a caller that's also presenting a Domo header.
         this.logger.debug('hb_session cookie present but invalid');
       }
     }
 
-    // 2. Legacy Domo header passthrough.
-    const embeddedToken = request.headers[DomoHeader.EmbeddedSecurity];
-    const devToken = request.headers[DomoHeader.DeveloperToken];
-    const epsToken = request.headers[DomoHeader.EpsAuthToken];
-    if (embeddedToken || devToken || epsToken) {
-      return true;
-    }
-
-    // 3. Dev fallback — `DEV_TOKEN` configured on the server.
+    // Dev-only convenience — server config gates it; no user input involved.
     if (appConfig?.nodeEnv === 'development' && appConfig.devToken) {
       return true;
     }

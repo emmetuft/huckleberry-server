@@ -66,7 +66,7 @@ export class DomoLinkService {
     userId: string,
     issuerUrl?: string,
   ): Promise<StartLinkResult> {
-    const resolved = (issuerUrl ?? this.defaultIssuer).replace(/\/+$/, '');
+    const resolved = trimTrailingSlashes(issuerUrl ?? this.defaultIssuer);
     if (!resolved) {
       throw new BadRequestException(
         'No issuer URL provided and GATEKEEPER_ISSUERS is not configured',
@@ -216,7 +216,7 @@ export class DomoLinkService {
     const link: LinkedDomoInstance = {
       id: randomUUID(),
       userId: opts.userId,
-      issuerUrl: opts.issuerUrl.replace(/\/+$/, ''),
+      issuerUrl: trimTrailingSlashes(opts.issuerUrl),
       customerId: opts.customerId,
       domoSub: null,
       scope: opts.scope,
@@ -226,4 +226,12 @@ export class DomoLinkService {
     await this.links.insert(link);
     return link;
   }
+}
+
+// Linear-time trailing-slash trim. Avoids the polynomial-regex pattern
+// `/\/+$/` on user-controlled input, which CodeQL flags as a ReDoS risk.
+function trimTrailingSlashes(s: string): string {
+  let end = s.length;
+  while (end > 0 && s.charCodeAt(end - 1) === 47 /* '/' */) end--;
+  return end === s.length ? s : s.slice(0, end);
 }

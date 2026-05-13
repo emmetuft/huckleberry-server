@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
@@ -79,9 +80,12 @@ export class AuthController {
   @Public()
   @Get('signin')
   async consumeSignin(
-    @Query('token') token: string,
+    @Query('token') token: string | string[] | undefined,
     @Res({ passthrough: true }) res: Response,
   ): Promise<{ userId: string; needsLinkage: boolean }> {
+    if (typeof token !== 'string') {
+      throw new BadRequestException('invalid_or_expired_token');
+    }
     const { user, needsLinkage } = await this.auth.consumeMagicLink(token);
     const issued = await this.sessions.issue(user.id);
 

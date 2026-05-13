@@ -62,7 +62,7 @@ describe('DomoAuthGuard', () => {
     await expect(guard.canActivate(ctx)).resolves.toBe(true);
   });
 
-  it('falls through past an invalid cookie if a legacy header is present', async () => {
+  it('rejects in production when only a legacy Domo header is present (no session)', async () => {
     const sessions = mockSessions(); // verifyAndTouch rejects
     const guard = new DomoAuthGuard(
       makeConfig({ nodeEnv: 'production', devToken: '' }),
@@ -73,7 +73,7 @@ describe('DomoAuthGuard', () => {
       cookie: 'hb_session=stale',
       'x-domo-embedded-security': 'some-token',
     });
-    await expect(guard.canActivate(ctx)).resolves.toBe(true);
+    await expect(guard.canActivate(ctx)).rejects.toThrow(UnauthorizedException);
   });
 
   it('allows requests in dev mode when DEV_TOKEN is set', async () => {
@@ -96,24 +96,24 @@ describe('DomoAuthGuard', () => {
     );
   });
 
-  it('allows requests in production with embedded security header', async () => {
+  it('rejects in production with only the embedded security header (no session)', async () => {
     const guard = new DomoAuthGuard(
       makeConfig({ nodeEnv: 'production', devToken: '' }),
       mockSessions(),
       mockUsers,
     );
     const ctx = createMockContext({ 'x-domo-embedded-security': 'some-token' });
-    await expect(guard.canActivate(ctx)).resolves.toBe(true);
+    await expect(guard.canActivate(ctx)).rejects.toThrow(UnauthorizedException);
   });
 
-  it('allows requests in production with developer token header', async () => {
+  it('rejects in production with only the developer token header (no session)', async () => {
     const guard = new DomoAuthGuard(
       makeConfig({ nodeEnv: 'production', devToken: '' }),
       mockSessions(),
       mockUsers,
     );
     const ctx = createMockContext({ 'x-domo-developer-token': 'some-token' });
-    await expect(guard.canActivate(ctx)).resolves.toBe(true);
+    await expect(guard.canActivate(ctx)).rejects.toThrow(UnauthorizedException);
   });
 
   it('rejects in production without any auth header or session', async () => {
