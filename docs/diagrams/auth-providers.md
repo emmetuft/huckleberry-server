@@ -80,13 +80,13 @@ The huckleberry session cookie is the **only** inbound auth. `GatekeeperAuthGuar
 | `src/common/auth/domo-auth-broker/jwks.service.ts` | Per-issuer JWKS cache. |
 | `src/common/auth/domo-auth-broker/known-tenants.service.ts` | Issuer allowlist + pattern matcher. Determines which Domo instances are valid linkage targets. |
 | `src/common/auth/domo-auth-broker/gatekeeper-auth.guard.ts` | Reusable verifier — invoked by `DomoOAuthClient` to validate tokens received from Gatekeeper. Not applied to inbound controllers. |
-| `src/common/auth/domo-auth-broker/domo-oauth-client.service.ts` | Builds authorize URLs, exchanges codes, refreshes tokens, revokes. Holds the Gatekeeper `client_secret` (fetched from Secrets Manager at boot). |
+| `src/common/auth/domo-auth-broker/domo-oauth-client.service.ts` | Builds authorize URLs, exchanges codes, refreshes tokens, revokes. PKCE-only public client — no `client_secret`. |
 | `src/common/auth/domo-auth-broker/domo-token-store.service.ts` | Aurora R/W for `domo_oauth_tokens` and `linked_domo_instances`. KMS envelope encryption on `refresh_token`. |
 | `src/common/auth/domo-auth-broker/domo-auth-broker.service.ts` | `tokenFor(linkId): Promise<string>` — returns a fresh access token, refreshing transparently. Redis cache + Aurora fallback. |
-| `src/auth/auth.controller.ts` | `/auth/signin/request`, `/auth/signin` (consume), `/auth/logout`, `/auth/me`. No signup endpoint — users are created by vetted operator tooling. |
+| `src/auth/auth.controller.ts` | `/auth/signup`, `/auth/signin/request`, `/auth/signin` (consume), `/auth/logout`, `/auth/me`. Signup provisions a Domo instance via `InstanceProvisioner` and seeds a `pending_link` user. Signin is existing-users-only. |
 | `src/auth/auth.service.ts` | Issue magic links (random token, SHA-256 hash to DB, raw via email), atomic consume + session issue, rate-limit. |
 | `src/auth/domo-link.controller.ts` | `/auth/domo/link/start`, `/auth/domo/callback`. Single linked instance per user (MVP). |
-| `src/auth/domo-link.service.ts` | Completes the operator-seeded link stub by populating `domo_oauth_tokens` after OAuth callback. Marks user `status='active'`. |
+| `src/auth/domo-link.service.ts` | Builds PKCE authorize URLs, completes the signup-seeded link by populating `domo_oauth_tokens` after the OAuth callback, marks user `status='active'`. |
 | `src/email/email.service.ts` | SES integration (magic-link emails only at MVP). |
 | `scripts/onboard-user.ts` | Operator CLI: takes email + instance details, inserts `users` row (status=pending_link) + `linked_domo_instances` stub + initial magic_link, sends sign-in email. |
 
@@ -181,8 +181,8 @@ The integrity rules from the prior design still apply with role shifts:
 
 ## Inbound auth boundary
 
-`HuckleberryAuthGuard` is the front door — it reads the `hb_session` cookie and attaches a principal. `DomoAuthGuard` is a legacy header-passthrough guard kept behind the `AUTH_PROVIDER=dev` switch for header-style callers; flip to `AUTH_PROVIDER=huckleberry` to make session-cookie auth the only inbound mechanism.
+`HuckleberryAuthGuard` is the front door — it reads the `hb_session` cookie and attaches a principal. `DomoAuthGuard` is the same shape for Category A (Domo-proxied) controllers: a valid `hb_session` cookie or, in `development` mode only, a server-configured `DEV_TOKEN`. There is no inbound header-based auth.
 
 `GatekeeperAuthGuard` is an internal verifier — invoked by `DomoOAuthClient` to validate tokens received from Gatekeeper during code exchange and refresh. It is never applied to controllers.
 
-The SPA never runs an OAuth flow itself; all OAuth happens server-side. Inbound `Authorization: Bearer` headers are not used for identity — only the session cookie is. Category A scope enforcement is delegated to Domo (the BFF forwards a token, Domo enforces).
+The SPA hands off to Gatekeeper for the PKCE redirect, but the code exchange + token storage live server-side. Inbound `Authorization: Bearer` headers are not used for identity — only the session cookie is. Outbound Domo bearers come from `DomoAuthBroker` via the request-scoped `DomoContextInterceptor`. Category A scope enforcement is delegated to Domo (the BFF forwards the user's bearer, Heimdall + DomoWeb enforce).

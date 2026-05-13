@@ -8,8 +8,8 @@ That means we own the front-door identity. Users sign up to huckleberry with the
 
 Two separate auth layers, never confused:
 
-1. **Layer A — Huckleberry identity.** Magic-link sign-in only — no passwords. A users table, single-use email tokens, HttpOnly session cookies. This is the lock on huckleberry's front door. (Self-service signup is not exposed; users are seeded via vetted operator tooling — see "Onboarding flow" below.)
-2. **Layer B — Domo OAuth linkage** (per-instance, per-user). Standard OAuth 2.1 authorization-code + PKCE against `https://{customer}.domo.com/oauth2/authorize`. We are a **confidential OAuth client** with Gatekeeper — the BFF holds the `client_secret`, runs the code-exchange server-side, and stores the user's Domo refresh token encrypted in Aurora. When the BFF needs to call Domo on the user's behalf, it pulls a fresh access token from the refresh and forwards it.
+1. **Layer A — Huckleberry identity.** Magic-link sign-in only — no passwords. A users table, single-use email tokens, HttpOnly session cookies. This is the lock on huckleberry's front door. Self-service sign-up provisions a Domo instance + user via `InstanceProvisioner` and emails the magic-link; sign-in is a separate endpoint that only emails existing users.
+2. **Layer B — Domo OAuth linkage** (per-instance, per-user). Standard OAuth 2.1 authorization-code + PKCE against `https://{customer}.domo.com/oauth2/authorize`. The BFF is a **public PKCE client** (`token_endpoint_auth_method=none`) — no `client_secret`. PKCE is the proof-of-possession. The code-exchange runs server-side, and the user's Domo refresh token is stored encrypted in Aurora and rotated on every use per OAuth 2.1.
 
 A user can link N Domo instances under one huckleberry account. The active instance is part of the user's session state and can be switched without re-authing.
 
@@ -17,9 +17,9 @@ A user can link N Domo instances under one huckleberry account. The active insta
 
 Standalone huckleberry.com has no ambient Domo session, the SPA can't run a silent re-OAuth on every page load, and we need a stable huckleberry identity that survives Domo session expiries. So:
 
-- **BFF as confidential OAuth client** — server-side `/auth/domo/*` endpoints, `client_secret` in AWS Secrets Manager, encrypted token storage in Aurora.
+- **BFF as public PKCE OAuth client** — server-side `/auth/domo/*` endpoints, no `client_secret` to store, encrypted refresh-token storage in Aurora.
 - **A `users` table and a server-issued huckleberry session** — magic-link sign-in, HttpOnly cookie, sliding TTL.
-- **The SPA never sees Gatekeeper tokens.** All OAuth happens server-side.
+- **The PKCE `code_verifier` lives only inside the BFF.** It's stored in the request-scoped `OAuthStateStore` keyed by `state`, exchanged server-side at the callback, then dropped. The SPA hands the user off to Gatekeeper but never sees the verifier or any token.
 - **Multi-tenant.** One huckleberry deployment, many customers. `customer_id`-scoped Aurora rows. `GatekeeperAuthGuard` and `JwksService` verify Gatekeeper-issued tokens *internally* when the BFF processes a Domo OAuth callback or refreshes a token — not as a front-door verifier.
 
 ## Two-layer flow (the full picture)
@@ -241,64 +241,66 @@ These are settled. Anything not on this list is post-MVP.
 | 4 | **Double-submit CSRF token** on all state-changing routes. | SameSite=Lax leaks on top-level GET; double-submit is the standard belt-and-suspenders. |
 | 5 | **AWS SES from day 1**, sandbox mode acceptable for internal demo. | Domain verification before external launch. |
 | 6 | **One linked Domo instance per huckleberry user.** | Vetted onboarding sets the instance; users don't switch. Multi-link is post-MVP. |
-| 7 | **Vetted onboarding creates the Domo instance and seeds the user.** No self-service signup, no instance picker. See "Onboarding flow" below. | Cleanest path to a real demo. The instance question is answered at vetting time, not at runtime. |
+| 7 | **Self-service sign-up provisions the Domo instance; sign-in is existing-users-only.** Two distinct endpoints. See "Onboarding flow" below. | Distinct paths because they have different access requirements: sign-up has to call the InstanceProvisioner; sign-in must not. |
 
-### Onboarding flow — freemium auto-provisioning
+### Onboarding flow — sign-up + PKCE-on-first-signin
 
-Self-service signup is the default; an operator-driven path (`POST /api/admin/users`) is also exposed for pilots / internal onboarding.
+Two distinct endpoints:
 
-The user enters their email at `/login`. The BFF:
+- **`POST /api/auth/signup`** — provisions the Domo instance + user, seeds the huckleberry account in `pending_link`, emails the magic-link.
+- **`POST /api/auth/signin/request`** — existing users only; emails a magic-link if the email matches a row, silently no-ops otherwise. Always 202 (existence-oracle protection).
+- **`POST /api/admin/users`** — operator-driven variant of sign-up (same shape, gated by `ADMIN_API_KEY`). Used for pilot / internal onboarding.
 
-1. **Looks up the user.** If found, jumps to step 4 (send magic-link).
-2. **Calls the `InstanceProvisioner`** to mint a Domo tenant. In dev this is `DevStubInstanceProvisioner` — returns the pre-registered `DEV_INSTANCE_*` credentials for the shared dev instance, no real tenant created. In prod this calls Domo's freemium-provisioning API and gets back fresh `client_id` + `client_secret` for a new tenant.
-3. **Inserts** `users` row + `linked_domo_instances` row holding the provisioned `client_credentials` pair. The link's `linkType` is `client_credentials`. User status flips directly to `'active'` — no `pending_link` intermediate, no browser → Domo handoff.
-4. **Emails a magic-link.** User clicks → huckleberry verifies → session cookie set → SPA renders. `AuthGuard` sees `active` user with a link, just lets the app load.
+Sign-up flow:
+
+1. User enters email at `/login?mode=signup` (or hits the "Try for free" header button → same route).
+2. BFF calls `SignupService.ensureUser()`:
+   - **`InstanceProvisioner.provision(email)`** mints a Domo instance + user. In dev this is `DevStubInstanceProvisioner` — returns the configured `DEV_INSTANCE_*` metadata for the shared dev instance, no real tenant created, no Domo credentials held. In prod this calls Domo's freemium-provisioning API.
+   - Inserts a `users` row with `status = 'pending_link'`.
+   - Inserts a `linked_domo_instances` row holding `issuerUrl`, `customerId`, `scope` — no `domoSub`, no refresh token. This is a placeholder until the PKCE flow completes.
+3. Emails the magic-link.
+4. User clicks → magic-link consumed → `hb_session` + `csrf_token` cookies set → SPA's `AuthGuard` sees `status === 'pending_link'` → calls `POST /api/auth/domo/link/start` → BFF generates PKCE pair and `state`, stores them in `OAuthStateStore`, returns the authorize URL.
+5. SPA redirects browser to `https://{customer}.domo.com/oauth2/authorize?...&code_challenge=...&state=...`.
+6. Domo authenticates the user (login screen if no Domo session), Gatekeeper redirects to `/api/auth/domo/callback?code=...&state=...`.
+7. BFF: consumes `state` (matches sessioned `userId`), retrieves the matching `code_verifier`, posts `/oauth2/token` (`grant_type=authorization_code`, no `client_secret`), receives access + refresh tokens, verifies the access token via JWKS, persists the refresh token, flips user `status` to `'active'`, redirects to `/workspace?linked=1`.
 
 Per-request data flow after sign-in:
 
-- SPA hits any Category A endpoint.
-- BFF resolves the user's active link, asks `DomoAuthBroker` for a bearer.
-- Broker calls Gatekeeper `/oauth2/token` with `grant_type=client_credentials` using the link's stored credentials. Mints a fresh access token, caches it (TTL = `expires_in - 60s`). Single-flight semantics on concurrent requests.
-- BFF forwards the call to Domo with that bearer.
+- SPA hits any Category A endpoint with the session cookie.
+- `DomoAuthGuard` verifies the session, attaches the `HuckleberryPrincipal` to `req.user`.
+- `DomoContextInterceptor` (global `APP_INTERCEPTOR`) resolves the user's active link, asks `DomoAuthBroker` for a bearer (cache hit, or refresh via `grant_type=refresh_token` — rotated atomically per OAuth 2.1), and binds the bearer + `targetHost` into an `AsyncLocalStorage` context for the rest of the request's async tree.
+- Each Category A service calls `DomoProxyService.get/post/...` without passing `bearer` or `targetHost`; the proxy reads them from the ALS context.
+- BFF forwards the call to Domo with the user's bearer.
 
-No `pending_link`. No `/auth/domo/link/start` handoff. No browser visit to Domo. No user-side consent screen.
+### Two-credential security model
 
-### Three-credential security model
-
-The provisioning flow looks scary at first glance ("the BFF is admin?"). It isn't, if the three credentials are kept in different blast-radius buckets:
+The huckleberry side holds two credentials per session, plus an optional one-shot provisioner credential:
 
 | # | Credential | Power | Storage | When used |
 |---|---|---|---|---|
-| 1 | **Provisioner credential** | Mints Domo instances + the OAuth client on each new instance. Held by huckleberry-the-service. | Env (today) → AWS Secrets Manager (later). Single value, rotatable. | Once per signup. Never at runtime. |
-| 2 | **Per-customer service credential** (`client_credentials` `client_id` + `client_secret`) | Only data-read scopes (`ai:read`, `ai:execute`, `dataset:data:read`, `identity:read`). No admin, no `user.invite`, no `gateway.oauth.client.create`, no `user.impersonate`. | Aurora row in `linked_domo_instances` (KMS-encrypted at rest when Aurora wiring lands). One pair per customer. | Every runtime Domo call |
+| 1 | **Provisioner credential** | Mints Domo instances. Held by huckleberry-the-service, never by users. | Env (today) → AWS Secrets Manager (later). Single value, rotatable. | Once per sign-up. Never at runtime. |
+| 2 | **Per-user Domo refresh token** | Lets the BFF mint short-lived access tokens that act *as the user* on Domo. Token's scopes are the union granted at consent. | Aurora row in `domo_oauth_tokens` (KMS-encrypted at rest when Aurora wiring lands). One per user. Rotated on every use. | Every runtime Domo call (broker mints a fresh access token off it). |
 | 3 | **Huckleberry session cookie** (`hb_session`) | SPA features only. No Domo authority. | HttpOnly cookie + Redis-backed `sid`. | Per request |
 
 Compromise impact:
 
 - **#1 leaked** → attacker can create freemium instances under our name. Bad but recoverable: rotate the provisioner credential, audit the new-instance log, delete fraudulent tenants.
-- **#2 leaked** (single row or whole DB) → attacker reads one or all customers' Domo data within the scope set. Cannot escalate, write, create users, or impersonate. Customer can revoke any time by deleting the client from their Domo instance.
-- **#3 leaked** → attacker is *one* huckleberry user. They see the same Domo data every signed-in user of that customer sees (the service token's scope), nothing more.
+- **#2 leaked** (single row) → attacker can act as **that one user** on Domo within the granted scope set. Customer/user can revoke any time by signing out of Domo or having Gatekeeper revoke the refresh token. Rotation on every refresh means a stolen token gets cascade-revoked the next time the legitimate user signs in.
+- **#3 leaked** → attacker is *one* huckleberry user. Per-user revocation via session-id lookup; no Domo authority.
 
-The BFF never holds Domo admin authority at runtime. The provisioning credential is the only "powerful" thing it has, and it's used only at signup time, not on every request.
+The BFF never holds Domo admin authority at runtime. The provisioning credential is the only "powerful" thing it has, and it's used only at sign-up time, not on every request.
 
-### Per-user identity (deferred)
+### Per-user identity
 
-The `client_credentials` model gives the BFF a token that represents **the service**, not the human signed in. From Domo's perspective every call is "huckleberry-the-service asking on this customer's tenant" — every huckleberry user sees the same Domo-side data within the service's scope. Per-user filtering happens in huckleberry (sessions, personas, agent history, etc.) — not in Domo.
-
-If/when real per-user Domo identity is needed:
-
-- **Best:** per-user `authorization_code` OAuth flow. Each user visits Domo once, consents, BFF stores their refresh token. After that the BFF holds the user's refresh token and the broker rotates it on every refresh. Today the code path exists but is blocked by a DomoWeb redirect quirk; revisit when that's fixed.
-- **Avoid:** service token with `user.impersonate` authority + per-request `X-Domo-User-Id` header. Sharp tool, large blast radius. Don't ship this without a strong reason.
-
-The code is shaped to support both link types side-by-side: `LinkedDomoInstance.linkType` is either `'authorization_code'` or `'client_credentials'`, and `DomoAuthBroker.refresh` dispatches on it. Adding the auth-code path back later is mechanical.
+Each Domo bearer represents the **actual signed-in user**, not the service. From Domo's perspective every call is "user X, acting via huckleberry, asking on this tenant" — Domo's per-resource access controls apply natively (sharing, row-level filters, audit log). No `user.impersonate` authority required, no per-request `X-Domo-User-Id` header, no service-token model.
 
 ### Operator endpoint (`POST /api/admin/users`)
 
-Still exists for pilot / internal onboarding where you don't want self-service. Same body shape as the signup endpoint, plus `displayName` and an optional `customerHint` (informational — the stub provisioner ignores it; a real one might use it). Gated by `ADMIN_API_KEY` header.
+Same shape as sign-up plus `displayName`; gated by `ADMIN_API_KEY` header. Useful for pilots / internal onboarding without exposing a public sign-up form.
 
 ### Schema implication
 
-`linked_domo_instances` is the source of truth for "what instance does this user belong to." One row per user (single-link at MVP). Fields: `userId`, `issuerUrl`, `customerId`, `linkType`, `oauthClientId`, `oauthClientSecret` (KMS-encrypted in prod). The associated `domo_oauth_tokens` row is null/unused for `client_credentials` links (no refresh token to store).
+`linked_domo_instances` holds the per-user instance binding: `userId`, `issuerUrl`, `customerId`, `domoSub` (Domo user id), `scope`, `linkedAt`, `lastUsedAt`. Refresh token + scope live in the separate `domo_oauth_tokens` table (one row per link) so rotation writes don't churn the link record.
 
 ### Out of scope
 

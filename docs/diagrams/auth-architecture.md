@@ -17,11 +17,11 @@ graph LR
     subgraph "NestJS BFF"
         HAG[HuckleberryAuthGuard<br/>cookie → principal]
         SESS[SessionService<br/>Redis]
-        AUTH[Auth controllers<br/>signin/request · signin (consume)<br/>logout · me]
+        AUTH[Auth controllers<br/>signup · signin/request<br/>signin (consume) · logout · me]
         LINK[DomoLink controllers<br/>start · callback · switch · unlink]
         BROKER[DomoAuthBroker<br/>token cache + refresh]
         STORE[DomoTokenStore<br/>Aurora + KMS]
-        OAUTH[DomoOAuthClient<br/>holds client_secret]
+        OAUTH[DomoOAuthClient<br/>public PKCE client]
         JWKS_SVC[JwksService<br/>cached per-issuer]
         IDENT[Identity]
         PEOPLE[People]
@@ -42,7 +42,7 @@ graph LR
         T_MCP[(mcp_servers · mcp_oauth_tokens)]
     end
 
-    SM[(Secrets Manager<br/>session signing key<br/>Gatekeeper client_secret)]
+    SM[(Secrets Manager<br/>session signing key)]
     REDIS[(Redis<br/>sessions · link_init state<br/>Domo access-token cache)]
     KMS[(AWS KMS<br/>envelope encryption)]
     SES[AWS SES<br/>magic-link emails]

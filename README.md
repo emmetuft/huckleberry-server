@@ -97,7 +97,7 @@ pnpm demo:auth          # live demo of the sign-in flow via curl against a runni
 
 ## End-to-end sign-in (BFF + SPA + browser, freemium auto-provisioning)
 
-This is the path you'd demo to a colleague. Self-service signup: user enters email → BFF provisions a Domo instance (stub returns the dev instance in local dev) → user gets a magic-link → clicks it → lands in the app linked and active.
+This is the path you'd demo to a colleague. Sign-up: user enters email → BFF provisions a Domo instance (stub returns the dev instance in local dev) → user gets a magic-link → clicks it → SPA's AuthGuard sees `pending_link` and runs the PKCE auth-code flow against Gatekeeper → on success the user's refresh token is persisted and the user lands in the app `active`.
 
 **One-time setup**
 
@@ -110,37 +110,32 @@ ADMIN_API_KEY=<openssl rand -hex 32>
 MAGIC_LINK_BASE_URL=http://localhost:5173
 
 # Gatekeeper (multi-tenant verifier — used internally on token responses)
-GATEKEEPER_ISSUERS=http://domo-labs-dev.dev.domo.com:443
-GATEKEEPER_JWKS_URIS=http://domo-labs-dev.dev.domo.com:443=https://domo-labs-dev.dev.domo.com/oauth2/jwks
-GATEKEEPER_TRANSPORT_URIS=http://domo-labs-dev.dev.domo.com:443=https://domo-labs-dev.dev.domo.com
+GATEKEEPER_ISSUERS=https://your-instance.domo.com
 
-# Stubbed instance-provisioner credentials. In dev, signups "provision" by
-# returning these pre-registered confidential-client credentials. Register
-# the confidential client once via Postman `Admin — create client` against
-# the dev instance (Authorization: Bearer <Domo admin JWT>, body specifies
-# grant_types=["client_credentials"], scope="ai:read ai:execute identity:read dataset:data:read").
-DEV_INSTANCE_ISSUER_URL=http://domo-labs-dev.dev.domo.com:443
-DEV_INSTANCE_CUSTOMER_ID=labs
-DEV_INSTANCE_OAUTH_CLIENT_ID=<client_id from the admin-registered client>
-DEV_INSTANCE_OAUTH_CLIENT_SECRET=<client_secret from same registration>
-DEV_INSTANCE_SCOPES="ai:read ai:execute identity:read dataset:data:read"
+# Domo OAuth client (public PKCE, no client_secret). Register via Postman:
+# `2a. DCR — register public client (PKCE)` from ~/dev/gatekeeper/docs/PostmanCollection.json
+# against the target instance. The DCR response gives you a client_id and a
+# registration_access_token — save both. The redirect_uri must match exactly.
+DOMO_OAUTH_CLIENT_ID=<client_id from DCR>
+DOMO_OAUTH_REDIRECT_URI=http://localhost:3000/api/auth/domo/callback
+DOMO_OAUTH_SCOPES="ai:read ai:execute content:meta:read content:data:read dataset:meta:read dataset:data:read identity:read search:read"
+
+# Dev instance metadata used by the stub InstanceProvisioner at sign-up.
+# No Domo credentials are stored — sign-up only seeds an empty link row;
+# the user's first sign-in completes PKCE to mint the refresh token.
+DEV_INSTANCE_ISSUER_URL=https://your-instance.domo.com
+DEV_INSTANCE_CUSTOMER_ID=<customer-id>
+DEV_INSTANCE_SCOPES="ai:read ai:execute content:meta:read content:data:read dataset:meta:read dataset:data:read identity:read search:read"
 ```
 
-### One-time: register the confidential client on the dev Domo instance
+### One-time: register the PKCE client on the target Domo instance
 
-Gatekeeper rejects `client_credentials` clients from DCR — they have to be created via the admin endpoint. Do this once and save the credentials in `.env` as `DEV_INSTANCE_OAUTH_CLIENT_ID` + `DEV_INSTANCE_OAUTH_CLIENT_SECRET` above.
+The BFF is a public PKCE OAuth client — there is no `client_secret` to store. Register the client via DCR once and save the `client_id`.
 
-1. In Postman, set the collection variable `admin_token` to a Domo JWT or access token that carries `gateway.oauth.client.create` authority. (Your own Gatekeeper-issued access token works — get one via Postman items 2a → 4 → 5 the first time.)
-2. Run **`Admin — create client`** with body:
-   ```json
-   {
-     "client_name": "Huckleberry BFF — service",
-     "grant_types": ["client_credentials"],
-     "token_endpoint_auth_method": "client_secret_basic",
-     "scope": "ai:read ai:execute identity:read dataset:data:read"
-   }
-   ```
-3. Response contains `client_id` and `client_secret` (the secret is shown **once** — copy it now).
+1. In Postman, open the Gatekeeper collection.
+2. Set the collection variables `base_url`, `redirect_uri`, and `requested_scopes` to match the env above.
+3. Run **`2a. DCR — register public client (PKCE)`**. The response includes `client_id`, `registration_access_token`, and `registration_client_uri`. Save all three — `registration_access_token` is the only proof-of-ownership for future scope edits (via `3b. RFC 7592 — update registration`).
+4. Put `client_id` in `.env` as `DOMO_OAUTH_CLIENT_ID`.
 
 **Run**
 
@@ -152,27 +147,34 @@ cd ~/dev/huckleberry-server && pnpm start:dev
 cd ~/dev/huckleberry && pnpm dev
 ```
 
-### Path A — Self-service signup (the freemium demo)
+### Path A — Self-service sign-up (the freemium demo)
 
-1. Open `http://localhost:5173/login`.
-2. Type any email (e.g. `demo@huckleberry.com`). Click **Send me a sign-in link**.
+1. Open `http://localhost:5173/login?mode=signup` (or hit "Try for free" in the public header).
+2. Type any email. Click **Create my account**.
 3. Watch Terminal 1 logs:
    ```
-   [SignupService] provisioned instance for demo@huckleberry.com: ... (cid=labs)
+   [SignupService] provisioned instance for demo@huckleberry.com: <issuer> (cid=<customer>)
    [ConsoleEmailService] [magic-link] url=http://localhost:5173/auth/signin?token=...
    ```
-4. Click the magic-link URL. SPA consumes → `hb_session` + `csrf_token` cookies set → lands at `/workspace`.
-5. DevTools console:
+4. Click the magic-link URL. SPA consumes → `hb_session` + `csrf_token` cookies set → lands at `/workspace` → `AuthGuard` sees `status === 'pending_link'` → redirects browser to Gatekeeper's `/oauth2/authorize`.
+5. Authenticate to Domo (login screen if no Domo session). Gatekeeper redirects back to `/api/auth/domo/callback?code=...&state=...`. BFF exchanges code via PKCE, persists refresh token, flips user to `active`, redirects to `/workspace?linked=1`.
+6. DevTools console:
    ```js
    await fetch('/api/auth/me').then((r) => r.json());
    // → { success: true, data: { id, email, status: 'active', ... } }
    await fetch('/api/identity').then((r) => r.json());
-   // → Domo user (the service-account identity)
+   // → Domo user (the actual signed-in user)
    ```
 
-### Path B — Operator-driven onboarding (for pilots / internal)
+### Path B — Sign-in for an existing user
 
-Same flow but go through `POST /api/admin/users` instead. The endpoint also auto-provisions via the stub, but is gated by `ADMIN_API_KEY`:
+1. Open `http://localhost:5173/login`.
+2. Enter an email that already has an account. Click **Email me a sign-in link**.
+3. Click the magic-link → session cookies set → no PKCE round-trip needed (refresh token is already stored).
+
+### Path C — Operator-driven onboarding (for pilots / internal)
+
+Same shape as sign-up, but via `POST /api/admin/users`, gated by `ADMIN_API_KEY`:
 
 ```bash
 curl -X POST http://localhost:3000/api/admin/users \
@@ -186,26 +188,27 @@ Response includes `magicLinkUrl` in dev mode.
 ### Sanity-checks
 
 - Both cookies present on `localhost:5173` (DevTools → Application → Cookies).
-- `/api/auth/me` returns `status: 'active'` immediately (no `pending_link`).
-- `/api/identity` returns a Domo user — proves the broker minted a token via `client_credentials` and the BFF forwarded it through.
+- `/api/auth/me` returns `status: 'pending_link'` between magic-link consumption and PKCE callback; then `status: 'active'`.
+- `/api/identity` returns a Domo user matching the account you signed in with on Domo.
 - Clear cookies + refresh → `AuthGuard` redirects to `/login?next=<path>`.
 
 ### Restart behavior
 
-BFF restart wipes the in-memory stores (`users`, `magic_links`, `linked_domo_instances`, `domo_oauth_tokens`). After restart, any old magic-link is dead; the cookie is also dead (signing key may be re-derived if `SESSION_SIGNING_KEY` isn't set). Sign in again — the user gets re-created and re-provisioned in one shot.
+BFF restart wipes the in-memory stores (`users`, `magic_links`, `linked_domo_instances`, `domo_oauth_tokens`). After restart, any old magic-link is dead; the cookie is also dead (signing key may be re-derived if `SESSION_SIGNING_KEY` isn't set). Sign up again — the user gets re-created and the PKCE flow runs fresh.
 
 **Failure modes**
 
 | Symptom                                                                                              | Cause                                                                                                                                          |
 | ---------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| `/login` form returns 202 but BFF logs no `[magic-link]` line                                        | Provisioner failed silently. Check `[SignupService]` logs — most likely `DEV_INSTANCE_OAUTH_CLIENT_ID` / `_SECRET` missing in `.env`.          |
+| `/login` form returns 202 but BFF logs no `[magic-link]` line                                        | Provisioner failed silently. Check `[SignupService]` logs — most likely `DEV_INSTANCE_ISSUER_URL` / `_CUSTOMER_ID` missing in `.env`.          |
 | `/login` returns 503 "Dev instance provisioner not configured"                                       | Same — missing `DEV_INSTANCE_*` env vars. See setup section above.                                                                             |
 | `/auth/signin` returns `invalid_or_expired_token`                                                    | Magic link was already consumed (single-use), expired (15 min default), or BFF was restarted after issuance. Re-submit email at `/login`.       |
 | `/api/auth/me` returns 401 after seemingly-good sign-in                                              | Cookie didn't stick. Confirm SPA URL is `localhost:5173` (not `127.0.0.1:5173`) and Vite proxy is active.                                       |
-| `/api/identity` returns 401 "domo_link_required"                                                     | User has no linked instance. Shouldn't happen with freemium signup — re-onboard via `/login` to recreate the link.                              |
-| `/api/identity` returns 401 from Domo                                                                | The dev confidential client's `client_secret` is wrong or revoked. Re-register via Postman `Admin — create client` and update `.env`.           |
-| `/oauth2/token 400: invalid_scope`                                                                   | `DEV_INSTANCE_SCOPES` requests a scope the registered client doesn't have. Re-register the client with the wider scope set, or narrow the env. |
-| BFF logs `Gatekeeper unreachable` or HTTP 400 with `plain HTTP request was sent to HTTPS port`       | `GATEKEEPER_TRANSPORT_URIS` not set. The dev instance signs HTTP issuers but transport is HTTPS; the override maps one to the other.            |
+| AuthGuard redirects to homepage instead of `/api/auth/domo/callback`                                 | Gatekeeper bounced through `/auth/index` without honoring `redirectUrl` — pre-authenticate to Domo in another tab, then retry. Known DomoWeb redirect quirk. |
+| `/oauth2/token 400: invalid_grant`                                                                   | Authorization code reused, expired, or `code_verifier` didn't match the `code_challenge`. Re-run the sign-up flow from `/login?mode=signup`.   |
+| `/oauth2/token 400: invalid_scope`                                                                   | `DOMO_OAUTH_SCOPES` requests a scope the registered client doesn't have. Either narrow the env or update the client via Postman's `3b. RFC 7592`. |
+| Downstream `/api/...` returns 401 `iss.host does not match request host`                             | Token's `iss` and the request host disagree per Gatekeeper's `RequestScopedIssuerValidator` — likely an edge-proxy / Heimdall config mismatch on the target Domo instance. Escalate to Gatekeeper team; see `scripts/gatekeeper-iss-host-repro.sh` for a self-contained reproducer. |
+| Downstream `/api/...` returns 403 `insufficient_scope`                                               | The active token's `scope` claim doesn't cover the path. Refresh tokens carry the scope set they were issued with — sign up a new user after widening `DOMO_OAUTH_SCOPES`. |
 
 ## API Endpoints
 

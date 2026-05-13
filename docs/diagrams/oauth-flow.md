@@ -3,13 +3,16 @@
 Two distinct flows in one diagram set. They serve different purposes and must not be conflated:
 
 - **Layer A — Huckleberry identity.** Sign-up, sign-in, session. We own this end-to-end. No Domo involvement.
-- **Layer B — Domo OAuth linkage.** Standard OAuth 2.1 authorization-code + PKCE flow against each customer's Gatekeeper instance. **The BFF is the confidential OAuth client** — `client_secret` lives in AWS Secrets Manager, code exchange is server-side, the user's Domo refresh token is encrypted-at-rest in Aurora.
+- **Layer B — Domo OAuth linkage.** Standard OAuth 2.1 authorization-code + PKCE flow against each customer's Gatekeeper instance. **The BFF is a public PKCE client** (`token_endpoint_auth_method=none`) — no `client_secret` to store. The only Domo material persisted per user is the refresh token (encrypted-at-rest in Aurora, rotated on every use per OAuth 2.1).
 
 See `../authentication.md` for the design rationale, table schemas, and module surface.
 
 ## Layer A — Huckleberry sign-in (magic-link)
 
-There is no self-service signup. Customer users are created via vetted operator tooling that also provisions their Domo instance — see `../authentication.md` § Onboarding flow. First sign-in below picks up after the operator has inserted the `users` row and the `linked_domo_instances` stub.
+Two distinct entry points:
+
+- **Sign-up** (`POST /api/auth/signup`): provisions a Domo instance + user via `InstanceProvisioner`, inserts the huckleberry user row in `pending_link` status, seeds a pending `linked_domo_instances` row (no tokens), and emails a magic-link. First sign-in completes the PKCE auth-code flow to mint the user's refresh token.
+- **Sign-in** (`POST /api/auth/signin/request`): existing-users-only. Sends a magic-link if the email matches a row; silently no-ops otherwise. Always returns 202 (existence-oracle protection).
 
 ```mermaid
 sequenceDiagram
@@ -111,9 +114,7 @@ sequenceDiagram
     FE->>BFF: GET /auth/domo/callback?code=...&state=... (Cookie)
     BFF->>R: GET link_init:<state>
     R-->>BFF: { userId, instanceUrl, code_verifier }<br/>(or 400 if missing / expired)
-    BFF->>SM: fetch Gatekeeper client_secret
-    SM-->>BFF: client_secret
-    BFF->>GK: POST /oauth2/token<br/>grant_type=authorization_code<br/>code, redirect_uri, client_id,<br/>client_secret, code_verifier
+    BFF->>GK: POST /oauth2/token<br/>grant_type=authorization_code<br/>code, redirect_uri, client_id, code_verifier<br/>(public PKCE client — no client_secret)
     GK-->>BFF: { access_token, refresh_token, expires_in, scope }
 
     BFF->>BFF: GatekeeperAuthGuard.verify(access_token)<br/>against {instanceUrl}/oauth2/jwks<br/>(checks ES256, typ=at+jwt, iss, exp, sub)
@@ -198,7 +199,7 @@ All paths live on the tenant hostname (`https://{customer}.domo.com`). The BFF d
 
 ## Client registration — confidential, not public
 
-Huckleberry registers with Gatekeeper as a **confidential OAuth 2.1 client**:
+Huckleberry registers with Gatekeeper as a **public PKCE OAuth 2.1 client**:
 
 | Field | Value |
 |---|---|
@@ -206,10 +207,10 @@ Huckleberry registers with Gatekeeper as a **confidential OAuth 2.1 client**:
 | `redirect_uris` | `https://huckleberry.com/auth/domo/callback`, plus staging/dev variants |
 | `grant_types` | `["authorization_code", "refresh_token"]` |
 | `response_types` | `["code"]` |
-| `token_endpoint_auth_method` | `client_secret_basic` (or `client_secret_post`) |
-| `scope` | union of all scopes we ever request across features — `ai:read ai:write ai:execute identity:read dataset:meta:read dataset:meta:write dataset:data:read` |
+| `token_endpoint_auth_method` | `none` (public PKCE client) |
+| `scope` | union of all scopes we ever request across features — `ai:read ai:execute content:meta:read content:data:read dataset:meta:read dataset:data:read identity:read search:read` |
 
-`client_secret` lives in **AWS Secrets Manager**, fetched by the BFF at boot and on rotation. PKCE is layered on top of the confidential client flow — defense in depth (Gatekeeper requires it under OAuth 2.1).
+There is no `client_secret`. PKCE (S256 code-challenge) is the proof-of-possession. The verifier never leaves the BFF — it's stored in the `OAuthStateStore` keyed by `state` for the duration of the round-trip.
 
 Open question: does each Domo customer require us to register separately, or does one global Gatekeeper registration work across all customer instances? The Postman collection registers per-instance via `POST /oauth2/register`; we likely need one registration per allowed customer. Track this with the Gatekeeper team.
 
@@ -230,5 +231,5 @@ Open question: does each Domo customer require us to register separately, or doe
 - Users sign in once with a huckleberry credential. Their session survives Domo session expiries.
 - One huckleberry user can link multiple Domo instances and switch without re-authing each one.
 - Refresh tokens live server-side, so we can do background work (memory extraction, scheduled jobs) on behalf of the user when the browser is closed.
-- The BFF, not the SPA, holds `client_secret` — public-client PKCE flow is unnecessarily exposed for a server-backed product. (PKCE is still used as defense in depth, which Gatekeeper requires.)
+- The PKCE verifier lives only inside the BFF process — never reaches the browser. The SPA's job ends at the authorize redirect; the callback hits the BFF directly.
 
