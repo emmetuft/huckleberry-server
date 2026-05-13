@@ -1,0 +1,146 @@
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Inject,
+  Post,
+  Query,
+  Req,
+  Res,
+  UseGuards,
+} from '@nestjs/common';
+import type { Request, Response } from 'express';
+import { ApiTags } from '@nestjs/swagger';
+import { AuthService } from './auth.service.js';
+import { RequestSigninDto } from './dto/request-signin.dto.js';
+import { SessionService } from './session.service.js';
+import { SignupService } from './signup.service.js';
+import { USER_REPOSITORY, type UserRepository } from './user.repository.js';
+import type { HuckleberryPrincipal } from './types.js';
+import { HuckleberryAuthGuard } from '../common/auth/huckleberry-auth.guard.js';
+import { Public } from '../common/auth/decorators/public.decorator.js';
+
+const SESSION_COOKIE = 'hb_session';
+const CSRF_COOKIE = 'csrf_token';
+
+@ApiTags('Auth')
+@Controller('auth')
+@UseGuards(HuckleberryAuthGuard)
+export class AuthController {
+  constructor(
+    private readonly auth: AuthService,
+    private readonly signup: SignupService,
+    private readonly sessions: SessionService,
+    @Inject(USER_REPOSITORY) private readonly users: UserRepository,
+  ) {}
+
+  /**
+   * Sign-up: provisions a Domo instance + user via the InstanceProvisioner,
+   * creates the huckleberry user row in `pending_link` status, seeds a
+   * pending Domo-link row, and sends a magic-link email. On first sign-in
+   * the user completes the PKCE auth-code flow to mint the refresh token.
+   *
+   * If the email already exists this is a no-op (existence-oracle
+   * protection — returns 202 either way).
+   */
+  @Public()
+  @Post('signup')
+  @HttpCode(HttpStatus.ACCEPTED)
+  async signupRequest(
+    @Body() dto: RequestSigninDto,
+    @Req() req: Request,
+  ): Promise<{ status: 'accepted' }> {
+    const ip = readClientIp(req);
+    await this.signup.ensureUser(dto.email);
+    await this.auth.requestMagicLink(dto.email, ip);
+    return { status: 'accepted' };
+  }
+
+  /**
+   * Sign-in: sends a magic-link only if a user with this email already
+   * exists. Does NOT provision instances or create accounts — that's
+   * `POST /auth/signup` only. Always returns 202 regardless of whether
+   * the user exists (existence-oracle protection).
+   */
+  @Public()
+  @Post('signin/request')
+  @HttpCode(HttpStatus.ACCEPTED)
+  async requestSignin(
+    @Body() dto: RequestSigninDto,
+    @Req() req: Request,
+  ): Promise<{ status: 'accepted' }> {
+    const ip = readClientIp(req);
+    await this.auth.requestMagicLink(dto.email, ip);
+    return { status: 'accepted' };
+  }
+
+  @Public()
+  @Get('signin')
+  async consumeSignin(
+    @Query('token') token: string | string[] | undefined,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<{ userId: string; needsLinkage: boolean }> {
+    if (typeof token !== 'string') {
+      throw new BadRequestException('invalid_or_expired_token');
+    }
+    const { user, needsLinkage } = await this.auth.consumeMagicLink(token);
+    const issued = await this.sessions.issue(user.id);
+
+    res.cookie(SESSION_COOKIE, issued.cookieValue, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      path: '/',
+      expires: issued.expiresAt,
+    });
+    // CSRF cookie is NOT HttpOnly — the SPA reads it and echoes it as X-CSRF-Token.
+    res.cookie(CSRF_COOKIE, issued.csrfToken, {
+      httpOnly: false,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      path: '/',
+      expires: issued.expiresAt,
+    });
+
+    return { userId: user.id, needsLinkage };
+  }
+
+  @Post('logout')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async logout(
+    @Req() req: Request & { user?: HuckleberryPrincipal },
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<void> {
+    if (req.user) {
+      await this.sessions.revoke(req.user.sessionId);
+    }
+    res.clearCookie(SESSION_COOKIE, { path: '/' });
+    res.clearCookie(CSRF_COOKIE, { path: '/' });
+  }
+
+  @Get('me')
+  async me(@Req() req: Request & { user: HuckleberryPrincipal }): Promise<{
+    id: string;
+    email: string;
+    status: string;
+    displayName: string | null;
+  }> {
+    const user = await this.users.findById(req.user.userId);
+    if (!user) throw new Error('user disappeared mid-session');
+    return {
+      id: user.id,
+      email: user.email,
+      status: user.status,
+      displayName: user.displayName,
+    };
+  }
+}
+
+function readClientIp(req: Request): string | null {
+  const xff = req.headers['x-forwarded-for'];
+  if (typeof xff === 'string') return xff.split(',')[0].trim();
+  return req.socket?.remoteAddress ?? null;
+}

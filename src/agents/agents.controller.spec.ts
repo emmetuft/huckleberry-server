@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
 import { AgentsController } from './agents.controller';
 import { AgentsService } from './agents.service';
+import { DomoAuthGuard } from '../common/guards/domo-auth.guard';
 import { DomoApiError } from '../common/filters/domo-exception.filter';
 import { Response as ExpressResponse } from 'express';
 import { Readable } from 'node:stream';
@@ -9,10 +10,7 @@ import {
   CustomAgent,
   SearchAgentsResponse,
 } from '../common/types/domo-agent.types';
-import { CreateAgentDto } from './dto/create-agent.dto';
-import { UpdateAgentDto } from './dto/update-agent.dto';
 import { SearchAgentsDto } from './dto/search-agents.dto';
-import { AgentContextUpdateDto } from './dto/agent-context-update.dto';
 import { ExecuteAgentDto } from './dto/execute-agent.dto';
 import { ResumeAgentDto } from './dto/resume-agent.dto';
 
@@ -54,7 +52,10 @@ describe('AgentsController', () => {
           },
         },
       ],
-    }).compile();
+    })
+      .overrideGuard(DomoAuthGuard)
+      .useValue({ canActivate: () => true })
+      .compile();
 
     controller = module.get<AgentsController>(AgentsController);
     service = module.get(AgentsService);
@@ -95,7 +96,7 @@ describe('AgentsController', () => {
     };
     service.create.mockResolvedValue(expected);
 
-    const result = await controller.create(dto as CreateAgentDto);
+    const result = await controller.create(dto);
     expect(result).toEqual(expected);
   });
 
@@ -120,7 +121,7 @@ describe('AgentsController', () => {
     };
     service.update.mockResolvedValue(updated);
 
-    const result = await controller.update('123', dto as UpdateAgentDto);
+    const result = await controller.update('123', dto);
     expect(result).toEqual({ id: '123', name: 'Updated', prompt: 'Do stuff' });
   });
 
@@ -159,10 +160,7 @@ describe('AgentsController', () => {
     };
     service.updateContext.mockResolvedValue(updated);
 
-    const result = await controller.updateContext(
-      '123',
-      dto as AgentContextUpdateDto,
-    );
+    const result = await controller.updateContext('123', dto);
     expect(result).toEqual({ id: '123', name: 'Test', prompt: 'Do stuff' });
   });
 

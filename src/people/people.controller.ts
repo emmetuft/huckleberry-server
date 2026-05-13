@@ -20,10 +20,7 @@ export class PeopleController {
   }
 
   @Get('groups')
-  getGroups(
-    @Query('limit') limit?: string,
-    @Query('offset') offset?: string,
-  ) {
+  getGroups(@Query('limit') limit?: string, @Query('offset') offset?: string) {
     return this.peopleService.getGroups(
       limit != null ? Number(limit) : undefined,
       offset != null ? Number(offset) : undefined,

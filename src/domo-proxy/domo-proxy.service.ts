@@ -7,10 +7,23 @@ import {
   HttpHeader,
 } from '../common/constants/http.constants.js';
 import { DomoApiError } from '../common/filters/domo-exception.filter.js';
+import { domoRequestContext } from '../common/auth/domo-request-context.js';
 
 export interface DomoRequestOptions {
   headers?: Record<string, string>;
   query?: Record<string, string>;
+  /**
+   * Per-request target host. Multi-tenant callers pass `req.user.issuer` so
+   * the request reaches the same instance that issued the token. Falls back
+   * to the configured `DOMO_INSTANCE_URL` when omitted (dev / single-tenant).
+   */
+  targetHost?: string;
+  /**
+   * Per-request bearer token. Callers pass `req.user.rawToken` so the user's
+   * own Gatekeeper JWT flows downstream and Domo enforces fine-grained access.
+   * When omitted in dev, the legacy `x-domo-developer-token` header is sent.
+   */
+  bearer?: string;
 }
 
 @Injectable()
@@ -20,6 +33,7 @@ export class DomoProxyService {
   private readonly devToken: string;
   private readonly isDev: boolean;
   private readonly verbose: boolean;
+  private readonly transportOverrides: Record<string, string>;
 
   constructor(private readonly config: ConfigService) {
     const appConfig = this.config.get<AppConfig>('app');
@@ -27,6 +41,7 @@ export class DomoProxyService {
     this.devToken = appConfig.devToken;
     this.isDev = appConfig.nodeEnv === 'development';
     this.verbose = appConfig.verboseLogging ?? false;
+    this.transportOverrides = appConfig.gatekeeperTransportOverrides ?? {};
     this.logger.log(
       `isDev=${this.isDev}, nodeEnv=${appConfig.nodeEnv}, hasToken=${!!this.devToken}, baseUrl=${this.baseUrl}`,
     );
@@ -60,8 +75,8 @@ export class DomoProxyService {
     path: string,
     options?: DomoRequestOptions,
   ): Promise<Response> {
-    const url = this.buildUrl(path, options?.query);
-    const headers = this.buildHeaders(options?.headers);
+    const url = this.buildUrl(path, options?.query, options?.targetHost);
+    const headers = this.buildHeaders(options?.headers, options?.bearer);
 
     if (this.isDev) {
       this.logger.log(`→ STREAM GET ${url}`);
@@ -88,9 +103,13 @@ export class DomoProxyService {
     body?: unknown,
     options?: DomoRequestOptions,
   ): Promise<Response> {
-    const url = this.buildUrl(path, options?.query);
-    const headers = this.buildHeaders(options?.headers);
-    headers[HttpHeader.Accept] = ContentType.SSE;
+    const url = this.buildUrl(path, options?.query, options?.targetHost);
+    const headers = this.buildHeaders(options?.headers, options?.bearer);
+    // Prefer SSE but accept anything — some Domo controllers produce
+    // application/x-ndjson or application/json and would 406 a strict SSE
+    // Accept. The pipe-through is byte-for-byte either way.
+    headers[HttpHeader.Accept] =
+      'text/event-stream, application/x-ndjson, application/json, */*';
 
     if (this.isDev) {
       this.logger.log(`→ STREAM POST ${url}`);
@@ -125,8 +144,8 @@ export class DomoProxyService {
     body?: unknown,
     options?: DomoRequestOptions,
   ): Promise<T> {
-    const url = this.buildUrl(path, options?.query);
-    const headers = this.buildHeaders(options?.headers);
+    const url = this.buildUrl(path, options?.query, options?.targetHost);
+    const headers = this.buildHeaders(options?.headers, options?.bearer);
 
     if (this.isDev) {
       this.logger.log(`→ ${method} ${url}`);
@@ -176,8 +195,20 @@ export class DomoProxyService {
     return (await response.text()) as unknown as T;
   }
 
-  private buildUrl(path: string, query?: Record<string, string>): string {
-    const base = new URL(this.baseUrl);
+  private buildUrl(
+    path: string,
+    query?: Record<string, string>,
+    targetHost?: string,
+  ): string {
+    // Resolution order: explicit caller arg → per-request context (set by
+    // DomoContextInterceptor from the active link) → configured baseUrl.
+    const ctx = domoRequestContext.getStore();
+    // Apply transport override — the issuer string (`http://host:443`) is
+    // an identifier, not a transport instruction. We rewrite to the real
+    // HTTPS endpoint when configured.
+    const raw = targetHost || ctx?.targetHost || this.baseUrl;
+    const resolved = this.transportOverrides[raw] ?? raw;
+    const base = new URL(resolved);
 
     let normalizedPath = path || '';
 
@@ -205,12 +236,23 @@ export class DomoProxyService {
     return base.toString();
   }
 
-  private buildHeaders(extra?: Record<string, string>): Record<string, string> {
+  private buildHeaders(
+    extra?: Record<string, string>,
+    bearer?: string,
+  ): Record<string, string> {
     const headers: Record<string, string> = {
       [HttpHeader.ContentType]: ContentType.JSON,
     };
 
-    if (this.isDev && this.devToken) {
+    // Resolution order: explicit caller arg → per-request context (set by
+    // DomoContextInterceptor from the active link's bearer) → dev-token
+    // fallback for unauthenticated/legacy paths.
+    const ctxBearer = domoRequestContext.getStore()?.bearer;
+    const effectiveBearer = bearer ?? ctxBearer;
+    if (effectiveBearer) {
+      headers[HttpHeader.Authorization] = `Bearer ${effectiveBearer}`;
+    } else if (this.isDev && this.devToken) {
+      // Dev fallback: x-domo-developer-token works against a single instance.
       headers[DomoHeader.DeveloperToken] = this.devToken;
     }
 

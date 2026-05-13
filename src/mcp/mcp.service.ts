@@ -13,7 +13,10 @@ import type { UpdateMcpServerDto } from './dto/update-mcp-server.dto.js';
 export class McpService {
   private readonly logger = new Logger(McpService.name);
   private readonly store = new Map<string, McpServerConfig>();
-  private readonly oauthTokens = new Map<string, { accessToken: string; authorizedAt: string }>();
+  private readonly oauthTokens = new Map<
+    string,
+    { accessToken: string; authorizedAt: string }
+  >();
 
   findAll(enabledOnly = false): McpServerConfig[] {
     const servers = Array.from(this.store.values());
@@ -102,7 +105,9 @@ export class McpService {
     }
   }
 
-  async syncTools(id: string): Promise<{ server: McpServerConfig; toolCount: number }> {
+  async syncTools(
+    id: string,
+  ): Promise<{ server: McpServerConfig; toolCount: number }> {
     const server = this.findOne(id);
     try {
       const response = await fetch(`${server.url}/tools/list`, {
@@ -120,7 +125,11 @@ export class McpService {
       }
 
       const data = (await response.json()) as {
-        tools?: Array<{ name: string; description?: string; inputSchema?: Record<string, unknown> }>;
+        tools?: Array<{
+          name: string;
+          description?: string;
+          inputSchema?: Record<string, unknown>;
+        }>;
       };
 
       const tools: McpToolDefinition[] = (data.tools ?? []).map((t) => ({
@@ -184,10 +193,15 @@ export class McpService {
 
   // --- OAuth2 ---
 
-  getOAuth2AuthorizationUrl(serverId: string): { authorizationUrl: string; state: string } {
+  getOAuth2AuthorizationUrl(serverId: string): {
+    authorizationUrl: string;
+    state: string;
+  } {
     const server = this.findOne(serverId);
     if (!server.oauth2Config) {
-      throw new NotFoundException(`Server ${serverId} has no OAuth2 configuration`);
+      throw new NotFoundException(
+        `Server ${serverId} has no OAuth2 configuration`,
+      );
     }
 
     const state = randomUUID();
@@ -195,8 +209,12 @@ export class McpService {
       client_id: server.oauth2Config.clientId,
       response_type: 'code',
       state,
-      ...(server.oauth2Config.redirectUri && { redirect_uri: server.oauth2Config.redirectUri }),
-      ...(server.oauth2Config.scopes?.length && { scope: server.oauth2Config.scopes.join(' ') }),
+      ...(server.oauth2Config.redirectUri && {
+        redirect_uri: server.oauth2Config.redirectUri,
+      }),
+      ...(server.oauth2Config.scopes?.length && {
+        scope: server.oauth2Config.scopes.join(' '),
+      }),
     });
 
     return {

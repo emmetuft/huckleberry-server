@@ -75,69 +75,56 @@ graph LR
 
 ## Service → table ownership
 
+Three table groups: huckleberry identity, Domo linkage, Category B app data. Category A controllers (Identity, People, Agents, Sessions, AI Services, Graph, DataSources, Connectors, Toolkits, Huckleberry) are stateless — they forward the user's *active linked* Domo Bearer through `DomoProxyService`.
+
 ```mermaid
 graph LR
     subgraph "BFF services (Aurora-using)"
-        AUTH[Auth]
-        IDENT[Identity]
+        AUTH[Auth<br/>signup · login · verify · reset]
+        LINK[DomoLink<br/>start · callback · switch · unlink]
+        BROKER[DomoAuthBroker<br/>refresh + encrypted store]
         PERS[Personas]
-        AGENTS[Agents]
-        SESS[Sessions]
         MCP[MCP]
-        PROXY_SVC["DomoProxy<br/>HOT PATH — token lookup<br/>Redis in front"]
         HEALTH[Health<br/>readiness ping]
     end
 
     subgraph "Stateless services (no Aurora)"
-        STATELESS[AI Services · Graph · People<br/>DataSources · Connectors<br/>Toolkits · Huckleberry<br/>pure proxies through DomoProxy]
+        STATELESS[Identity · People · Agents · Sessions<br/>AI Services · Graph · DataSources<br/>Connectors · Toolkits · Huckleberry<br/>proxies through DomoProxyService]
     end
 
     subgraph "Out-of-band processes"
-        WORKER[Scheduled Worker<br/>ECS scheduled task / Lambda<br/>expired token cleanup, session sweep]
-        MIGRATOR[Migrations Runner<br/>deploy-time container<br/>elevated DB role + GET_LOCK]
+        WORKER[Scheduled Worker<br/>expired magic-link sweep]
+        MIGRATOR[Migrations Runner<br/>deploy-time · GET_LOCK]
     end
 
-    subgraph "Aurora MySQL cluster"
-        subgraph "huckleberry_auth (database)"
-            T_USERS[(users)]
-            T_TOKENS[(domo_sessions)]
-            T_SESSIONS[(sessions<br/>optional — JWT alternative)]
-        end
-
-        subgraph "huckleberry_app (database)"
-            T_PERSONAS[(personas)]
-            T_AGENTS[(agents_meta)]
-            T_AGENT_SESS[(agent_sessions)]
-            T_MCP[(mcp_servers)]
-            T_MCP_TOK[(mcp_oauth_tokens)]
-        end
+    subgraph "Aurora MySQL — huckleberry_app"
+        T_USERS[(users)]
+        T_MAGIC[(magic_links)]
+        T_LINKS[(linked_domo_instances)]
+        T_TOKENS[(domo_oauth_tokens<br/>KMS-encrypted)]
+        T_PERSONAS[(personas)]
+        T_MCP[(mcp_servers · mcp_oauth_tokens)]
     end
 
     WRITER_EP{{Writer endpoint}}
     READER_EP{{Reader endpoint}}
 
     AUTH -->|R/W| WRITER_EP
-    PERS -->|R/W| WRITER_EP
-    AGENTS -->|R/W| WRITER_EP
-    SESS -->|R/W| WRITER_EP
-    MCP -->|R/W| WRITER_EP
-    IDENT -->|R| READER_EP
-    PROXY_SVC ==>|R hot path| READER_EP
+    LINK -->|R/W| WRITER_EP
+    BROKER -->|R/W refresh rotation| WRITER_EP
+    PERS -->|R/W customer_id-scoped| WRITER_EP
+    MCP -->|R/W customer_id-scoped| WRITER_EP
     HEALTH -->|R| READER_EP
     WORKER -->|R/W| WRITER_EP
     MIGRATOR -->|DDL| WRITER_EP
 
     WRITER_EP ==>|R/W| T_USERS
+    WRITER_EP ==>|R/W| T_MAGIC
+    WRITER_EP ==>|R/W| T_LINKS
     WRITER_EP ==>|R/W| T_TOKENS
-    WRITER_EP ==>|R/W| T_SESSIONS
     WRITER_EP ==>|R/W| T_PERSONAS
-    WRITER_EP ==>|R/W| T_AGENTS
-    WRITER_EP ==>|R/W| T_AGENT_SESS
     WRITER_EP ==>|R/W| T_MCP
-    WRITER_EP ==>|R/W| T_MCP_TOK
 
-    READER_EP -.R only.-> T_USERS
-    READER_EP -.R only.-> T_TOKENS
     READER_EP -.shared storage.-> WRITER_EP
 ```
 
@@ -145,74 +132,81 @@ graph LR
 
 | Service | Tables touched | R/W | Endpoint | Notes |
 |---|---|---|---|---|
-| Auth | `users`, `domo_sessions`, `sessions` | R/W | writer | Owns `huckleberry_auth` database |
-| Identity | `users` | R only | reader | Profile lookup; tolerates replica lag |
-| Personas | `personas` | R/W | writer | |
-| Agents | `agents_meta` | R/W | writer | Local cache; truth in Domo |
-| Sessions | `agent_sessions` | R/W | writer | Local index; events from Domo |
-| MCP | `mcp_servers`, `mcp_oauth_tokens` | R/W | writer | |
-| DomoProxy | `domo_sessions` | **R hot path** | reader | Redis-cached; Aurora is fallback only |
-| Health | any | R | reader | Cheap probe (`SELECT 1`) |
-| Worker | `domo_sessions`, `sessions` | R/W | writer | Expired token + session cleanup |
-| Migrations | all | DDL | writer | Deploy-time only; `GET_LOCK('hb_migrate', 30)` |
-| AI / Graph / People / DataSources / Connectors / Toolkits / Huckleberry | none | — | — | Stateless proxies |
+| Auth (Layer A) | `users`, `magic_links` | R/W | writer | Magic-link only (no passwords). SES emails, rate-limited |
+| DomoLink (Layer B) | `linked_domo_instances`, `domo_oauth_tokens` | R/W | writer | OAuth code exchange + KMS encrypt on insert |
+| DomoAuthBroker (Layer B) | `domo_oauth_tokens` (rotation), `linked_domo_instances` (last_used_at) | R/W | writer | Single-use refresh rotation per OAuth 2.1 |
+| Personas (Category B) | `personas` | R/W | writer | All rows `(customer_id, user_id)`-scoped |
+| MCP (Category B) | `mcp_servers`, `mcp_oauth_tokens` | R/W | writer | Third-party MCP creds KMS-encrypted |
+| Health | none (`SELECT 1`) | R | reader | Cheap probe |
+| Worker | `magic_links` (expired sweep), `mcp_oauth_tokens` (expired sweep) | R/W | writer | Memory lives in Mako, not Aurora |
+| Migrations | all | DDL | writer | Deploy-time; `GET_LOCK('hb_migrate', 30)`; separate DB user |
+| Identity, People, Agents, Sessions, AI Services, Graph, DataSources, Connectors, Toolkits, Huckleberry | none | — | — | Stateless — forward Bearer from active link |
 
 ## Schema relationships (ER) — MVP
 
 ```mermaid
 erDiagram
-    users ||--|| domo_sessions : "has"
-    users ||--o{ sessions : "owns"
-    users ||--o{ personas : "owns"
-    users ||--o{ agents_meta : "owns"
-    users ||--o{ agent_sessions : "owns"
-    users ||--o{ mcp_servers : "registers"
+    users ||--o{ magic_links : "issued"
+    users ||--|| linked_domo_instances : "single (MVP)"
+    linked_domo_instances ||--|| domo_oauth_tokens : "has (post-OAuth)"
+    users ||--o{ personas : "owns (per customer)"
+    users ||--o{ mcp_servers : "owns (per customer)"
     mcp_servers ||--o{ mcp_oauth_tokens : "has"
 
     users {
         BINARY16 id PK
-        VARCHAR domo_user_id
-        VARCHAR domo_instance
-        VARCHAR email
+        VARCHAR email UK
+        TINYINT email_verified
         VARCHAR display_name
+        VARCHAR status "pending_link|active|suspended"
         DATETIME last_login_at
     }
-    domo_sessions {
-        BINARY16 user_id PK
-        VARBINARY access_token
-        VARBINARY refresh_token
+    magic_links {
+        VARCHAR token_hash PK
+        BINARY16 user_id
         DATETIME expires_at
+        DATETIME consumed_at
+        VARCHAR ip_issued_from
     }
-    sessions {
+    linked_domo_instances {
         BINARY16 id PK
-        BINARY16 user_id FK
+        BINARY16 user_id
+        VARCHAR issuer_url
+        VARCHAR customer_id "Gatekeeper cid"
+        VARCHAR domo_sub
+        VARCHAR scope
+        DATETIME linked_at
+        DATETIME last_used_at
+    }
+    domo_oauth_tokens {
+        BINARY16 link_id PK
+        VARBINARY refresh_token "AES-GCM ciphertext"
+        VARBINARY refresh_iv
+        VARCHAR refresh_dek_id "KMS-wrapped DEK"
         DATETIME expires_at
-        VARCHAR ip
-        VARCHAR user_agent
+        VARCHAR scope
     }
     personas {
+        VARCHAR customer_id PK
+        BINARY16 user_id PK
         BINARY16 id PK
-        BINARY16 user_id FK
         JSON focus_areas
-    }
-    agents_meta {
-        BINARY16 id PK
-        VARCHAR domo_agent_id
-        BINARY16 user_id FK
-    }
-    agent_sessions {
-        BINARY16 id PK
-        BINARY16 user_id FK
-        VARCHAR domo_session_id
+        TINYINT is_default
     }
     mcp_servers {
+        VARCHAR customer_id PK
+        BINARY16 user_id PK
         BINARY16 id PK
-        BINARY16 user_id FK
+        VARCHAR name
         VARCHAR url
+        TINYINT enabled
+        VARCHAR auth_type
     }
     mcp_oauth_tokens {
+        VARCHAR customer_id PK
         BINARY16 mcp_server_id PK
         VARBINARY access_token
+        VARBINARY refresh_token
         DATETIME expires_at
     }
 ```
@@ -232,7 +226,7 @@ erDiagram
 | Backup | 35-day automated retention + weekly manual snapshot | Manual snapshot survives cluster delete; automated does not |
 | Encryption | KMS CMK at rest + TLS in transit (`?ssl={"rejectUnauthorized":true}`) | Token columns also encrypted at column level via KMS envelope encryption — defense in depth |
 | Read replicas | 1 reader minimum, autoscaled by CPU | Cheap insurance for failover + offload of audit/analytics reads |
-| Database separation | `huckleberry_auth` and `huckleberry_app` databases in same cluster | MySQL conflates schema and database, so two databases replace what would be two PG schemas. Same cluster, separate connection URLs |
+| Database separation | Single `huckleberry_app` database | Category B + Layer A/B tables all share one database. Splitting comes later if a feature demands it. |
 | Primary key type | `BINARY(16)` UUIDs via `UUID_TO_BIN(uuid, 1)` | Half the storage of `CHAR(36)`, index-friendly time-prefix ordering. Swap-flag (`1`) reorders timestamp bits for better B-tree locality |
 | ORM | Drizzle (preferred) or TypeORM, MySQL driver | Both support MySQL natively |
 | Multi-AZ | Required in prod | Single-AZ Aurora is not actually HA |
@@ -244,10 +238,16 @@ erDiagram
 
 ## What's encrypted at the column level (not just at rest)
 
+Two distinct sets of OAuth tokens live on the BFF, both KMS envelope-encrypted:
+
 | Column | Why |
 |---|---|
-| `oauth_tokens.access_token` | If a backup leaks, raw Domo tokens shouldn't |
-| `oauth_tokens.refresh_token` | Same |
-| `mcp_oauth_tokens.access_token` | Same logic for third-party MCP creds |
+| `domo_oauth_tokens.refresh_token` | Per-link Domo refresh credential. Backup leaks shouldn't expose the user's ability to act against Domo. |
+| `mcp_oauth_tokens.access_token` | Third-party MCP credentials. |
+| `mcp_oauth_tokens.refresh_token` | Same. |
+
+Mechanism: KMS-wrapped DEK stored alongside the ciphertext (`refresh_dek_id`), AES-GCM with a per-row IV. Plaintext DEK cached in-process for a short window — KMS is called only on cache miss. Backups are unreadable without KMS access.
+
+There is no `users.password_hash` — magic-link only. `magic_links.token_hash` is SHA-256 (not encrypted; pre-image is the random token and only travels via SES email).
 
 KMS envelope encryption: Huckleberry holds a data key (cached), KMS holds the wrapping key. Rotating the wrapping key re-encrypts data keys, not every row.

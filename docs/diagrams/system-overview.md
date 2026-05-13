@@ -16,25 +16,27 @@ graph LR
         end
 
         subgraph "Compute"
-            UI_HOST[Huckleberry UI<br/>S3 + CloudFront<br/>or ECS]
+            UI_HOST[Huckleberry UI<br/>S3 + CloudFront<br/>huckleberry.com]
             BFF[Huckleberry BFF<br/>NestJS on ECS Fargate<br/>autoscaled behind ALB]
         end
 
         subgraph "Data"
-            AURORA[(Aurora MySQL<br/>users · personas<br/>domo_sessions · sessions<br/>agents_meta · mcp_servers)]
-            REDIS[(ElastiCache Redis<br/>sessions + token cache)]
+            AURORA[(Aurora MySQL<br/>users · linked_domo_instances<br/>domo_oauth_tokens (KMS)<br/>personas · mcp_servers (customer_id scoped))]
+            REDIS[(ElastiCache Redis<br/>huckleberry sessions<br/>Domo access-token cache<br/>OAuth link_init state)]
         end
 
         subgraph "Platform"
-            SM[Secrets Manager<br/>DB creds · JWT key<br/>token-encryption key<br/>per-instance OAuth secrets]
-            KMS[KMS<br/>envelope encryption]
+            TASK_ROLE[Task IAM Role<br/>rds-db:connect · kms:Decrypt<br/>secretsmanager:GetSecretValue · ses:SendEmail]
+            SM[Secrets Manager<br/>Gatekeeper client_secret<br/>session signing key<br/>Aurora master (break-glass)]
+            KMS[KMS<br/>envelope encryption<br/>for stored OAuth refresh tokens]
+            SES[AWS SES<br/>magic-link sign-in emails]
             CW[CloudWatch + OTel<br/>logs · metrics · traces]
             ECR[ECR<br/>container images]
         end
     end
 
     subgraph "Domo Platform"
-        GATEKEEPER[Gatekeeper OAuth 2.1<br/>/oauth/authorize + /oauth/token<br/>auth-code + PKCE]
+        GATEKEEPER[Gatekeeper OAuth 2.1<br/>customer.domo.com/oauth2/*<br/>auth-code + PKCE · ES256<br/>refresh-token rotation]
 
         subgraph "Mako — Agent Platform"
             MAKO_AGENT[Agent Runtime<br/>ai-assistant-app<br/>execute · resume · streaming]
@@ -57,18 +59,21 @@ graph LR
     CF --> UI_HOST
     USER --> WAF
     WAF --> ALB
+    USER -- huckleberry session cookie --> WAF
     ALB --> BFF
 
+    BFF -.IAM auth token.-> TASK_ROLE
     BFF --> AURORA
     BFF --> REDIS
     BFF --> SM
-    SM --> KMS
+    BFF --> SES
     AURORA --> KMS
+    SM --> KMS
     BFF --> CW
     BFF -.pulls image.-> ECR
 
-    BFF --> GATEKEEPER
-    BFF --> MAKO_AGENT
+    BFF -- code exchange + refresh<br/>(server-side, client_secret) --> GATEKEEPER
+    BFF -- forwards Bearer for active link --> MAKO_AGENT
     MAKO_AGENT --> INTENT_ENGINE
     INTENT_ENGINE --> MEMORY_APP
     MAKO_AGENT --> MAKO_AI
@@ -86,11 +91,13 @@ graph LR
 
 | Component | AWS service | Purpose |
 |---|---|---|
-| UI | S3 + CloudFront (or ECS if SSR) | Static frontend, edge-cached |
-| BFF | ECS Fargate behind ALB | NestJS API, scales horizontally |
-| Primary DB | Aurora MySQL | Users, tenants, personas, tokens, sessions |
-| Cache | ElastiCache Redis | Hot session lookups, Domo token cache |
-| Secrets | Secrets Manager + KMS | OAuth client secrets, JWT signing key, token encryption key |
+| UI | S3 + CloudFront | Static SPA served from `huckleberry.com`. Talks to the BFF only — never directly to Gatekeeper or Domo |
+| BFF | ECS Fargate behind ALB | NestJS API. Owns huckleberry identity (Layer A) + Domo OAuth broker (Layer B). Scales horizontally |
+| Primary DB | Aurora MySQL | `users`, Domo linkage, `domo_oauth_tokens` (KMS-encrypted), Category B app data. All app rows `customer_id`-scoped |
+| Cache + sessions | ElastiCache Redis | Huckleberry server-side sessions (revocable), Domo access-token cache, PKCE `link_init` state |
+| AWS auth | Task IAM Role | Aurora IAM auth, Secrets Manager reads, KMS decrypt, SES send. No long-lived AWS secrets in the container |
+| Secrets | Secrets Manager + KMS | Gatekeeper `client_secret`, session JWT signing key, Aurora master (break-glass). KMS for envelope-encrypted OAuth refresh tokens at rest |
+| Email | AWS SES | Magic-link sign-in emails |
 | Edge | CloudFront + WAF + ACM | TLS termination, DDoS / rate-limit, bot rules |
 | Observability | CloudWatch + OpenTelemetry | Logs, metrics, traces |
 | Image registry | ECR | BFF container images |
@@ -99,7 +106,7 @@ graph LR
 
 | Surface | Auth | What Huckleberry uses it for |
 |---|---|---|
-| Gatekeeper `/oauth/authorize` + `/oauth/token` | auth code + PKCE (OAuth 2.1) | User authentication; Bearer JWT for downstream calls |
+| Gatekeeper `/oauth2/{authorize,token,jwks,revoke}` | auth code + PKCE (OAuth 2.1, ES256). **Confidential client.** Per-instance registration | BFF runs the OAuth flow server-side when a user links an instance; refreshes Domo tokens on demand and verifies them against the instance's JWKS |
 | Mako: `/api/ai/v1/agents/*` | Bearer JWT (Gatekeeper) | Agent execute, resume, streaming, CRUD |
 | Mako: `/api/ai/v1/memory/*` | Bearer JWT, Bedrock customer-scoped | Memory admin (read what's remembered, right-to-forget) |
 | Mako: `/api/ai/v1/text/*` | Bearer JWT | Text generation, summarization, text-to-SQL |

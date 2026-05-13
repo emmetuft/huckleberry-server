@@ -7,6 +7,7 @@ export enum ContentType {
 export enum HttpHeader {
   ContentType = 'content-type',
   Accept = 'accept',
+  Authorization = 'authorization',
   CacheControl = 'cache-control',
   Connection = 'connection',
 }

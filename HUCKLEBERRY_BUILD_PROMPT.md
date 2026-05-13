@@ -82,7 +82,7 @@ interface FetchNodesParams {
 
 - The ontology service should connect to a Neo4j instance via environment variables:
   `NEO4J_URI`, `NEO4J_USER`, `NEO4J_PASSWORD`
-- Use the official `neo4j-driver` npm package (`npm install neo4j-driver`)
+- Use the official `neo4j-driver` package (`pnpm add neo4j-driver`)
 - Create an `OntologyModule` that provides a `Neo4jService` for the driver connection
   and an `OntologyService` for query execution
 - All Cypher queries should be parameterized (no string interpolation)

@@ -1,135 +1,198 @@
-# Auth & Data Architecture — MVP (Internal Use)
+# Auth & Data Architecture — MVP
 
-Minimal schema for the v1 auth model: one user, one Domo instance, one identity. Multi-tenancy, multi-instance per user, and multi-IdP are deferred until we have a shared understanding of the post-MVP product.
+Where auth state lives. **Standalone huckleberry.com with native identity + BFF-as-confidential-OAuth-client to Domo.** Both layers are stored.
 
-**Auth via Gatekeeper OAuth 2.1.** Huckleberry registers as a confidential client in Gatekeeper (Domo's new internal OAuth 2.1 server, replacing the older Heimdall) and uses authorization-code flow with PKCE. See `oauth-flow.md` for the sequence and `auth-providers.md` for the auth-service shape. The earlier "swappable provider" seam is retired — single provider.
+- **Layer A (huckleberry identity):** `users`, `magic_links`, server-side sessions in Redis.
+- **Layer B (Domo linkage):** `linked_domo_instances`, `domo_oauth_tokens` (KMS-encrypted refresh tokens).
+- **Category B (app data):** `personas`, `mcp_servers`, `mcp_oauth_tokens`. All `(customer_id, user_id, ...)` scoped.
 
-Stateless proxy services (AI, Graph, DataSources, Connectors, Toolkits, Huckleberry) are collapsed into a single "Domo proxy services" node — they hold no local state and exist only to forward through DomoProxy.
-
-Aurora is drawn as a single block at this abstraction level. Writer/reader endpoints, RDS Proxy, KMS, backups, worker, and migrations runner are detailed in `aurora-integration.md`.
+See `../authentication.md` for design rationale; `oauth-flow.md` for sequences.
 
 ## Diagram
 
 ```mermaid
 graph LR
-    UI[Huckleberry UI]
+    UI[Huckleberry UI<br/>huckleberry.com]
 
     subgraph "NestJS BFF"
-        AUTH[Auth]
+        HAG[HuckleberryAuthGuard<br/>cookie → principal]
+        SESS[SessionService<br/>Redis]
+        AUTH[Auth controllers<br/>signup · signin/request<br/>signin (consume) · logout · me]
+        LINK[DomoLink controllers<br/>start · callback · switch · unlink]
+        BROKER[DomoAuthBroker<br/>token cache + refresh]
+        STORE[DomoTokenStore<br/>Aurora + KMS]
+        OAUTH[DomoOAuthClient<br/>public PKCE client]
+        JWKS_SVC[JwksService<br/>cached per-issuer]
         IDENT[Identity]
         PEOPLE[People]
         PERS[Personas]
         AGENTS[Agents]
-        SESS[Sessions]
+        SESS_CTRL[Sessions]
         MCP[MCP]
         PROXY_SVCS[Domo proxy services<br/>AI · Graph · DataSources<br/>Connectors · Toolkits · Huckleberry]
-        PROXY[DomoProxy]
-        GATEKEEPER_CLIENT{{Gatekeeper OAuth Client<br/>authorize · token · refresh · revoke}}
+        PROXY[DomoProxyService<br/>targetHost + bearer]
     end
 
-    subgraph "Aurora MySQL — MVP"
+    subgraph "Aurora MySQL"
         T_USERS[(users)]
-        T_TOKENS[(domo_sessions<br/>access_token encrypted 1h TTL<br/>refresh_token encrypted 2y TTL)]
+        T_MAGIC[(magic_links)]
+        T_LINKS[(linked_domo_instances)]
+        T_TOKENS[(domo_oauth_tokens<br/>refresh KMS-encrypted)]
         T_PERSONAS[(personas)]
-        T_AGENTS[(agents_meta · agent_sessions)]
         T_MCP[(mcp_servers · mcp_oauth_tokens)]
     end
 
-    SM[Secrets Manager]
-    REDIS[(Redis<br/>sessions + token cache)]
+    SM[(Secrets Manager<br/>session signing key)]
+    REDIS[(Redis<br/>sessions · link_init state<br/>Domo access-token cache)]
+    KMS[(AWS KMS<br/>envelope encryption)]
+    SES[AWS SES<br/>magic-link emails]
 
-    DOMO[Domo Instance APIs<br/>Identity · AI · Data<br/>Recall · Toolkits<br/>Bearer JWT auth]
-    GATEKEEPER[Gatekeeper<br/>/oauth/authorize<br/>/oauth/token<br/>/oauth/revoke]
+    DOMO[Domo Instance APIs<br/>customer.domo.com/api/*]
+    GATEKEEPER[Gatekeeper<br/>customer.domo.com/oauth2/*]
 
+    UI --> HAG
+    HAG --> SESS
+    SESS --> REDIS
     UI --> AUTH
-    UI --> PROXY_SVCS
-    UI --> AGENTS
-
+    UI --> LINK
     AUTH --> T_USERS
-    AUTH --> T_TOKENS
+    AUTH --> T_MAGIC
+    AUTH --> SES
     AUTH --> SM
-    AUTH --> REDIS
-    AUTH --> GATEKEEPER_CLIENT
-    GATEKEEPER_CLIENT --> GATEKEEPER
+    LINK --> BROKER
+    LINK --> T_LINKS
+    BROKER --> STORE
+    BROKER --> REDIS
+    BROKER --> OAUTH
+    STORE --> T_TOKENS
+    STORE --> KMS
+    OAUTH --> SM
+    OAUTH --> JWKS_SVC
+    JWKS_SVC --> GATEKEEPER
+    OAUTH --> GATEKEEPER
 
-    IDENT --> T_USERS
+    HAG --> IDENT
+    HAG --> PEOPLE
+    HAG --> PERS
+    HAG --> AGENTS
+    HAG --> SESS_CTRL
+    HAG --> MCP
+    HAG --> PROXY_SVCS
+
     PERS --> T_PERSONAS
-    AGENTS --> T_AGENTS
-    SESS --> T_AGENTS
     MCP --> T_MCP
 
     IDENT --> PROXY
     PEOPLE --> PROXY
     AGENTS --> PROXY
-    SESS --> PROXY
+    SESS_CTRL --> PROXY
     PROXY_SVCS --> PROXY
-
-    PROXY --> T_TOKENS
-    PROXY --> REDIS
+    PROXY --> BROKER
     PROXY --> DOMO
 ```
 
-## MVP Schema
+## Aurora schema — MVP
 
-```
+Three layers of tables: identity, Domo linkage, app data. All carry `customer_id` where multi-tenancy applies; user-level tables carry the huckleberry `user_id`.
+
+```sql
+-- Layer A — Huckleberry identity (magic-link only)
 users
-  id              BINARY(16) PK
-  domo_user_id    VARCHAR(64)
-  domo_instance   VARCHAR(255)
-  email           VARCHAR(255)
-  display_name    VARCHAR(255)
+  id                BINARY(16) PK
+  email             VARCHAR(255) NOT NULL UNIQUE
+  email_verified    TINYINT(1) NOT NULL DEFAULT 0
+  display_name      VARCHAR(255)
+  status            ENUM('pending_link','active','suspended') NOT NULL DEFAULT 'pending_link'
   created_at, updated_at, last_login_at
+  INDEX (email)
 
-domo_sessions       (1:1 with users)
-  user_id         BINARY(16) PK FK → users
-  access_token    VARBINARY        -- KMS envelope encrypted, 1h TTL JWT
-  refresh_token   VARBINARY        -- KMS envelope encrypted, 2y TTL, no rotation
-  expires_at      DATETIME         -- access_token expiry
-  scope           VARCHAR(255)     -- granted scopes from Gatekeeper
+magic_links
+  token_hash        VARCHAR(64) PK            -- SHA-256 of single-use token
+  user_id           BINARY(16) NOT NULL FK -> users(id)
+  expires_at        DATETIME NOT NULL         -- 15 min TTL
+  consumed_at       DATETIME NULL
+  ip_issued_from    VARCHAR(45)
+  INDEX (user_id, expires_at)
+
+-- Layer B — Domo linkage
+linked_domo_instances
+  id                BINARY(16) PK
+  user_id           BINARY(16) NOT NULL FK -> users(id)
+  issuer_url        VARCHAR(255) NOT NULL          -- byte-matches iss claim
+  customer_id       VARCHAR(64) NOT NULL           -- Gatekeeper cid
+  domo_sub          VARCHAR(64) NOT NULL           -- Gatekeeper sub
+  scope             VARCHAR(1000) NOT NULL
+  linked_at, last_used_at
+  UNIQUE (user_id, issuer_url, domo_sub)
+  INDEX (customer_id)
+
+domo_oauth_tokens
+  link_id           BINARY(16) PK FK -> linked_domo_instances(id) ON DELETE CASCADE
+  refresh_token     VARBINARY NOT NULL             -- AES-GCM ciphertext
+  refresh_iv        VARBINARY NOT NULL
+  refresh_dek_id    VARCHAR(255) NOT NULL          -- KMS-wrapped DEK reference
+  expires_at        DATETIME NULL                  -- access-token expiry (advisory)
+  scope             VARCHAR(1000) NOT NULL
   updated_at
 
-(optional) sessions   -- only if using server-side sessions; skip if stateless JWT
-  id              BINARY(16) PK
-  user_id         BINARY(16) FK → users
-  expires_at      DATETIME
-  ip, user_agent
+-- Category B — Huckleberry-owned app data
+personas
+  customer_id       VARCHAR(64) NOT NULL
+  user_id           BINARY(16) NOT NULL FK -> users(id)
+  id                BINARY(16)
+  focus_areas       JSON
+  is_default        TINYINT(1)
+  created_at, updated_at
+  PRIMARY KEY (customer_id, user_id, id)
+  INDEX (customer_id, user_id, is_default)
+
+mcp_servers
+  customer_id       VARCHAR(64) NOT NULL
+  user_id           BINARY(16) NOT NULL FK -> users(id)
+  id                BINARY(16)
+  name, url, enabled, auth_type, created_at, updated_at
+  PRIMARY KEY (customer_id, user_id, id)
+
+mcp_oauth_tokens
+  customer_id       VARCHAR(64) NOT NULL
+  mcp_server_id     BINARY(16) NOT NULL FK -> mcp_servers(id)
+  access_token      VARBINARY                       -- KMS envelope encrypted
+  refresh_token     VARBINARY                       -- KMS envelope encrypted
+  expires_at        DATETIME
+  PRIMARY KEY (customer_id, mcp_server_id)
 ```
 
-Plus the non-auth domain tables that already exist: `personas`, `agents_meta`, `agent_sessions`, `mcp_servers`, `mcp_oauth_tokens`. Those aren't part of "OAuth user management."
+Note that **memory tables are not here.** Memory lives in Mako's graph device, accessed via Mako APIs.
 
-## Service ↔ Table matrix (MVP)
+## Service ↔ Table matrix
 
-| Service | Tables |
+| Service | Tables | R/W |
+|---|---|---|
+| Auth (Layer A) | `users`, `magic_links` | R/W |
+| Sessions (Layer A) | none (Redis) | — |
+| DomoLink (Layer B) | `linked_domo_instances`, `domo_oauth_tokens` | R/W |
+| DomoAuthBroker (Layer B) | `domo_oauth_tokens` (refresh rotation), `linked_domo_instances` (last_used_at) | R/W |
+| Personas (Category B) | `personas` | R/W |
+| MCP (Category B) | `mcp_servers`, `mcp_oauth_tokens` | R/W |
+| Identity, People, Agents, Sessions (controllers), AI Services, Graph, DataSources, Connectors, Toolkits, Huckleberry | none | — |
+
+## Multi-tenant scoping
+
+- `users.id` is **huckleberry-global**. A huckleberry user is not bound to any single Domo customer.
+- `linked_domo_instances` is **N-per-user** — one row per linked instance.
+- All Category B rows are scoped by `(customer_id, user_id)`. The same huckleberry user can have personas under `labs` and a different set under `customer1` — they're separate rows.
+- The active link (held in the huckleberry session) determines which `customer_id` a request scopes to. `TenantBoundConnection` is acquired with that customer_id and the connection-level `SET @huckleberry_customer_id` is set accordingly.
+
+## What's encrypted at the column level
+
+| Column | Why |
 |---|---|
-| Auth | `users`, `domo_sessions`, `sessions` (if server-side) |
-| Identity | `users` |
-| People | none today (Domo-backed list) |
-| Personas | `personas` |
-| Agents / Sessions | `agents_meta`, `agent_sessions` |
-| MCP | `mcp_servers`, `mcp_oauth_tokens` |
-| Domo proxy services | none (stateless) |
-| DomoProxy | reads `domo_sessions` (Redis-cached) |
+| `domo_oauth_tokens.refresh_token` | Per-link Domo refresh credential. If a backup leaks, attacker shouldn't be able to act as the user against Domo. |
+| `mcp_oauth_tokens.access_token` | Third-party MCP credentials. Same logic. |
+| `mcp_oauth_tokens.refresh_token` | Same. |
 
-## Deferred for post-MVP
+No password hashes are stored (magic-link only). `magic_links.token_hash` is SHA-256 of the random token; the token itself never lands in the DB. Rate-limit `/auth/signin/request` per email + per IP to stop email-flood abuse.
 
-These were in earlier designs and have been removed for now. Each comes back when a real feature requires it.
+## Aurora rollout order
 
-| Table / concept | Defer until |
-|---|---|
-| `tenants` | First customer wants multiple users sharing context |
-| `instances` (separate from users) | A user actually needs to link a second Domo instance |
-| `linked_identities` | Non-Domo SSO arrives, or one human needs multiple Domo accounts |
-| `tenant_memberships` | Tenants exist |
-| `invitations` | First "invite a teammate" feature |
-| `audit_log` | First compliance / "who changed this?" ask |
-
-## Migration path when we expand
-
-When tenancy lands, the migration is mechanical, not painful:
-
-1. Create `tenants`, `tenant_memberships`, `invitations`
-2. Backfill one `tenants` row per existing user (each user becomes their own solo tenant)
-3. Add `tenant_id` FK to `users`
-4. (If multi-IdP) introduce `linked_identities`, move `domo_user_id` + `domo_instance` off `users` onto a new identity row, repoint `domo_sessions` FK
-
-Column names are kept honest in v1 (e.g. `domo_user_id`, not `external_id`) so the future migration is a straightforward rename + foreign-key shift, not a data model rethink.
+Tables ship in order: Layer A (users + identity) → Layer B (linkage + tokens) → Category B (personas / MCP). Aurora wiring is one ticket; the in-memory `Map<>` stubs on `personas` and `mcp` swap to repository calls in a follow-up.

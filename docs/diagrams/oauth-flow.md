@@ -1,168 +1,235 @@
-# Domo OAuth Flow (Authorization Code + PKCE via Gatekeeper)
+# Auth Flows — Huckleberry Identity + Domo OAuth Linkage
 
-Huckleberry registers as an OAuth 2.1 client in **Gatekeeper** — Domo's new internal OAuth 2.1 authorization server, replacing the older Gatekeeper.
+Two distinct flows in one diagram set. They serve different purposes and must not be conflated:
 
-Server-side authorization code flow. Huckleberry's NestJS backend is a **confidential client** — `client_secret` lives in Secrets Manager and never leaves the server. PKCE is mandatory under OAuth 2.1 (binds the code to the originating session so a stolen code can't be redeemed).
+- **Layer A — Huckleberry identity.** Sign-up, sign-in, session. We own this end-to-end. No Domo involvement.
+- **Layer B — Domo OAuth linkage.** Standard OAuth 2.1 authorization-code + PKCE flow against each customer's Gatekeeper instance. **The BFF is a public PKCE client** (`token_endpoint_auth_method=none`) — no `client_secret` to store. The only Domo material persisted per user is the refresh token (encrypted-at-rest in Aurora, rotated on every use per OAuth 2.1).
 
-## Gatekeeper client registration
+See `../authentication.md` for the design rationale, table schemas, and module surface.
 
-Confirm registration mechanism with the Gatekeeper team. Proposed client metadata:
+## Layer A — Huckleberry sign-in (magic-link)
 
-| Field | Value | Why |
-|---|---|---|
-| `ID` | `huckleberry` (or per Gatekeeper naming convention — confirm) | Single client identifier; convention TBD with Gatekeeper team |
-| `Secret` | UUID issued by Gatekeeper, stored in AWS Secrets Manager | `[]string` shape lets Gatekeeper rotate by appending a new secret then removing the old |
-| `Name` | `Huckleberry` | Display name on consent / stop screens |
-| `Internal` | `true` | Domo-built, internal-use |
-| `Confidential` | `true` | NestJS backend can hold a secret; not a public client |
-| `RequireStopScreens` | `true` | Matches precedent for confidential server apps (Workbench, ARC, Coursebuilder) |
-| `RedirectURIs` | `http://localhost:3000/auth/callback`, `https://huckleberry-staging.<domain>/auth/callback`, `https://huckleberry.<domain>/auth/callback` | Dev, staging, prod callbacks |
+Two distinct entry points:
 
-## Sequence
+- **Sign-up** (`POST /api/auth/signup`): provisions a Domo instance + user via `InstanceProvisioner`, inserts the huckleberry user row in `pending_link` status, seeds a pending `linked_domo_instances` row (no tokens), and emails a magic-link. First sign-in completes the PKCE auth-code flow to mint the user's refresh token.
+- **Sign-in** (`POST /api/auth/signin/request`): existing-users-only. Sends a magic-link if the email matches a row; silently no-ops otherwise. Always returns 202 (existence-oracle protection).
 
 ```mermaid
 sequenceDiagram
     autonumber
-    participant U as User Browser
+    participant U as User
+    participant FE as Huckleberry UI<br/>(huckleberry.com)
     participant BFF as Huckleberry BFF
-    participant R as Redis
     participant DB as Aurora MySQL
-    participant SM as Secrets Manager
-    participant H as Gatekeeper
-    participant D as Domo Instance APIs
+    participant R as Redis
+    participant SES as AWS SES
 
-    U->>BFF: GET /auth/login
-    BFF->>BFF: generate state and code_verifier<br/>code_challenge is S256 of code_verifier
-    BFF->>R: store state with code_verifier, returnTo (TTL 10m)
-    BFF-->>U: 302 to Gatekeeper /oauth/authorize<br/>params: client_id, redirect_uri, state,<br/>scope, code_challenge
-
-    U->>H: follows redirect, logs in
-    H-->>U: consent screen (RequireStopScreens true)
-    U->>H: approve
-    H-->>U: 302 to BFF /auth/callback with code and state
-
-    U->>BFF: GET /auth/callback with code and state
-    BFF->>R: lookup state, get code_verifier
-    R-->>BFF: code_verifier (or 400 if missing or expired)
-    BFF->>SM: get Gatekeeper client_secret
-    SM-->>BFF: client_secret
-
-    BFF->>H: POST /oauth/token<br/>grant_type authorization_code<br/>plus code, redirect_uri, client_id,<br/>client_secret, code_verifier
-    H-->>BFF: RS256 JWT access_token (1h),<br/>refresh_token (2y), expires_in
-
-    BFF->>BFF: decode JWT claims sub, cid, iid
-    BFF->>D: GET /api/content/v3/users/me<br/>with Bearer access_token
-    D-->>BFF: domo_user_id, email, displayName
-
-    BFF->>DB: upsert users with domo_user_id, email, instance
-    BFF->>DB: upsert domo_sessions<br/>encrypted access and refresh, expires_at
-    BFF->>BFF: issue Huckleberry session JWT
-    BFF->>R: store hb_session and user_id (TTL is session lifetime)
-    BFF-->>U: 302 to returnTo + hb_session cookie<br/>(HttpOnly, Secure, SameSite Lax)
-
-    Note over U,D: subsequent API calls
-    U->>BFF: GET /api/agents with cookie
-    BFF->>R: validate hb_session, get user_id
-    BFF->>R: get cached access_token for user
-    alt token expired or missing
-        BFF->>DB: load domo_sessions
-        BFF->>H: POST /oauth/token<br/>grant_type refresh_token
-        H-->>BFF: new access_token<br/>(refresh_token reused, no rotation)
-        BFF->>DB: update domo_sessions access_token and expires_at
-        BFF->>R: cache access_token (TTL under expires_in)
+    Note over U,SES: Request magic-link
+    U->>FE: enters email, clicks "Send me a sign-in link"
+    FE->>BFF: POST /auth/signin/request { email }<br/>X-CSRF-Token: ...
+    BFF->>BFF: rate-limit by email + IP
+    BFF->>DB: SELECT users WHERE email = ? AND email_verified
+    alt user exists and verified
+        BFF->>BFF: generate random token (32 bytes), token_hash = SHA-256
+        BFF->>DB: INSERT magic_links (token_hash, user_id, expires_at=NOW()+15m)
+        BFF->>SES: send email with link huckleberry.com/auth/signin?token=<raw>
     end
-    BFF->>D: Domo API call with Bearer access_token
-    D-->>BFF: response
-    BFF-->>U: response
+    BFF-->>FE: 202 (regardless of existence — don't leak)
+    FE-->>U: "Check your inbox"
+
+    Note over U,R: Consume the link
+    U->>FE: clicks email link → /auth/signin?token=...
+    FE->>BFF: GET /auth/signin?token=...
+    BFF->>BFF: token_hash = SHA-256(token)
+    BFF->>DB: SELECT magic_links WHERE token_hash AND consumed_at IS NULL AND expires_at > NOW()
+    alt valid
+        BFF->>DB: UPDATE magic_links SET consumed_at=NOW() WHERE token_hash AND consumed_at IS NULL
+        Note over BFF,DB: Atomic — affected rows = 1 means we won the race
+        BFF->>DB: UPDATE users SET email_verified=1, last_login_at=NOW()
+        BFF->>R: SET session:<sid> = { userId, exp } (TTL 12h)
+        BFF-->>FE: Set-Cookie: hb_session=<HS256 JWT { sub, sid, exp }><br/>HttpOnly; Secure; SameSite=Lax
+        BFF-->>FE: Set-Cookie: csrf_token=<random><br/>Secure; SameSite=Lax (NOT HttpOnly)
+        alt user.status == 'pending_link'
+            BFF-->>FE: 302 → /auth/domo/link/start (forced OAuth handoff)
+        else
+            BFF-->>FE: 302 → /app
+        end
+    else
+        BFF-->>FE: 400 invalid_or_expired_token
+    end
+
+    Note over U,R: Subsequent requests
+    U->>FE: any app action
+    FE->>BFF: GET /something<br/>Cookie: hb_session=...<br/>X-CSRF-Token: <echo of csrf_token cookie>
+    BFF->>BFF: HuckleberryAuthGuard:<br/>verify cookie JWT signature
+    BFF->>R: GET session:<sid>
+    R-->>BFF: { userId, exp } or null → 401
+    BFF->>BFF: CSRF guard (state-changing routes only)
+    BFF->>BFF: attach HuckleberryPrincipal { userId, sessionId, activeLinkId? }
+
+    Note over U,R: Sliding TTL
+    BFF->>R: EXPIRE session:<sid> 12h<br/>(extend on every valid request)
+
+    Note over U,R: Sign out
+    U->>FE: POST /auth/logout (Cookie + X-CSRF-Token)
+    FE->>BFF: POST /auth/logout
+    BFF->>R: DEL session:<sid>
+    BFF-->>FE: Set-Cookie: hb_session=; Max-Age=0<br/>Set-Cookie: csrf_token=; Max-Age=0
 ```
 
-## Why this flow
+The very first magic-link click does double duty: marks the user `email_verified=1` and issues their first session. No separate "verify email then come back to sign in" round-trip.
 
-- **Authorization code with confidential client** — backend keeps `client_secret`, tokens never touch the browser
-- **PKCE included as forward-compat** — Gatekeeper accepts but doesn't enforce today; harmless to send
-- **`state` parameter** — CSRF protection on the callback; also doubles as the lookup key for the per-flow `code_verifier`
-- **Tokens encrypted at rest** — KMS-backed envelope encryption on `domo_sessions.access_token` / `refresh_token`
-- **Redis as token cache** — avoids a DB read on every Domo API call; falls back to DB on miss
-- **Single client registration** — Huckleberry is one app talking to one Gatekeeper (Domo's auth server), not per-instance. `instance` is a property of the user, not the OAuth client
+## Layer B — Linking a Domo instance
 
-## Gatekeeper facts (confirmed against `~/dev/heimdall`)
+```mermaid
+sequenceDiagram
+    autonumber
+    participant U as User
+    participant FE as Huckleberry UI
+    participant BFF as Huckleberry BFF
+    participant SM as Secrets Manager
+    participant R as Redis
+    participant DB as Aurora MySQL
+    participant KMS as AWS KMS
+    participant GK as Gatekeeper<br/>(customer.domo.com)
 
-### Endpoints
-| Purpose | Path | File |
-|---|---|---|
-| Authorization | `/oauth/authorize` | `main.go:148` |
-| Token | `/oauth/token` | `main.go:149` |
-| Revocation (RFC 7009) | `/oauth/revoke` | `main.go:150` |
-| Introspection (RFC 7662) | `/oauth/introspect` | `main.go:151` |
-| Userinfo (Gatekeeper only) | `/userinfo` (proxied) | `route_product.go:196` |
-| Discovery | `/.well-known/*` (proxied to Gatekeeper, allowlisted customers only) | `route_product.go:195` |
+    Note over U,FE: User is signed into huckleberry already
+    U->>FE: clicks "Link a Domo instance"
+    FE->>U: prompt for instance URL
+    U->>FE: enters https://customer.domo.com
 
-### Tokens (assumed; confirm with Gatekeeper team)
-- **Format**: RS256-signed JWTs; decodable for claims (`jti`, `sub`, `aud`, `exp`, `scope`, `cid`, `iid`, `sid`)
-- **Access token TTL**: short-lived (1h target)
-- **Refresh token TTL**: long-lived; **OAuth 2.1 mandates rotation** — every refresh response yields a new refresh_token
-- **PKCE**: mandatory under OAuth 2.1; both `/authorize` and `/token` enforce it
+    FE->>BFF: POST /auth/domo/link/start { instanceUrl }<br/>Cookie: hb_session
+    BFF->>BFF: validate instanceUrl matches allowlist / pattern
+    BFF->>BFF: generate code_verifier, code_challenge=S256(verifier), state
+    BFF->>R: SET link_init:<state> = { userId, instanceUrl, code_verifier } (TTL 10m)
+    BFF-->>FE: 200 { authorizeUrl }
+    FE-->>U: 302 to authorizeUrl
 
-### Scopes (proposed; confirm with Gatekeeper team)
-| Endpoint Huckleberry calls | Scope to request |
+    U->>GK: GET /oauth2/authorize?<br/>client_id=huckleberry-prod&redirect_uri=https://huckleberry.com/auth/domo/callback<br/>&response_type=code&scope=...&state=...&code_challenge=...&code_challenge_method=S256
+    GK-->>U: DomoWeb login (if needed), then consent (first time)
+    U->>GK: Allow
+    GK-->>U: 302 to https://huckleberry.com/auth/domo/callback?code=...&state=...
+
+    U->>FE: arrives at /auth/domo/callback (browser leg)
+    FE->>BFF: GET /auth/domo/callback?code=...&state=... (Cookie)
+    BFF->>R: GET link_init:<state>
+    R-->>BFF: { userId, instanceUrl, code_verifier }<br/>(or 400 if missing / expired)
+    BFF->>GK: POST /oauth2/token<br/>grant_type=authorization_code<br/>code, redirect_uri, client_id, code_verifier<br/>(public PKCE client — no client_secret)
+    GK-->>BFF: { access_token, refresh_token, expires_in, scope }
+
+    BFF->>BFF: GatekeeperAuthGuard.verify(access_token)<br/>against {instanceUrl}/oauth2/jwks<br/>(checks ES256, typ=at+jwt, iss, exp, sub)
+    BFF->>BFF: extract cid (customer slug), sub (domo user)
+
+    BFF->>KMS: GenerateDataKey for token encryption
+    KMS-->>BFF: { plaintext DEK, encrypted DEK }
+    BFF->>BFF: AES-GCM encrypt refresh_token with DEK
+
+    BFF->>DB: INSERT linked_domo_instances (user_id, issuer_url, customer_id, domo_sub, scope)
+    BFF->>DB: INSERT domo_oauth_tokens (link_id, refresh_token, refresh_iv, refresh_dek_id, scope)
+    BFF->>R: SET access:<link_id> = access_token (TTL = expires_in - 60s)
+    BFF->>R: DEL link_init:<state>
+    BFF-->>FE: 302 → /app  (linkage complete)
+```
+
+## Per-request — using a linked Domo instance
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant FE as Huckleberry UI
+    participant BFF as Huckleberry BFF<br/>(Resource server + Domo broker)
+    participant R as Redis
+    participant DB as Aurora MySQL
+    participant KMS as AWS KMS
+    participant GK as Gatekeeper
+    participant DOMO as Domo APIs
+
+    FE->>BFF: GET /agents<br/>Cookie: hb_session
+    BFF->>BFF: HuckleberryAuthGuard: cookie → principal
+    BFF->>BFF: activeLinkId from session state
+
+    Note over BFF,R: DomoAuthBroker.tokenFor(linkId)
+    BFF->>R: GET access:<link_id>
+    alt cache hit and not expired
+        R-->>BFF: access_token
+    else cache miss
+        BFF->>DB: SELECT domo_oauth_tokens WHERE link_id = ?
+        BFF->>KMS: Decrypt DEK
+        KMS-->>BFF: plaintext DEK
+        BFF->>BFF: AES-GCM decrypt refresh_token
+        BFF->>GK: POST /oauth2/token grant_type=refresh_token
+        GK-->>BFF: { access_token, refresh_token (rotated), expires_in }
+        BFF->>BFF: verify new access_token vs JWKS
+        BFF->>BFF: encrypt new refresh_token with DEK
+        BFF->>DB: UPDATE domo_oauth_tokens (refresh, scope)
+        BFF->>R: SET access:<link_id> = access_token (TTL)
+    end
+
+    BFF->>DOMO: GET /api/ai/v1/agents<br/>Authorization: Bearer <access_token><br/>Host: customer.domo.com
+    DOMO-->>BFF: 200 { agents }
+    BFF-->>FE: 200 { agents }
+```
+
+## Refresh-token rotation + reuse detection
+
+Gatekeeper enforces single-use refresh tokens. Every refresh exchange:
+
+1. Invalidates the presented refresh token.
+2. Issues a new access + refresh pair.
+3. Stores the prior refresh value so replay is detectable.
+
+If the BFF presents a rotated-out refresh token, Gatekeeper **cascade-revokes the entire authorization** — every live token from that row stops working immediately. Practical implication for our `domo_oauth_tokens` table:
+
+- Every refresh response *must* atomically overwrite the stored refresh token. If the write fails after the exchange succeeded, we've lost the new refresh and the link is effectively dead.
+- Implement the write as a `BEGIN TRANSACTION; UPDATE ...; COMMIT;` with a guaranteed-durable Aurora write — and if it errors, surface to the user as "Re-link your Domo account."
+- Never retry a failed refresh with the same refresh token. The reuse signal is fatal at Gatekeeper.
+
+## Endpoints we use against Gatekeeper
+
+| Purpose | Path |
 |---|---|
-| Mako `/api/ai/v1/agents/*` (agents, execute, sessions) | `ai-services` |
-| Mako `/api/ai/v1/memory/*` (memory admin) | `ai-services` |
-| Mako `/api/ai/v1/text/*` | `ai-services` |
-| Mako `/api/recall/v1/*` (graph nodes) | `ai-services` |
-| `/api/content/v3/*` (users, groups) | `content` |
-| `/api/content/v3/users/me` | `user-profile` |
-| `/api/identity/v1/*` | `identity` (or `content`) |
-| `/api/data/v3/*` (datasources) | `data` |
+| Authorization | `GET /oauth2/authorize` |
+| Token (auth code, refresh) | `POST /oauth2/token` |
+| JWKS | `GET /oauth2/jwks` |
+| Revocation | `POST /oauth2/revoke` |
+| Discovery | `GET /.well-known/oauth-authorization-server` |
+| UserInfo (optional) | `GET /userinfo` |
 
-**Recommended scope set:** `ai-services content data user-profile`. Avoid `user` / `identity` unless we mutate users.
+All paths live on the tenant hostname (`https://{customer}.domo.com`). The BFF discovers them once per linked instance at startup (cached) rather than hardcoding paths.
 
-### Bearer token against Domo APIs
-The Gatekeeper-issued Bearer JWT is the canonical credential for downstream Domo (and Mako) API calls. Drop `x-domo-developer-token` / `x-domo-eps-auth-token` from DomoProxy when Huckleberry is wired up — replace with `Authorization: Bearer <gatekeeper_jwt>`.
+## Client registration — confidential, not public
 
-### Identity propagation
-1. **Decode + verify JWT claims** — `sub` is the user ID, `cid` is customer, `iid` is instance. Cheap. No network call. (Verification mandatory — see correctness rules in `auth-providers.md`.)
-2. **Call `/api/content/v3/users/me`** with `user-profile` scope to get email + display name. Once at login, persist on `users` row.
+Huckleberry registers with Gatekeeper as a **public PKCE OAuth 2.1 client**:
 
-Use both: claims for fast per-request identity, `/users/me` once at login for profile data.
-
-### Discovery
-Gatekeeper as OAuth 2.1 should expose a discovery endpoint (`/.well-known/oauth-authorization-server` or OIDC equivalent). Fetch + cache at boot to avoid hardcoded endpoint paths. Confirm path with the Gatekeeper team.
-
-## Implementation implications
-
-1. **Drop the `DomoAuthProvider` swappable seam.** Single provider implementation against Gatekeeper.
-2. **Refresh logic**: OAuth 2.1 requires refresh-token rotation — always overwrite `domo_sessions.refresh_token` from the response.
-3. **Schema**: `oauth_tokens.refresh_token` is always populated (no NULL case).
-4. **PKCE is mandatory** — send and validate `code_challenge` / `code_verifier` end-to-end.
-
-## OAuth 2.1 — what we build
-
-Gatekeeper is OAuth 2.1 native. The "build now vs defer" framing from the prior Heimdall era simplifies — most items are simply correctness requirements.
-
-### Required (correctness, not optional)
-
-| # | What |
+| Field | Value |
 |---|---|
-| 1 | **Always overwrite `domo_sessions.refresh_token` from the refresh response.** OAuth 2.1 mandates rotation. |
-| 2 | **Verify RS256 JWT signature against Gatekeeper's JWKS** before trusting any claim. JWKS fetched at boot, cached, used on every decode. |
-| 3 | **Validate `iss` and `aud` claims** on every JWT we accept. |
-| 4 | **On refresh `/token` → 401 (or `invalid_grant`)**, immediately invalidate the user's `hb_session` and force re-login. |
-| 5 | **Single `verifyAndDecodeAccessToken(jwt)` function** used everywhere. |
-| 6 | **Single `injectBearer(req)` function in DomoProxy** for outbound auth. |
-| 7 | **Persist granted `scope` on `domo_sessions`**; re-auth when scope set changes. |
-| 8 | **Reject bearer tokens from query strings.** OAuth 2.1 forbids `?access_token=`. |
-| 9 | **Exact redirect URI matching** at our `/auth/callback`. |
-| 10 | **PKCE end-to-end** — generate `code_verifier` per flow, send `code_challenge` to `/authorize`, send `code_verifier` to `/token`. |
+| `client_name` | `Huckleberry` |
+| `redirect_uris` | `https://huckleberry.com/auth/domo/callback`, plus staging/dev variants |
+| `grant_types` | `["authorization_code", "refresh_token"]` |
+| `response_types` | `["code"]` |
+| `token_endpoint_auth_method` | `none` (public PKCE client) |
+| `scope` | union of all scopes we ever request across features — `ai:read ai:execute content:meta:read content:data:read dataset:meta:read dataset:data:read identity:read search:read` |
 
-### Deferred (confirm with Gatekeeper team)
+There is no `client_secret`. PKCE (S256 code-challenge) is the proof-of-possession. The verifier never leaves the BFF — it's stored in the `OAuthStateStore` keyed by `state` for the duration of the round-trip.
 
-| # | What | Trigger to revisit |
-|---|---|---|
-| A | **DPoP / sender-constrained tokens** | Gatekeeper supports DPoP (RFC 9449) and a high-value feature requires it |
-| B | **Front-channel / back-channel logout** | Gatekeeper publishes session-end notifications |
-| C | **Periodic introspection probes** of access tokens | High-sensitivity feature lands |
-| D | **Multi-device / multi-session per user** (1:N `domo_sessions`) | First user complaint or external-customer phase |
-| E | **mTLS client auth** to Gatekeeper token endpoint | Gatekeeper mandates, or high-value-target deployment |
-| F | **Refresh-token-at-rest hashing** | n/a — encryption + KMS is the right primitive |
-| G | **Token introspection endpoint** for inbound bearer auth | Huckleberry exposes APIs that accept Gatekeeper bearers directly |
+Open question: does each Domo customer require us to register separately, or does one global Gatekeeper registration work across all customer instances? The Postman collection registers per-instance via `POST /oauth2/register`; we likely need one registration per allowed customer. Track this with the Gatekeeper team.
+
+## Correctness rules for the BFF-side OAuth implementation
+
+1. **Always overwrite `domo_oauth_tokens.refresh_token` from every refresh response.** OAuth 2.1 mandates rotation; treat every response as authoritative.
+2. **Verify the access token via JWKS before persisting.** Even though we just exchanged a code for it, an invalid token means we have nothing useful to store. Use `GatekeeperAuthGuard.verify` (now factored to be reusable internally).
+3. **Validate `iss` and `aud` claims** as part of #2. Reject if the token's `iss` doesn't match the `instanceUrl` we initiated the flow against.
+4. **On any refresh failure (401 / `invalid_grant`), mark the link as broken.** The user must re-link to recover. Cascade-revocation makes this a one-way door.
+5. **Single bearer-injection point in DomoProxy.** All outbound Domo calls go through `DomoProxyService` with `{ targetHost, bearer }`.
+6. **Reject `?access_token=` query parameters** inbound. We never accept tokens via URL — only via the huckleberry session cookie (Layer A) or as `Authorization: Bearer` on internal proxy calls.
+7. **Never log full tokens.** Log `jti` claim or first 8 chars of the signature only. KMS-encrypt tokens at rest, even in dev (use a local KMS or LocalStack for parity).
+8. **Exact redirect URI match.** `/auth/domo/callback` is the only valid callback path; no trailing slashes, no path params.
+9. **Bind the OAuth `state` to the huckleberry session.** The `state` lookup in Redis must include the `userId` from the session cookie — a callback hitting our endpoint without the matching huckleberry session is rejected.
+
+## Why this is the right model for standalone huckleberry.com
+
+- Users sign in once with a huckleberry credential. Their session survives Domo session expiries.
+- One huckleberry user can link multiple Domo instances and switch without re-authing each one.
+- Refresh tokens live server-side, so we can do background work (memory extraction, scheduled jobs) on behalf of the user when the browser is closed.
+- The PKCE verifier lives only inside the BFF process — never reaches the browser. The SPA's job ends at the authorize redirect; the callback hits the BFF directly.
+

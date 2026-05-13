@@ -1,8 +1,13 @@
 import { Module } from '@nestjs/common';
+import { APP_INTERCEPTOR } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { join } from 'node:path';
+import { DomoContextInterceptor } from './common/auth/domo-context.interceptor.js';
 import configuration from './common/config/configuration.js';
+import { AuthModule } from './common/auth/auth.module.js';
+import { DomoLinkModule } from './common/auth/domo-link/domo-link.module.js';
+import { HuckleberryAuthModule } from './auth/auth.module.js';
 import { AgentsModule } from './agents/agents.module.js';
 import { AiServicesModule } from './ai-services/ai-services.module.js';
 import { ConnectorsModule } from './connectors/connectors.module.js';
@@ -26,8 +31,17 @@ import { ToolkitsModule } from './toolkits/toolkits.module.js';
     }),
     ServeStaticModule.forRoot({
       rootPath: join(__dirname, '..', 'public'),
-      exclude: ['/api{/*path}', '/domo{/*path}', '/health{/*path}'],
+      exclude: [
+        '/api{/*path}',
+        '/domo{/*path}',
+        '/health{/*path}',
+        '/auth{/*path}',
+        '/admin{/*path}',
+      ],
     }),
+    AuthModule,
+    HuckleberryAuthModule,
+    DomoLinkModule,
     AgentsModule,
     AiServicesModule,
     ConnectorsModule,
@@ -42,6 +56,12 @@ import { ToolkitsModule } from './toolkits/toolkits.module.js';
     PeopleModule,
     SessionsModule,
     ToolkitsModule,
+  ],
+  providers: [
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: DomoContextInterceptor,
+    },
   ],
 })
 export class AppModule {}

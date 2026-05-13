@@ -4,6 +4,16 @@ Behavioral guidelines to reduce common LLM coding mistakes. Merge with project-s
 
 **Tradeoff:** These guidelines bias toward caution over speed. For trivial tasks, use judgment.
 
+## Tooling — pnpm only
+
+This project uses **pnpm** for everything: install, run scripts, add packages, the lockfile.
+
+- `pnpm install`, `pnpm add <pkg>`, `pnpm remove <pkg>`
+- `pnpm <script>` (e.g. `pnpm start:dev`, `pnpm test`, `pnpm test:e2e`, `pnpm test:auth`)
+- `pnpm-lock.yaml` is the source of truth. `package-lock.json` and `yarn.lock` are gitignored — do not generate them.
+
+Never run `npm install` or `yarn` against this repo. If you do, the resulting `package-lock.json` / `yarn.lock` is wrong and out-of-sync with `pnpm-lock.yaml`.
+
 ## 1. Think Before Coding
 
 **Don't assume. Don't hide confusion. Surface tradeoffs.**
