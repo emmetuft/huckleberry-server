@@ -1,0 +1,46 @@
+# Local-dev infra. Bring up with `podman compose up -d` (or `docker compose up -d`
+# if you happen to have Docker installed). MySQL 8.4 LTS — matches our Aurora
+# target, so reserved words and removed-deprecated-feature classes of bugs
+# surface locally instead of at deploy time (we've been bit by this before).
+#
+# Volumes are named — they survive `compose down` but are wiped with
+# `compose down -v` or `podman volume rm huckleberry-server_mysql-data`.
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: huckleberry-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: huckleberry
+      MYSQL_USER: huckleberry
+      MYSQL_PASSWORD: huckleberry
+      MYSQL_RANDOM_ROOT_PASSWORD: 'yes'
+    ports:
+      - '3306:3306'
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ['CMD', 'mysqladmin', 'ping', '-h', 'localhost', '-uhuckleberry', '-phuckleberry']
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  # Local SMTP capture for the magic-link flow. The BFF sends to :1025 via
+  # nodemailer; Mailpit traps every outgoing email and serves them in a web
+  # UI at http://localhost:8025 — open, click the magic-link, demo continues.
+  # Nothing escapes the container. In prod the same EmailService interface
+  # is implemented by an SES-backed impl.
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: huckleberry-mailpit
+    restart: unless-stopped
+    ports:
+      - '1025:1025'   # SMTP
+      - '8025:8025'   # web UI
+    environment:
+      MP_MAX_MESSAGES: 500
+      MP_SMTP_AUTH_ACCEPT_ANY: 'true'
+      MP_SMTP_AUTH_ALLOW_INSECURE: 'true'
+
+volumes:
+  mysql-data:
