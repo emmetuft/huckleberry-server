@@ -18,13 +18,19 @@
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/jest/bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "test:auth": "jest --config ./test/jest-e2e.json --testPathPattern=auth-flow",
-    "demo:auth": "./scripts/demo-auth.sh"
+    "demo:auth": "./scripts/demo-auth.sh",
+    "infra:up": "podman compose up -d",
+    "infra:down": "podman compose down",
+    "infra:reset": "podman compose down -v && podman compose up -d",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:studio": "drizzle-kit studio"
   },
   "engines": {
     "node": ">=20.0.0",
-    "pnpm": ">=8.0.0"
+    "pnpm": ">=10.0.0"
   },
-  "packageManager": "pnpm@8.15.0",
+  "packageManager": "pnpm@10.5.0",
   "dependencies": {
     "@nestjs/common": "^11.0.17",
     "@nestjs/config": "^4.0.3",
@@ -34,8 +40,11 @@
     "@nestjs/swagger": "^11.2.6",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.3",
+    "drizzle-orm": "^0.45.2",
     "jose": "^5.10.0",
+    "mysql2": "^3.22.3",
     "neo4j-driver": "^6.0.1",
+    "nodemailer": "^8.0.7",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
     "uuid": "^13.0.0"
@@ -51,8 +60,11 @@
     "@types/express": "^5.0.0",
     "@types/jest": "^29.5.14",
     "@types/node": "^22.10.7",
+    "@types/nodemailer": "^8.0.0",
     "@types/supertest": "^6.0.2",
     "@types/uuid": "^10.0.0",
+    "dotenv": "^17.4.2",
+    "drizzle-kit": "^0.31.10",
     "eslint": "^9.18.0",
     "eslint-config-prettier": "^10.0.1",
     "eslint-plugin-prettier": "^5.2.3",
@@ -65,6 +77,7 @@
     "ts-loader": "^9.5.2",
     "ts-node": "^10.9.2",
     "tsconfig-paths": "^4.2.0",
+    "tsx": "^4.22.0",
     "typescript": "^5.7.3",
     "typescript-eslint": "^8.20.0"
   },

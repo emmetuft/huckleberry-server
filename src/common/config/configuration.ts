@@ -22,6 +22,30 @@ export interface AppConfig {
   neo4jPassword: string;
   neo4jDatabase: string;
   /**
+   * MySQL connection string for the BFF's persistent state (users,
+   * magic_links, sessions, linked_domo_instances, domo_oauth_tokens).
+   * Mirrors the Aurora MySQL 8.4 target. When unset, repositories fall back to the
+   * in-memory MVP implementations.
+   */
+  databaseUrl: string | null;
+  /**
+   * When true, apply pending Drizzle migrations at boot. Local dev only —
+   * production runs the same SQL files via a deploy-time runner with
+   * `GET_LOCK('hb_migrate', 30)` (see docs/diagrams/aurora-integration.md).
+   */
+  databaseRunMigrations: boolean;
+  /**
+   * SMTP host for the magic-link `EmailService`. Local dev points at
+   * Mailpit (localhost:1025). Prod points at SES SMTP. When unset, the
+   * BFF falls back to `ConsoleEmailService` and logs the URL.
+   */
+  smtpHost: string | null;
+  smtpPort: number;
+  smtpSecure: boolean;
+  smtpUser: string;
+  smtpPass: string;
+  smtpFrom: string;
+  /**
    * Which guard runs on Category-A controllers.
    * - `dev` (default): the legacy `DomoAuthGuard` that accepts `DEV_TOKEN` /
    *   header passthrough.
@@ -206,6 +230,14 @@ export default (): { app: AppConfig } => ({
     neo4jUser: process.env.NEO4J_USER || 'neo4j',
     neo4jPassword: process.env.NEO4J_PASSWORD || '',
     neo4jDatabase: process.env.NEO4J_DATABASE || 'neo4j',
+    databaseUrl: process.env.DATABASE_URL || null,
+    databaseRunMigrations: process.env.DATABASE_RUN_MIGRATIONS === 'true',
+    smtpHost: process.env.SMTP_HOST || null,
+    smtpPort: parseInt(process.env.SMTP_PORT || '1025', 10),
+    smtpSecure: process.env.SMTP_SECURE === 'true',
+    smtpUser: process.env.SMTP_USER || '',
+    smtpPass: process.env.SMTP_PASS || '',
+    smtpFrom: process.env.SMTP_FROM || 'huckleberry@localhost',
     authProvider: parseAuthProvider(process.env.AUTH_PROVIDER),
     gatekeeperIssuers: parseIssuers(process.env),
     gatekeeperJwksUriOverrides: parseJwksOverrides(process.env),

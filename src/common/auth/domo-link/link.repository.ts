@@ -5,6 +5,12 @@ export interface LinkRepository {
   findById(linkId: string): Promise<LinkedDomoInstance | null>;
   findActiveForUser(userId: string): Promise<LinkedDomoInstance | null>;
   insert(link: LinkedDomoInstance): Promise<LinkedDomoInstance>;
+  /**
+   * Overwrite an existing link row. Used by `completeLink` to fill in
+   * `domoSub` + `customerId` + `scope` on the bootstrap row created at
+   * signup, instead of creating a second row per user.
+   */
+  update(link: LinkedDomoInstance): Promise<LinkedDomoInstance>;
   touchLastUsed(linkId: string): Promise<void>;
   delete(linkId: string): Promise<void>;
 }
@@ -35,6 +41,14 @@ export class InMemoryLinkRepository implements LinkRepository {
   insert(link: LinkedDomoInstance): Promise<LinkedDomoInstance> {
     this.byId.set(link.id, link);
     this.byUserId.set(link.userId, link.id);
+    return Promise.resolve(link);
+  }
+
+  update(link: LinkedDomoInstance): Promise<LinkedDomoInstance> {
+    if (!this.byId.has(link.id)) {
+      return Promise.reject(new Error(`link not found: ${link.id}`));
+    }
+    this.byId.set(link.id, link);
     return Promise.resolve(link);
   }
 

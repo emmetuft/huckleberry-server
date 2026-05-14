@@ -168,17 +168,36 @@ export class DomoLinkService {
       throw new BadRequestException('access_token_missing_cid_or_sub');
     }
 
-    const link: LinkedDomoInstance = {
-      id: randomUUID(),
-      userId: opts.sessionUserId,
-      issuerUrl: pending.issuerUrl,
-      customerId: cid,
-      domoSub: sub,
-      scope: tokenResp.scope,
-      linkedAt: new Date(),
-      lastUsedAt: new Date(),
-    };
-    await this.links.insert(link);
+    // Reuse the bootstrap link row created at signup. If it's missing
+    // (legacy users created before bootstrap was a thing, or admin paths
+    // that skipped it), fall back to creating one — keeps the contract
+    // "one link row per user" intact.
+    const existing = await this.links.findActiveForUser(opts.sessionUserId);
+    const now = new Date();
+    const link: LinkedDomoInstance = existing
+      ? {
+          ...existing,
+          issuerUrl: pending.issuerUrl,
+          customerId: cid,
+          domoSub: sub,
+          scope: tokenResp.scope,
+          lastUsedAt: now,
+        }
+      : {
+          id: randomUUID(),
+          userId: opts.sessionUserId,
+          issuerUrl: pending.issuerUrl,
+          customerId: cid,
+          domoSub: sub,
+          scope: tokenResp.scope,
+          linkedAt: now,
+          lastUsedAt: now,
+        };
+    if (existing) {
+      await this.links.update(link);
+    } else {
+      await this.links.insert(link);
+    }
     await this.tokens.upsert({
       linkId: link.id,
       refreshToken: tokenResp.refreshToken,

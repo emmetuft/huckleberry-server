@@ -1,4 +1,5 @@
 import { Global, Module } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { AdminController } from './admin.controller.js';
 import { AuthController } from './auth.controller.js';
 import { AuthService } from './auth.service.js';
@@ -13,31 +14,66 @@ import {
   SESSION_REPOSITORY,
   InMemorySessionRepository,
 } from './session.repository.js';
-import { EMAIL_SERVICE, ConsoleEmailService } from './email.service.js';
+import {
+  EMAIL_SERVICE,
+  ConsoleEmailService,
+  SmtpEmailService,
+} from './email.service.js';
 import { HuckleberryAuthGuard } from '../common/auth/huckleberry-auth.guard.js';
+import { DbModule, DRIZZLE, type Db } from '../common/db/db.module.js';
+import { MysqlUserRepository } from '../common/db/repositories/mysql-user.repository.js';
+import { MysqlMagicLinkRepository } from '../common/db/repositories/mysql-magic-link.repository.js';
+import { MysqlSessionRepository } from '../common/db/repositories/mysql-session.repository.js';
+import type { AppConfig } from '../common/config/configuration.js';
 
 /**
  * Layer A wiring — magic-link sign-in + session.
  *
- * Repositories are bound to in-memory impls today. Swap to Aurora-backed
- * impls when `TenantBoundConnection` lands by changing only the provider
- * useClass values; no consumer needs to change.
- *
- * EmailService is bound to a console-logging impl in dev. The SES impl
- * lives behind the same interface and is selected post-MVP.
+ * Repositories pick MySQL when `DATABASE_URL` is set (so the BFF can boot
+ * against `pnpm infra:up`), and fall back to the in-memory MVP impls otherwise
+ * (so tests + zero-config local dev keep working).
  */
 @Global()
 @Module({
+  imports: [DbModule],
   controllers: [AuthController, AdminController],
   providers: [
     AuthService,
     SessionService,
     SignupService,
     HuckleberryAuthGuard,
-    { provide: USER_REPOSITORY, useClass: InMemoryUserRepository },
-    { provide: MAGIC_LINK_REPOSITORY, useClass: InMemoryMagicLinkRepository },
-    { provide: SESSION_REPOSITORY, useClass: InMemorySessionRepository },
-    { provide: EMAIL_SERVICE, useClass: ConsoleEmailService },
+    {
+      provide: USER_REPOSITORY,
+      inject: [ConfigService, DRIZZLE],
+      useFactory: (config: ConfigService, db: Db | null) =>
+        useMysql(config) && db
+          ? new MysqlUserRepository(db)
+          : new InMemoryUserRepository(),
+    },
+    {
+      provide: MAGIC_LINK_REPOSITORY,
+      inject: [ConfigService, DRIZZLE],
+      useFactory: (config: ConfigService, db: Db | null) =>
+        useMysql(config) && db
+          ? new MysqlMagicLinkRepository(db)
+          : new InMemoryMagicLinkRepository(),
+    },
+    {
+      provide: SESSION_REPOSITORY,
+      inject: [ConfigService, DRIZZLE],
+      useFactory: (config: ConfigService, db: Db | null) =>
+        useMysql(config) && db
+          ? new MysqlSessionRepository(db)
+          : new InMemorySessionRepository(),
+    },
+    {
+      provide: EMAIL_SERVICE,
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) =>
+        useSmtp(config)
+          ? new SmtpEmailService(config)
+          : new ConsoleEmailService(),
+    },
   ],
   exports: [
     AuthService,
@@ -51,3 +87,13 @@ import { HuckleberryAuthGuard } from '../common/auth/huckleberry-auth.guard.js';
   ],
 })
 export class HuckleberryAuthModule {}
+
+function useMysql(config: ConfigService): boolean {
+  const app = config.get<AppConfig>('app');
+  return !!app?.databaseUrl;
+}
+
+function useSmtp(config: ConfigService): boolean {
+  const app = config.get<AppConfig>('app');
+  return !!app?.smtpHost;
+}
