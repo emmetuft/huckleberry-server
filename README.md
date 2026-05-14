@@ -33,7 +33,7 @@ pnpm infra:up                         # boot MySQL + Mailpit containers
 pnpm start:dev                        # BFF; runs migrations on first boot
 ```
 
-Full one-time-setup + day-to-day workflow + troubleshooting lives in **[`docs/local-development.md`](docs/local-development.md)**.
+Full one-time-setup + day-to-day workflow + troubleshooting lives in **[`docs/local-development.md`](docs/local-development.md)**. AWS deployment runbook (ECS + CD pipeline + IAM): **[`docs/deployment-bff.md`](docs/deployment-bff.md)**.
 
 > This project uses **pnpm** exclusively. `pnpm-lock.yaml` is the source of truth; `package-lock.json` and `yarn.lock` are gitignored.
 
