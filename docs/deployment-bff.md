@@ -32,7 +32,28 @@ What each piece is for:
 - **CloudFront** — fronts both the SPA (S3 origin) and the API (ALB origin), so the browser stays same-origin. The same `hb_session` cookie covers `huckleberry.com` and `huckleberry.com/api/*`.
 - **GitHub Actions + OIDC** — the CD pipeline. No long-lived AWS keys stored in GitHub; each workflow run assumes an IAM role via short-lived OIDC tokens.
 
-Assumptions throughout: region **`us-west-2`** (Domo's primary). Domain **`huckleberry.com`**. Adjust as needed.
+Assumptions throughout: region **`us-east-1`**. Domain **`huckleberry.com`**.
+
+---
+
+## Environments
+
+Each environment has its own AWS resources following the naming pattern `<env>-huckleberry-*`. The doc uses `<env>` as a placeholder so the same instructions cover dev3 / staging / prod.
+
+| Env | Aurora cluster | Master-cred secret | SM prefix | SSM prefix |
+|---|---|---|---|---|
+| **dev3** | `dev3-huckleberry-1-cluster` | `dev3-huckleberry` | `dev3-huckleberry/*` | `/dev3-huckleberry/*` |
+| staging | _TBD_ | _TBD_ | `staging-huckleberry/*` | `/staging-huckleberry/*` |
+| prod | _TBD_ | _TBD_ | `huckleberry/*` (no env prefix) | `/huckleberry/*` |
+
+**dev3 endpoints** (current):
+
+```
+Writer:  dev3-huckleberry-1-cluster.cluster-cjeyhncfcola.us-east-1.rds.amazonaws.com
+Reader:  dev3-huckleberry-1-cluster.cluster-ro-cjeyhncfcola.us-east-1.rds.amazonaws.com
+```
+
+When the doc says `huckleberry/*` (e.g. `huckleberry/session-signing-key`), substitute the env's actual prefix: `dev3-huckleberry/session-signing-key` for dev3.
 
 ---
 
@@ -47,7 +68,7 @@ aws ecr create-repository \
   --repository-name huckleberry-bff \
   --image-scanning-configuration scanOnPush=true \
   --image-tag-mutability IMMUTABLE \
-  --region us-west-2
+  --region us-east-1
 ```
 
 Immutable tags prevent us from re-tagging an older image as `latest` — every deploy gets a unique tag (the git SHA).
@@ -163,19 +184,19 @@ Permissions: connect to Aurora via IAM, read its secrets + parameters, send mail
       "Sid": "AuroraIamAuth",
       "Effect": "Allow",
       "Action": "rds-db:connect",
-      "Resource": "arn:aws:rds-db:us-west-2:<ACCOUNT_ID>:dbuser:<DB_CLUSTER_RESOURCE_ID>/huckleberry_app"
+      "Resource": "arn:aws:rds-db:us-east-1:<ACCOUNT_ID>:dbuser:<DB_CLUSTER_RESOURCE_ID>/huckleberry_app"
     },
     {
       "Sid": "ReadSecrets",
       "Effect": "Allow",
       "Action": "secretsmanager:GetSecretValue",
-      "Resource": "arn:aws:secretsmanager:us-west-2:<ACCOUNT_ID>:secret:huckleberry/*"
+      "Resource": "arn:aws:secretsmanager:us-east-1:<ACCOUNT_ID>:secret:huckleberry/*"
     },
     {
       "Sid": "ReadParams",
       "Effect": "Allow",
       "Action": ["ssm:GetParameter", "ssm:GetParameters", "ssm:GetParametersByPath"],
-      "Resource": "arn:aws:ssm:us-west-2:<ACCOUNT_ID>:parameter/huckleberry/*"
+      "Resource": "arn:aws:ssm:us-east-1:<ACCOUNT_ID>:parameter/huckleberry/*"
     },
     {
       "Sid": "SesSend",
@@ -228,20 +249,32 @@ The BFF reads both at boot and assembles `process.env` equivalents — keeps `.e
 
 ### 7. Aurora — bootstrap migrations + IAM-auth users
 
-You said you've already got the cluster and master key. One-time:
+One-time per environment. Walk-through with the dev3 cluster:
 
 ```bash
-# Port-forward via SSM Session Manager to the bastion (or VPN in)
+# 1. Read the master password from Secrets Manager.
+MASTER_PW=$(aws secretsmanager get-secret-value \
+  --secret-id dev3-huckleberry \
+  --query SecretString --output text | jq -r .password)
+
+# 2. Port-forward via SSM Session Manager to the bastion (or VPN in).
+#    The Aurora cluster lives in a private subnet — no direct internet route.
 aws ssm start-session --target i-<bastion> \
   --document-name AWS-StartPortForwardingSession \
-  --parameters '{"portNumber":["3306"],"localPortNumber":["13306"]}'
+  --parameters '{
+    "host":["dev3-huckleberry-1-cluster.cluster-cjeyhncfcola.us-east-1.rds.amazonaws.com"],
+    "portNumber":["3306"],
+    "localPortNumber":["13306"]
+  }'
 
-# Apply migrations using the master credential
-DATABASE_URL='mysql://admin:<master>@localhost:13306/huckleberry' \
+# 3. Apply Drizzle migrations against the writer endpoint.
+DATABASE_URL="mysql://admin:${MASTER_PW}@localhost:13306/huckleberry" \
   pnpm db:migrate
 ```
 
-Then create the IAM-authenticated app + migration users. Connect with `mysql -h localhost -P 13306 -u admin -p` and run:
+> Format of the master secret: AWS RDS sets up `dev3-huckleberry` as a JSON secret with `{ "username": "admin", "password": "..." }` if it was created through the RDS-managed flow. If yours is plain text, drop the `| jq -r .password` from step 1.
+
+Then create the IAM-authenticated app + migration users. Connect with `mysql -h 127.0.0.1 -P 13306 -u admin -p"$MASTER_PW"` and run:
 
 ```sql
 CREATE USER 'huckleberry_app'@'%' IDENTIFIED WITH AWSAuthenticationPlugin AS 'RDS';
@@ -266,13 +299,13 @@ Security groups (assuming you have the VPC):
 
 ### 9. ALB + ACM + Route 53
 
-ACM cert in `us-west-2` (where the ALB lives — separate cert in us-east-1 will follow for CloudFront):
+ACM cert in `us-east-1` (where the ALB lives — separate cert in us-east-1 will follow for CloudFront):
 
 ```bash
 aws acm request-certificate \
   --domain-name api.huckleberry.com \
   --validation-method DNS \
-  --region us-west-2
+  --region us-east-1
 ```
 
 Validate by adding the CNAME record ACM provides into Route 53. Standard 5–15 minute wait.
@@ -284,7 +317,7 @@ Then create the ALB pointing at port 443 with that cert, a target group for the 
 Cluster:
 
 ```bash
-aws ecs create-cluster --cluster-name huckleberry --region us-west-2
+aws ecs create-cluster --cluster-name huckleberry --region us-east-1
 ```
 
 Task definition (committed in the repo at `infra/ecs/bff-task-def.json` — generate-and-commit pattern):
@@ -300,28 +333,28 @@ Task definition (committed in the repo at `infra/ecs/bff-task-def.json` — gene
   "taskRoleArn": "arn:aws:iam::<ACCOUNT_ID>:role/huckleberry-bff-task",
   "containerDefinitions": [{
     "name": "bff",
-    "image": "<ACCOUNT_ID>.dkr.ecr.us-west-2.amazonaws.com/huckleberry-bff:<TAG_REPLACED_AT_DEPLOY>",
+    "image": "<ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/huckleberry-bff:<TAG_REPLACED_AT_DEPLOY>",
     "essential": true,
     "portMappings": [{ "containerPort": 3000, "protocol": "tcp" }],
     "environment": [
       { "name": "NODE_ENV", "value": "production" },
-      { "name": "AWS_REGION", "value": "us-west-2" }
+      { "name": "AWS_REGION", "value": "us-east-1" }
     ],
     "secrets": [
       {
         "name": "SESSION_SIGNING_KEY",
-        "valueFrom": "arn:aws:secretsmanager:us-west-2:<ACCT>:secret:huckleberry/session-signing-key"
+        "valueFrom": "arn:aws:secretsmanager:us-east-1:<ACCT>:secret:huckleberry/session-signing-key"
       },
       {
         "name": "ADMIN_API_KEY",
-        "valueFrom": "arn:aws:secretsmanager:us-west-2:<ACCT>:secret:huckleberry/admin-api-key"
+        "valueFrom": "arn:aws:secretsmanager:us-east-1:<ACCT>:secret:huckleberry/admin-api-key"
       }
     ],
     "logConfiguration": {
       "logDriver": "awslogs",
       "options": {
         "awslogs-group": "/ecs/huckleberry-bff",
-        "awslogs-region": "us-west-2",
+        "awslogs-region": "us-east-1",
         "awslogs-stream-prefix": "bff"
       }
     },
@@ -449,14 +482,14 @@ The CD pipeline runs this as a separate ECS **task** (not service) before swappi
 
 ```bash
 # Auth to ECR
-aws ecr get-login-password --region us-west-2 \
-  | docker login --username AWS --password-stdin <ACCT>.dkr.ecr.us-west-2.amazonaws.com
+aws ecr get-login-password --region us-east-1 \
+  | docker login --username AWS --password-stdin <ACCT>.dkr.ecr.us-east-1.amazonaws.com
 
 # Build + push (use commit SHA for the tag)
 TAG=$(git rev-parse --short HEAD)
 docker build -t huckleberry-bff:$TAG .
-docker tag huckleberry-bff:$TAG <ACCT>.dkr.ecr.us-west-2.amazonaws.com/huckleberry-bff:$TAG
-docker push <ACCT>.dkr.ecr.us-west-2.amazonaws.com/huckleberry-bff:$TAG
+docker tag huckleberry-bff:$TAG <ACCT>.dkr.ecr.us-east-1.amazonaws.com/huckleberry-bff:$TAG
+docker push <ACCT>.dkr.ecr.us-east-1.amazonaws.com/huckleberry-bff:$TAG
 
 # Run migrations once
 aws ecs run-task --cluster huckleberry \
@@ -489,7 +522,7 @@ permissions:
   contents: read
 
 env:
-  AWS_REGION: us-west-2
+  AWS_REGION: us-east-1
   ECR_REPO: huckleberry-bff
   ECS_CLUSTER: huckleberry
   ECS_SERVICE: bff
@@ -617,7 +650,7 @@ Two paths, fast to slow:
 
 ---
 
-## Cost estimate (rough, us-west-2, low traffic)
+## Cost estimate (rough, us-east-1, low traffic)
 
 | Resource | Monthly |
 |---|---|
