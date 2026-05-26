@@ -181,7 +181,7 @@ export class McpService {
         return { success: false, error: `HTTP ${response.status}` };
       }
 
-      const data = await response.json();
+      const data: unknown = await response.json();
       return { success: true, data };
     } catch (error) {
       return {

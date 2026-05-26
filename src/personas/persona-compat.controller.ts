@@ -23,6 +23,7 @@ export class PersonaCompatController {
 
   @Post(':userId')
   saveForUser(@Param('userId') userId: string, @Body() body: any) {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
     return this.personasService.saveForUser(userId, body);
   }
 }

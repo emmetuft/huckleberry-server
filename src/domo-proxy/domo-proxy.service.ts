@@ -89,7 +89,7 @@ export class DomoProxyService {
         error instanceof Error && 'cause' in error ? error.cause : undefined;
       this.logger.error(
         `Stream fetch failed: ${String(error)}`,
-        cause ? String(cause) : undefined,
+        cause instanceof Error ? cause.message : undefined,
       );
       throw new DomoApiError(
         503,
@@ -129,7 +129,7 @@ export class DomoProxyService {
         error instanceof Error && 'cause' in error ? error.cause : undefined;
       this.logger.error(
         `Stream fetch failed: ${String(error)}`,
-        cause ? String(cause) : undefined,
+        cause instanceof Error ? cause.message : undefined,
       );
       throw new DomoApiError(
         503,

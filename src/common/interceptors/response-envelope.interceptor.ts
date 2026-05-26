@@ -20,11 +20,8 @@ export class ResponseEnvelopeInterceptor implements NestInterceptor {
     // If the handler used @Res() directly (streaming), this interceptor
     // is bypassed by NestJS — but guard against double-wrapping just in case.
     return next.handle().pipe(
-      map((data) => {
-        // If the response is already 204 No Content, don't wrap
+      map((data: unknown) => {
         if (res.statusCode === 204) return data;
-
-        // If already wrapped (e.g., ontology controller), pass through
         if (
           data &&
           typeof data === 'object' &&
@@ -33,7 +30,6 @@ export class ResponseEnvelopeInterceptor implements NestInterceptor {
         ) {
           return data;
         }
-
         return { success: true, data };
       }),
     );

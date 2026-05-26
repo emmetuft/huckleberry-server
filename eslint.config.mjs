@@ -41,4 +41,13 @@ export default tseslint.config(
       '@typescript-eslint/no-unsafe-call': 'off',
     },
   },
+  // .mts files (ESM, top-level await) need sourceType: module.
+  // The rest of the project is CommonJS (nodenext tsconfig without
+  // "type":"module" in package.json), so we only override here.
+  {
+    files: ['**/*.mts'],
+    languageOptions: {
+      sourceType: 'module',
+    },
+  },
 );

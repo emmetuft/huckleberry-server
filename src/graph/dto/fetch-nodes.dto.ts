@@ -1,4 +1,4 @@
-import { IsArray, IsNumber, IsOptional, Min } from 'class-validator';
+import { IsNumber, IsOptional, Min } from 'class-validator';
 import { NodeFilterDto } from './node-filter.dto';
 
 export class FetchNodesDto {
