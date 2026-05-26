@@ -32,6 +32,11 @@
   },
   "packageManager": "pnpm@10.5.0",
   "dependencies": {
+    "@aws-sdk/client-rds": "^3.1053.0",
+    "@aws-sdk/client-s3": "^3.1053.0",
+    "@aws-sdk/client-secrets-manager": "^3.1053.0",
+    "@aws-sdk/client-sts": "^3.1053.0",
+    "@aws-sdk/rds-signer": "^3.1053.0",
     "@nestjs/common": "^11.0.17",
     "@nestjs/config": "^4.0.3",
     "@nestjs/core": "^11.0.1",
