@@ -1,6 +1,10 @@
 # BFF deployment — AWS production
 
-End-to-end runbook for getting `huckleberry-server` running in AWS, with a CD pipeline triggered by `git push`. Sibling doc for the SPA: `~/dev/huckleberry/docs/deployment-fe.md`.
+End-to-end runbook for getting `huckleberry-server` running in AWS, with a CD pipeline triggered by `git push`.
+
+**Prereq:** laptop-side AWS access set up per **[`docs/aws-local-setup.md`](aws-local-setup.md)** (AWS CLI, SSO profile, SSM Session Manager plugin). The Aurora bootstrap step below assumes you can already run `aws sts get-caller-identity` and `aws secretsmanager get-secret-value` against dev3.
+
+**Sibling doc:** `~/dev/huckleberry/docs/deployment-fe.md` — same shape, for the SPA.
 
 ## What you're standing up
 
