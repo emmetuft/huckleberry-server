@@ -4,15 +4,19 @@
  * policies for the `rds-db:connect` action).
  *
  * Override with `--cluster <id>`.
- * Run: `node --experimental-strip-types probe-aurora.ts`
+ * Run: `node --experimental-strip-types probe-aurora.mts`
  */
 import { RDSClient, DescribeDBClustersCommand } from '@aws-sdk/client-rds';
 
-const cluster =
-  process.argv[process.argv.indexOf('--cluster') + 1] ??
-  'dev3-huckleberry-1-cluster';
+const arg = (flag: string, fallback: string): string => {
+  const i = process.argv.indexOf(flag);
+  return i !== -1 && process.argv[i + 1] ? process.argv[i + 1] : fallback;
+};
 
-const rds = new RDSClient({ region: 'us-east-1' });
+const cluster = arg('--cluster', 'dev3-huckleberry-1-cluster');
+
+const rds: RDSClient = new RDSClient({ region: 'us-east-1' });
+
 const { DBClusters } = await rds.send(
   new DescribeDBClustersCommand({ DBClusterIdentifier: cluster }),
 );

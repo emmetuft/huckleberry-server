@@ -6,15 +6,20 @@
  * connection.
  *
  * Override with `--host <hostname>` and/or `--user <db user>`.
- * Run: `node --experimental-strip-types probe-iam-token.ts`
+ * Run: `node --experimental-strip-types probe-iam-token.mts`
  */
 import { Signer } from '@aws-sdk/rds-signer';
 
-const host =
-  process.argv[process.argv.indexOf('--host') + 1] ??
-  'dev3-huckleberry-1-cluster.cluster-cjeyhncfcola.us-east-1.rds.amazonaws.com';
-const username =
-  process.argv[process.argv.indexOf('--user') + 1] ?? 'huckleberry_app';
+const arg = (flag: string, fallback: string): string => {
+  const i = process.argv.indexOf(flag);
+  return i !== -1 && process.argv[i + 1] ? process.argv[i + 1] : fallback;
+};
+
+const host = arg(
+  '--host',
+  'dev3-huckleberry-1-cluster.cluster-cjeyhncfcola.us-east-1.rds.amazonaws.com',
+);
+const username = arg('--user', 'huckleberry_app');
 
 const signer = new Signer({
   region: 'us-east-1',

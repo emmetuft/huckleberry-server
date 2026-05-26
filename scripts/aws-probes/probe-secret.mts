@@ -4,15 +4,19 @@
  * non-password fields only.
  *
  * Override the secret id with `--secret <id>`.
- * Run: `node --experimental-strip-types probe-secret.ts`
+ * Run: `node --experimental-strip-types probe-secret.mts`
  */
 import {
   SecretsManagerClient,
   GetSecretValueCommand,
 } from '@aws-sdk/client-secrets-manager';
 
-const secretId =
-  process.argv[process.argv.indexOf('--secret') + 1] ?? 'dev3-huckleberry';
+const arg = (flag: string, fallback: string): string => {
+  const i = process.argv.indexOf(flag);
+  return i !== -1 && process.argv[i + 1] ? process.argv[i + 1] : fallback;
+};
+
+const secretId = arg('--secret', 'dev3-huckleberry');
 
 const client = new SecretsManagerClient({ region: 'us-east-1' });
 const res = await client.send(
