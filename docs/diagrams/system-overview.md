@@ -16,18 +16,18 @@ graph LR
         end
 
         subgraph "Compute"
-            UI_HOST[Huckleberry UI<br/>S3 + CloudFront<br/>huckleberry.com]
+            UI_HOST[Huckleberry UI<br/>S3 + CloudFront<br/>huckleberry.ai]
             BFF[Huckleberry BFF<br/>NestJS on ECS Fargate<br/>autoscaled behind ALB]
         end
 
         subgraph "Data"
-            AURORA[(Aurora MySQL<br/>users · linked_domo_instances<br/>domo_oauth_tokens (KMS)<br/>personas · mcp_servers (customer_id scoped))]
+            AURORA[(Aurora MySQL<br/>users · linked_domo_instances<br/>domo_oauth_tokens — KMS-encrypted<br/>personas · mcp_servers — customer_id scoped)]
             REDIS[(ElastiCache Redis<br/>huckleberry sessions<br/>Domo access-token cache<br/>OAuth link_init state)]
         end
 
         subgraph "Platform"
             TASK_ROLE[Task IAM Role<br/>rds-db:connect · kms:Decrypt<br/>secretsmanager:GetSecretValue · ses:SendEmail]
-            SM[Secrets Manager<br/>Gatekeeper client_secret<br/>session signing key<br/>Aurora master (break-glass)]
+            SM[Secrets Manager<br/>session signing key<br/>Aurora master — break-glass<br/>SES SMTP creds]
             KMS[KMS<br/>envelope encryption<br/>for stored OAuth refresh tokens]
             SES[AWS SES<br/>magic-link sign-in emails]
             CW[CloudWatch + OTel<br/>logs · metrics · traces]
@@ -59,7 +59,7 @@ graph LR
     CF --> UI_HOST
     USER --> WAF
     WAF --> ALB
-    USER -- huckleberry session cookie --> WAF
+    USER -->|huckleberry session cookie| WAF
     ALB --> BFF
 
     BFF -.IAM auth token.-> TASK_ROLE
@@ -72,8 +72,8 @@ graph LR
     BFF --> CW
     BFF -.pulls image.-> ECR
 
-    BFF -- code exchange + refresh<br/>(server-side, client_secret) --> GATEKEEPER
-    BFF -- forwards Bearer for active link --> MAKO_AGENT
+    BFF -->|PKCE code exchange + refresh<br/>server-side, no client_secret| GATEKEEPER
+    BFF -->|forwards Bearer for active link| MAKO_AGENT
     MAKO_AGENT --> INTENT_ENGINE
     INTENT_ENGINE --> MEMORY_APP
     MAKO_AGENT --> MAKO_AI
@@ -89,37 +89,37 @@ graph LR
 
 ### Huckleberry (AWS)
 
-| Component | AWS service | Purpose |
-|---|---|---|
-| UI | S3 + CloudFront | Static SPA served from `huckleberry.com`. Talks to the BFF only — never directly to Gatekeeper or Domo |
-| BFF | ECS Fargate behind ALB | NestJS API. Owns huckleberry identity (Layer A) + Domo OAuth broker (Layer B). Scales horizontally |
-| Primary DB | Aurora MySQL | `users`, Domo linkage, `domo_oauth_tokens` (KMS-encrypted), Category B app data. All app rows `customer_id`-scoped |
-| Cache + sessions | ElastiCache Redis | Huckleberry server-side sessions (revocable), Domo access-token cache, PKCE `link_init` state |
-| AWS auth | Task IAM Role | Aurora IAM auth, Secrets Manager reads, KMS decrypt, SES send. No long-lived AWS secrets in the container |
-| Secrets | Secrets Manager + KMS | Gatekeeper `client_secret`, session JWT signing key, Aurora master (break-glass). KMS for envelope-encrypted OAuth refresh tokens at rest |
-| Email | AWS SES | Magic-link sign-in emails |
-| Edge | CloudFront + WAF + ACM | TLS termination, DDoS / rate-limit, bot rules |
-| Observability | CloudWatch + OpenTelemetry | Logs, metrics, traces |
-| Image registry | ECR | BFF container images |
+| Component        | AWS service                | Purpose                                                                                                                                   |
+| ---------------- | -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| UI               | S3 + CloudFront            | Static SPA served from `huckleberry.ai`. Talks to the BFF only — never directly to Gatekeeper or Domo                                     |
+| BFF              | ECS Fargate behind ALB     | NestJS API. Owns huckleberry identity (Layer A) + Domo OAuth broker (Layer B). Scales horizontally                                        |
+| Primary DB       | Aurora MySQL               | `users`, Domo linkage, `domo_oauth_tokens` (KMS-encrypted), Category B app data. All app rows `customer_id`-scoped                        |
+| Cache + sessions | ElastiCache Redis          | Huckleberry server-side sessions (revocable), Domo access-token cache, PKCE `link_init` state                                             |
+| AWS auth         | Task IAM Role              | Aurora IAM auth, Secrets Manager reads, KMS decrypt, SES send. No long-lived AWS secrets in the container                                 |
+| Secrets          | Secrets Manager + KMS      | Session JWT signing key, Aurora master (break-glass), SES SMTP credentials. KMS for envelope-encrypted OAuth refresh tokens at rest. (No Gatekeeper `client_secret` — BFF is a public PKCE client.) |
+| Email            | AWS SES                    | Magic-link sign-in emails                                                                                                                 |
+| Edge             | CloudFront + WAF + ACM     | TLS termination, DDoS / rate-limit, bot rules                                                                                             |
+| Observability    | CloudWatch + OpenTelemetry | Logs, metrics, traces                                                                                                                     |
+| Image registry   | ECR                        | BFF container images                                                                                                                      |
 
 ### Domo Platform
 
-| Surface | Auth | What Huckleberry uses it for |
-|---|---|---|
-| Gatekeeper `/oauth2/{authorize,token,jwks,revoke}` | auth code + PKCE (OAuth 2.1, ES256). **Confidential client.** Per-instance registration | BFF runs the OAuth flow server-side when a user links an instance; refreshes Domo tokens on demand and verifies them against the instance's JWKS |
-| Mako: `/api/ai/v1/agents/*` | Bearer JWT (Gatekeeper) | Agent execute, resume, streaming, CRUD |
-| Mako: `/api/ai/v1/memory/*` | Bearer JWT, Bedrock customer-scoped | Memory admin (read what's remembered, right-to-forget) |
-| Mako: `/api/ai/v1/text/*` | Bearer JWT | Text generation, summarization, text-to-SQL |
-| Mako: `/api/ai/v1/toolkits/*` | Bearer JWT | Toolkit CRUD |
-| Mako: `/api/recall/v1/*` | Bearer JWT | Knowledge graph nodes (read path) |
-| `/api/content/v3/*`, `/api/identity/v1/*` | Bearer JWT | Users, groups, current user |
-| `/api/data/v3/*` | Bearer JWT | Datasources, schemas, queries |
-| `api.domo.com` (public) | `client_credentials` OAuth | Limited — does not expose AI/memory/recall endpoints |
+| Surface                                            | Auth                                                                                    | What Huckleberry uses it for                                                                                                                     |
+| -------------------------------------------------- | --------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Gatekeeper `/oauth2/{authorize,token,jwks,revoke}` | auth code + PKCE (OAuth 2.1, ES256). **Public PKCE client** — `token_endpoint_auth_method=none`, no client_secret. Per-instance registration | BFF runs the OAuth flow server-side when a user links an instance; refreshes Domo tokens on demand and verifies them against the instance's JWKS |
+| Mako: `/api/ai/v1/agents/*`                        | Bearer JWT (Gatekeeper)                                                                 | Agent execute, resume, streaming, CRUD                                                                                                           |
+| Mako: `/api/ai/v1/memory/*`                        | Bearer JWT, Bedrock customer-scoped                                                     | Memory admin (read what's remembered, right-to-forget)                                                                                           |
+| Mako: `/api/ai/v1/text/*`                          | Bearer JWT                                                                              | Text generation, summarization, text-to-SQL                                                                                                      |
+| Mako: `/api/ai/v1/toolkits/*`                      | Bearer JWT                                                                              | Toolkit CRUD                                                                                                                                     |
+| Mako: `/api/recall/v1/*`                           | Bearer JWT                                                                              | Knowledge graph nodes (read path)                                                                                                                |
+| `/api/content/v3/*`, `/api/identity/v1/*`          | Bearer JWT                                                                              | Users, groups, current user                                                                                                                      |
+| `/api/data/v3/*`                                   | Bearer JWT                                                                              | Datasources, schemas, queries                                                                                                                    |
+| `api.domo.com` (public)                            | `client_credentials` OAuth                                                              | Limited — does not expose AI/memory/recall endpoints                                                                                             |
 
 ### Third-party
 
-| Component | Owned by | Purpose |
-|---|---|---|
+| Component            | Owned by | Purpose                                                |
+| -------------------- | -------- | ------------------------------------------------------ |
 | External MCP servers | per-user | Tool execution surfaces registered through MCP service |
 
 ## Things this diagram is deliberately not showing
