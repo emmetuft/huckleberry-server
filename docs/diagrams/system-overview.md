@@ -8,51 +8,38 @@ High-level view of the deployed system. Shows where Huckleberry runs in AWS, whi
 graph LR
     USER[End User<br/>Browser]
 
-    subgraph "AWS — Huckleberry Account"
-        subgraph "Edge"
-            CF[CloudFront + ACM<br/>TLS, static asset CDN]
-            ALB[Application Load Balancer]
-            WAF[AWS WAF<br/>rate limit + bot rules]
-        end
-
-        subgraph "Compute"
-            UI_HOST[Huckleberry UI<br/>S3 + CloudFront<br/>huckleberry.ai]
-            BFF[Huckleberry BFF<br/>NestJS on ECS Fargate<br/>autoscaled behind ALB]
-        end
-
-        subgraph "Data"
-            AURORA[(Aurora MySQL<br/>users · linked_domo_instances<br/>domo_oauth_tokens — KMS-encrypted<br/>personas · mcp_servers — customer_id scoped)]
-            REDIS[(ElastiCache Redis<br/>huckleberry sessions<br/>Domo access-token cache<br/>OAuth link_init state)]
-        end
-
-        subgraph "Platform"
-            TASK_ROLE[Task IAM Role<br/>rds-db:connect · kms:Decrypt<br/>secretsmanager:GetSecretValue · ses:SendEmail]
-            SM[Secrets Manager<br/>session signing key<br/>Aurora master — break-glass<br/>SES SMTP creds]
-            KMS[KMS<br/>envelope encryption<br/>for stored OAuth refresh tokens]
-            SES[AWS SES<br/>magic-link sign-in emails]
-            CW[CloudWatch + OTel<br/>logs · metrics · traces]
-            ECR[ECR<br/>container images]
-        end
+    subgraph AWS["AWS — Huckleberry Account"]
+        direction TB
+        CF["Edge · CloudFront + ACM<br/>TLS, static asset CDN"]
+        WAF["Edge · AWS WAF<br/>rate limit + bot rules"]
+        ALB["Edge · Application Load Balancer"]
+        UI_HOST["Compute · Huckleberry UI<br/>S3 + CloudFront<br/>huckleberry.ai"]
+        BFF["Compute · Huckleberry BFF<br/>NestJS on ECS Fargate<br/>autoscaled behind ALB"]
+        AURORA[("Data · Aurora MySQL<br/>users · linked_domo_instances<br/>domo_oauth_tokens — KMS-encrypted<br/>personas · mcp_servers — customer_id scoped")]
+        REDIS[("Data · ElastiCache Redis<br/>huckleberry sessions<br/>Domo access-token cache<br/>OAuth link_init state")]
+        TASK_ROLE["Platform · Task IAM Role<br/>rds-db:connect · kms:Decrypt<br/>secretsmanager:GetSecretValue · ses:SendEmail"]
+        SM["Platform · Secrets Manager<br/>session signing key<br/>Aurora master — break-glass<br/>SES SMTP creds"]
+        KMS["Platform · KMS<br/>envelope encryption<br/>for stored OAuth refresh tokens"]
+        SES["Platform · AWS SES<br/>magic-link sign-in emails"]
+        CW["Platform · CloudWatch + OTel<br/>logs · metrics · traces"]
+        ECR["Platform · ECR<br/>container images"]
     end
 
-    subgraph "Domo Platform"
-        GATEKEEPER[Gatekeeper OAuth 2.1<br/>customer.domo.com/oauth2/*<br/>auth-code + PKCE · ES256<br/>refresh-token rotation]
-
-        subgraph "Mako — Agent Platform"
-            MAKO_AGENT[Agent Runtime<br/>ai-assistant-app<br/>execute · resume · streaming]
-            INTENT_ENGINE[mako-intent-engine<br/>intent classification<br/>working memory<br/>context assembly]
-            MEMORY_APP[memory-app<br/>capture · extract · retrieve<br/>customer-scoped]
-            MAKO_AI[AI Services<br/>generate · summarize · embed]
-            MAKO_GRAPH[Graph Device<br/>Domo-hosted graph]
-            MAKO_DB[(MongoDB<br/>session history +<br/>memory entities/facts)]
-        end
-
-        DOMO_INST[Instance APIs<br/>/api/content/v3/users<br/>/api/identity/v1/users<br/>/api/data/v3/datasources]
-        DOMO_PUB[Public API<br/>api.domo.com<br/>client_credentials only]
+    subgraph DOMO["Domo Platform"]
+        direction TB
+        GATEKEEPER["Gatekeeper OAuth 2.1<br/>customer.domo.com/oauth2/*<br/>auth-code + PKCE · ES256<br/>refresh-token rotation"]
+        MAKO_AGENT["Mako · Agent Runtime<br/>ai-assistant-app<br/>execute · resume · streaming"]
+        INTENT_ENGINE["Mako · mako-intent-engine<br/>intent classification<br/>working memory<br/>context assembly"]
+        MEMORY_APP["Mako · memory-app<br/>capture · extract · retrieve<br/>customer-scoped"]
+        MAKO_AI["Mako · AI Services<br/>generate · summarize · embed"]
+        MAKO_GRAPH["Mako · Graph Device<br/>Domo-hosted graph"]
+        MAKO_DB[("Mako · MongoDB<br/>session history +<br/>memory entities/facts")]
+        DOMO_INST["Instance APIs<br/>/api/content/v3/users<br/>/api/identity/v1/users<br/>/api/data/v3/datasources"]
+        DOMO_PUB["Public API<br/>api.domo.com<br/>client_credentials only"]
     end
 
-    subgraph "Third-Party"
-        MCP_EXT[External MCP Servers<br/>per-user registrations]
+    subgraph EXT["Third-Party"]
+        MCP_EXT["External MCP Servers<br/>per-user registrations"]
     end
 
     USER --> CF
@@ -83,6 +70,17 @@ graph LR
     BFF --> DOMO_INST
     BFF -.future or limited.-> DOMO_PUB
     BFF --> MCP_EXT
+
+    classDef edge fill:#fef3c7,stroke:#d97706
+    classDef compute fill:#dbeafe,stroke:#2563eb
+    classDef data fill:#dcfce7,stroke:#16a34a
+    classDef platform fill:#f3e8ff,stroke:#9333ea
+    classDef mako fill:#fce7f3,stroke:#db2777
+    class CF,WAF,ALB edge
+    class UI_HOST,BFF compute
+    class AURORA,REDIS data
+    class TASK_ROLE,SM,KMS,SES,CW,ECR platform
+    class MAKO_AGENT,INTENT_ENGINE,MEMORY_APP,MAKO_AI,MAKO_GRAPH,MAKO_DB mako
 ```
 
 ## Where each piece lives
