@@ -1,5 +1,7 @@
 # Local AWS setup
 
+> **New to the environment?** Start with **[`docs/aws-access-request.md`](aws-access-request.md)** — it has the template message to send DevOps/IT and a checklist of what you need from them before any of the steps below will work.
+
 Prereq for both deployment docs. Gets your laptop ready to talk to the dev3 / staging / prod AWS resources — reading secrets, port-forwarding to Aurora, listing S3 buckets, running ad-hoc SDK probes. Do this once.
 
 Sibling docs:
