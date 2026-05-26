@@ -104,14 +104,14 @@ describe('Auth flow (e2e)', () => {
       .post('/api/admin/users')
       .set('x-admin-api-key', 'test-admin-key')
       .send({
-        email: 'e2e@huckleberry.com',
+        email: 'e2e@huckleberry.ai',
       })
       .expect(201);
     expect(onboard.body.data.userId).toBeTruthy();
 
     // 2. Magic-link captured.
     expect(emails.lastEmail).not.toBeNull();
-    expect(emails.lastEmail.to).toBe('e2e@huckleberry.com');
+    expect(emails.lastEmail.to).toBe('e2e@huckleberry.ai');
     const url = new URL(emails.lastEmail.url);
     expect(url.origin).toBe('http://localhost:5173');
     expect(url.pathname).toBe('/auth/signin');
@@ -143,7 +143,7 @@ describe('Auth flow (e2e)', () => {
       .get('/api/auth/me')
       .set('Cookie', cookieHeader)
       .expect(200);
-    expect(me.body.data.email).toBe('e2e@huckleberry.com');
+    expect(me.body.data.email).toBe('e2e@huckleberry.ai');
     expect(me.body.data.status).toBe('active');
 
     // 5. Reject reuse of the same magic-link token.
@@ -168,7 +168,7 @@ describe('Auth flow (e2e)', () => {
     await request(server)
       .post('/api/admin/users')
       .send({
-        email: 'rogue@huckleberry.com',
+        email: 'rogue@huckleberry.ai',
       })
       .expect(403);
   });
@@ -177,12 +177,12 @@ describe('Auth flow (e2e)', () => {
     const server = app.getHttpServer() as Parameters<typeof request>[0];
     await request(server)
       .post('/api/auth/signin/request')
-      .send({ email: 'fresh-signup@huckleberry.com' })
+      .send({ email: 'fresh-signup@huckleberry.ai' })
       .expect(202);
     // The signin/request endpoint find-or-creates the user and emails a
     // magic-link in both branches — freemium-style. The new user now has
     // a linked instance via the stub provisioner.
-    expect(emails.lastEmail?.to).toBe('fresh-signup@huckleberry.com');
+    expect(emails.lastEmail?.to).toBe('fresh-signup@huckleberry.ai');
   });
 
   it('rejects CSRF mismatch on state-changing routes', async () => {
@@ -193,7 +193,7 @@ describe('Auth flow (e2e)', () => {
       .post('/api/admin/users')
       .set('x-admin-api-key', 'test-admin-key')
       .send({
-        email: 'csrf@huckleberry.com',
+        email: 'csrf@huckleberry.ai',
       })
       .expect(201);
     const token = new URL(emails.lastEmail.url).searchParams.get('token');

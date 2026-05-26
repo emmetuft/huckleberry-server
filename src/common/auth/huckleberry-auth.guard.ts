@@ -20,7 +20,7 @@ const CSRF_HEADER = 'x-csrf-token';
 const STATE_CHANGING = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 
 /**
- * Front-door guard for huckleberry.com. Reads the `hb_session` cookie,
+ * Front-door guard for huckleberry.ai. Reads the `hb_session` cookie,
  * verifies it via `SessionService`, checks the double-submit CSRF token on
  * state-changing requests, then attaches a `HuckleberryPrincipal` to
  * `request.user`.

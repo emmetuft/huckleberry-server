@@ -14,7 +14,7 @@ graph LR
         WAF["Edge · AWS WAF<br/>rate limit + bot rules"]
         ALB["Edge · Application Load Balancer"]
         UI_HOST["Compute · Huckleberry UI<br/>S3 + CloudFront<br/>huckleberry.ai"]
-        BFF["Compute · Huckleberry BFF<br/>NestJS on ECS Fargate<br/>autoscaled behind ALB"]
+        BFF["Compute · Huckleberry BFF<br/>NestJS on EKS (Fargate profile)<br/>HPA-scaled behind ALB Ingress"]
         AURORA[("Data · Aurora MySQL<br/>users · linked_domo_instances<br/>domo_oauth_tokens — KMS-encrypted<br/>personas · mcp_servers — customer_id scoped")]
         REDIS[("Data · ElastiCache Redis<br/>huckleberry sessions<br/>Domo access-token cache<br/>OAuth link_init state")]
         TASK_ROLE["Platform · Task IAM Role<br/>rds-db:connect · kms:Decrypt<br/>secretsmanager:GetSecretValue · ses:SendEmail"]
@@ -90,7 +90,7 @@ graph LR
 | Component        | AWS service                | Purpose                                                                                                                                   |
 | ---------------- | -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
 | UI               | S3 + CloudFront            | Static SPA served from `huckleberry.ai`. Talks to the BFF only — never directly to Gatekeeper or Domo                                     |
-| BFF              | ECS Fargate behind ALB     | NestJS API. Owns huckleberry identity (Layer A) + Domo OAuth broker (Layer B). Scales horizontally                                        |
+| BFF              | EKS (Fargate profile) + ALB Ingress | NestJS API. Owns huckleberry identity (Layer A) + Domo OAuth broker (Layer B). HorizontalPodAutoscaler scales pods on CPU + request rate |
 | Primary DB       | Aurora MySQL               | `users`, Domo linkage, `domo_oauth_tokens` (KMS-encrypted), Category B app data. All app rows `customer_id`-scoped                        |
 | Cache + sessions | ElastiCache Redis          | Huckleberry server-side sessions (revocable), Domo access-token cache, PKCE `link_init` state                                             |
 | AWS auth         | Task IAM Role              | Aurora IAM auth, Secrets Manager reads, KMS decrypt, SES send. No long-lived AWS secrets in the container                                 |
@@ -126,5 +126,5 @@ graph LR
 - Auth sequence details — see `oauth-flow.md`
 - OAuth client shape — see `auth-providers.md`
 - Memory architecture detail (capture, extraction, retrieval pipeline) — see `memory-architecture.md`
-- CI/CD pipeline (GitHub Actions → ECR → ECS) — out of scope for system context
+- CI/CD pipeline (GitHub Actions → ECR → EKS rollout) — out of scope for system context
 - Mako's internal module composition (ai-app, ai-assistant-app, recall-app, synapse-app, etc.)

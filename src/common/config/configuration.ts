@@ -103,7 +103,7 @@ export interface AppConfig {
   /** Huckleberry session TTL in seconds (sliding). Default 43200 (12h). */
   sessionTtlSeconds: number;
   /**
-   * Where the magic-link email points the user. For standalone huckleberry.com
+   * Where the magic-link email points the user. For standalone huckleberry.ai
    * this is the SPA host — the SPA has an `/auth/signin?token=...` route that
    * reads the token and calls the BFF's consume endpoint via JS. Defaults to
    * `http://localhost:5173` (Vite dev server) so the SPA can intercept the

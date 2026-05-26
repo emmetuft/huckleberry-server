@@ -2,7 +2,7 @@
 
 ## What we're doing (the layman version)
 
-Huckleberry is a **standalone SaaS product** at `huckleberry.com`. It's not embedded in Domo, doesn't run on a Domo subdomain, and a user visiting huckleberry has no existing Domo session to lean on.
+Huckleberry is a **standalone SaaS product** at `huckleberry.ai`. It's not embedded in Domo, doesn't run on a Domo subdomain, and a user visiting huckleberry has no existing Domo session to lean on.
 
 That means we own the front-door identity. Users sign up to huckleberry with their own credential. After they're signed in, they **link one or more Domo instances** to their huckleberry account via OAuth. Huckleberry then talks to Domo on the user's behalf using the linked credential.
 
@@ -15,17 +15,17 @@ A user can link N Domo instances under one huckleberry account. The active insta
 
 ## Why this model
 
-Standalone huckleberry.com has no ambient Domo session, the SPA can't run a silent re-OAuth on every page load, and we need a stable huckleberry identity that survives Domo session expiries. So:
+Standalone huckleberry.ai has no ambient Domo session, the SPA can't run a silent re-OAuth on every page load, and we need a stable huckleberry identity that survives Domo session expiries. So:
 
 - **BFF as public PKCE OAuth client** — server-side `/auth/domo/*` endpoints, no `client_secret` to store, encrypted refresh-token storage in Aurora.
 - **A `users` table and a server-issued huckleberry session** — magic-link sign-in, HttpOnly cookie, sliding TTL.
 - **The PKCE `code_verifier` lives only inside the BFF.** It's stored in the request-scoped `OAuthStateStore` keyed by `state`, exchanged server-side at the callback, then dropped. The SPA hands the user off to Gatekeeper but never sees the verifier or any token.
-- **Multi-tenant.** One huckleberry deployment, many customers. `customer_id`-scoped Aurora rows. `GatekeeperAuthGuard` and `JwksService` verify Gatekeeper-issued tokens *internally* when the BFF processes a Domo OAuth callback or refreshes a token — not as a front-door verifier.
+- **Multi-tenant.** One huckleberry deployment, many customers. `customer_id`-scoped Aurora rows. `GatekeeperAuthGuard` and `JwksService` verify Gatekeeper-issued tokens _internally_ when the BFF processes a Domo OAuth callback or refreshes a token — not as a front-door verifier.
 
 ## Two-layer flow (the full picture)
 
 ```
-1. Sign up / sign in to huckleberry.com (Layer A)
+1. Sign up / sign in to huckleberry.ai (Layer A)
 2. Link a Domo instance via OAuth (Layer B)
 3. Use the app — BFF mints fresh Domo tokens on demand from stored refresh tokens
 4. Refresh huckleberry session as needed (Layer A)
@@ -34,13 +34,13 @@ Standalone huckleberry.com has no ambient Domo session, the SPA can't run a sile
 
 ### Layer A — Huckleberry identity (magic-link only)
 
-| Operation | Endpoint | What happens |
-|---|---|---|
-| Request sign-in link | `POST /auth/signin/request` | Body: `{ email }`. Looks up `users` by email. If found and `email_verified`, inserts a `magic_links` row (`user_id`, single-use `token_hash`, 15m TTL), sends an email with the link. Always returns `202` regardless of whether the email exists (don't leak account existence). |
-| Consume sign-in link | `GET /auth/signin?token=...` | Validates `token_hash` is unconsumed and unexpired, marks consumed, issues huckleberry session cookie. 302 to `/app` or to forced-OAuth if linkage is not yet completed. |
-| Sign out | `POST /auth/logout` | Invalidates session in Redis; clears cookie. |
-| Me | `GET /auth/me` | Returns the current user + linkage state (`pending_link` vs `active`). |
-| Verify email (operator-issued) | `GET /auth/verify?token=...` | Set during onboarding when the operator creates the user row. Marks `email_verified=1`. The very first magic-link email serves as both verification and first sign-in. |
+| Operation                      | Endpoint                     | What happens                                                                                                                                                                                                                                                                      |
+| ------------------------------ | ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Request sign-in link           | `POST /auth/signin/request`  | Body: `{ email }`. Looks up `users` by email. If found and `email_verified`, inserts a `magic_links` row (`user_id`, single-use `token_hash`, 15m TTL), sends an email with the link. Always returns `202` regardless of whether the email exists (don't leak account existence). |
+| Consume sign-in link           | `GET /auth/signin?token=...` | Validates `token_hash` is unconsumed and unexpired, marks consumed, issues huckleberry session cookie. 302 to `/app` or to forced-OAuth if linkage is not yet completed.                                                                                                          |
+| Sign out                       | `POST /auth/logout`          | Invalidates session in Redis; clears cookie.                                                                                                                                                                                                                                      |
+| Me                             | `GET /auth/me`               | Returns the current user + linkage state (`pending_link` vs `active`).                                                                                                                                                                                                            |
+| Verify email (operator-issued) | `GET /auth/verify?token=...` | Set during onboarding when the operator creates the user row. Marks `email_verified=1`. The very first magic-link email serves as both verification and first sign-in.                                                                                                            |
 
 Session shape — `hb_session` cookie carries an HS256-signed JWT with `{ sub: huckleberryUserId, iat, exp, sid: serverSessionId }`. Signing key in AWS Secrets Manager, rotated periodically. Server session in Redis (`sid → { userId, expiresAt }`) allows immediate revocation. Cookie attributes: `HttpOnly; Secure; SameSite=Lax; Path=/`. CSRF protection via double-submit token on state-changing endpoints.
 
@@ -50,15 +50,15 @@ No passwords are ever stored. No `password_hash` column, no `password_resets` ta
 
 ### Layer B — Domo OAuth linkage
 
-| Operation | Endpoint | What happens |
-|---|---|---|
-| Start linking | `POST /auth/domo/link/start` | Body: `{ instanceUrl }`. BFF validates instanceUrl shape, generates PKCE `code_verifier` + `state`, stores them in Redis keyed by `state` (TTL 10m), returns the authorize URL to the SPA. |
-| Authorize (browser leg) | Redirect to `{instance}/oauth2/authorize?...` | User signs into Domo (if needed), grants consent, Gatekeeper redirects to `huckleberry.com/auth/domo/callback?code=...&state=...`. |
-| Callback | `GET /auth/domo/callback?code=...&state=...` | BFF looks up `code_verifier` from Redis, exchanges code at `{instance}/oauth2/token`, verifies the returned access token against the instance's JWKS, extracts `cid`, `sub`. Persists a `linked_domo_instances` row + encrypted `domo_oauth_tokens` row. Redirects user back to app. |
-| Refresh (internal) | not user-facing | When the cached Domo access token is expired or missing, BFF calls `{instance}/oauth2/token` with `grant_type=refresh_token`, persists the new pair (rotation enforced — every refresh swaps both tokens), caches the new access token in Redis. |
-| Unlink | `DELETE /auth/domo/link/:linkId` | Calls `{instance}/oauth2/revoke` for the refresh token. Deletes both rows. Subsequent Domo calls for that link fail. |
-| List links | `GET /auth/domo/links` | Returns the user's linked instances with display metadata (customer slug, when linked, last used). |
-| Switch active | `POST /auth/domo/switch` | Sets `activeLinkId` on the huckleberry session. The active link determines which instance subsequent Domo proxy calls target. |
+| Operation               | Endpoint                                      | What happens                                                                                                                                                                                                                                                                         |
+| ----------------------- | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Start linking           | `POST /auth/domo/link/start`                  | Body: `{ instanceUrl }`. BFF validates instanceUrl shape, generates PKCE `code_verifier` + `state`, stores them in Redis keyed by `state` (TTL 10m), returns the authorize URL to the SPA.                                                                                           |
+| Authorize (browser leg) | Redirect to `{instance}/oauth2/authorize?...` | User signs into Domo (if needed), grants consent, Gatekeeper redirects to `huckleberry.ai/auth/domo/callback?code=...&state=...`.                                                                                                                                                    |
+| Callback                | `GET /auth/domo/callback?code=...&state=...`  | BFF looks up `code_verifier` from Redis, exchanges code at `{instance}/oauth2/token`, verifies the returned access token against the instance's JWKS, extracts `cid`, `sub`. Persists a `linked_domo_instances` row + encrypted `domo_oauth_tokens` row. Redirects user back to app. |
+| Refresh (internal)      | not user-facing                               | When the cached Domo access token is expired or missing, BFF calls `{instance}/oauth2/token` with `grant_type=refresh_token`, persists the new pair (rotation enforced — every refresh swaps both tokens), caches the new access token in Redis.                                     |
+| Unlink                  | `DELETE /auth/domo/link/:linkId`              | Calls `{instance}/oauth2/revoke` for the refresh token. Deletes both rows. Subsequent Domo calls for that link fail.                                                                                                                                                                 |
+| List links              | `GET /auth/domo/links`                        | Returns the user's linked instances with display metadata (customer slug, when linked, last used).                                                                                                                                                                                   |
+| Switch active           | `POST /auth/domo/switch`                      | Sets `activeLinkId` on the huckleberry session. The active link determines which instance subsequent Domo proxy calls target.                                                                                                                                                        |
 
 ### Per-request — putting it together
 
@@ -95,7 +95,7 @@ Scopes still come from Gatekeeper's catalog (`{domain}[:{subdomain}]:{action}`),
 - **Category A — Domo-proxied.** Scope is whatever the downstream Domo endpoint needs (`ai:read`, `ai:execute`, `dataset:meta:read`, etc.). Enforced server-side by Domo on the forwarded Bearer; the BFF doesn't need to check.
 - **Category B — Huckleberry-owned (Aurora).** Scope is `huckleberry:access` (a huckleberry-internal authorization concept that lives in our `users` and `linked_domo_instances` rows, not Gatekeeper's catalog). Gated by the huckleberry session, not a JWT scope claim.
 
-Scope enforcement for Category A happens entirely *downstream of the BFF* — Domo verifies the token it receives. The BFF doesn't need a `@Scopes('ai:read')` decorator on Category A routes; if the linked Domo account lacks the scope, Domo returns 403 and we surface it. We can still declare expected scopes inline for documentation, but they're not enforced by the BFF.
+Scope enforcement for Category A happens entirely _downstream of the BFF_ — Domo verifies the token it receives. The BFF doesn't need a `@Scopes('ai:read')` decorator on Category A routes; if the linked Domo account lacks the scope, Domo returns 403 and we surface it. We can still declare expected scopes inline for documentation, but they're not enforced by the BFF.
 
 Category A routes still require **a valid linked Domo instance** with the active link selected.
 
@@ -227,21 +227,21 @@ return this.domoProxy.get('/api/ai/v1/agents', {
 
 Everything we documented before — IAM database auth via the ECS task role, no long-lived DB password, TLS required, least-privilege DB user, `TenantBoundConnection` factory that refuses to acquire a connection without a validated `customer_id` — still applies. The Aurora-side auth story is orthogonal to the user-side identity story.
 
-The one nuance: when a huckleberry user has linked multiple Domo customers, a single huckleberry request only ever touches *one* `customer_id` (the active link). `TenantBoundConnection` is acquired with that customer_id and `SET @huckleberry_customer_id = ?` accordingly. Switching the active link mid-session is a new HTTP request and gets its own bound connection.
+The one nuance: when a huckleberry user has linked multiple Domo customers, a single huckleberry request only ever touches _one_ `customer_id` (the active link). `TenantBoundConnection` is acquired with that customer_id and `SET @huckleberry_customer_id = ?` accordingly. Switching the active link mid-session is a new HTTP request and gets its own bound connection.
 
 ## MVP decisions (locked)
 
 These are settled. Anything not on this list is post-MVP.
 
-| # | Decision | Rationale |
-|---|---|---|
-| 1 | **Magic-link sign-in only.** No password. | Removes password storage, hashing parameters, breach monitoring, and reset flow. Sign-in = "click the link we emailed you" → session cookie. |
-| 2 | **No MFA.** | Internal demo audience. MFA is required before external launch; schema slot kept. |
-| 3 | **12h sliding session.** HS256-signed JWT in `HttpOnly; Secure; SameSite=Lax` cookie. Redis-backed `sid` for instant revocation. | Sliding TTL gives "stay logged in while working" without long-lived bearer-equivalent. |
-| 4 | **Double-submit CSRF token** on all state-changing routes. | SameSite=Lax leaks on top-level GET; double-submit is the standard belt-and-suspenders. |
-| 5 | **AWS SES from day 1**, sandbox mode acceptable for internal demo. | Domain verification before external launch. |
-| 6 | **One linked Domo instance per huckleberry user.** | Vetted onboarding sets the instance; users don't switch. Multi-link is post-MVP. |
-| 7 | **Self-service sign-up provisions the Domo instance; sign-in is existing-users-only.** Two distinct endpoints. See "Onboarding flow" below. | Distinct paths because they have different access requirements: sign-up has to call the InstanceProvisioner; sign-in must not. |
+| #   | Decision                                                                                                                                    | Rationale                                                                                                                                    |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | **Magic-link sign-in only.** No password.                                                                                                   | Removes password storage, hashing parameters, breach monitoring, and reset flow. Sign-in = "click the link we emailed you" → session cookie. |
+| 2   | **No MFA.**                                                                                                                                 | Internal demo audience. MFA is required before external launch; schema slot kept.                                                            |
+| 3   | **12h sliding session.** HS256-signed JWT in `HttpOnly; Secure; SameSite=Lax` cookie. Redis-backed `sid` for instant revocation.            | Sliding TTL gives "stay logged in while working" without long-lived bearer-equivalent.                                                       |
+| 4   | **Double-submit CSRF token** on all state-changing routes.                                                                                  | SameSite=Lax leaks on top-level GET; double-submit is the standard belt-and-suspenders.                                                      |
+| 5   | **AWS SES from day 1**, sandbox mode acceptable for internal demo.                                                                          | Domain verification before external launch.                                                                                                  |
+| 6   | **One linked Domo instance per huckleberry user.**                                                                                          | Vetted onboarding sets the instance; users don't switch. Multi-link is post-MVP.                                                             |
+| 7   | **Self-service sign-up provisions the Domo instance; sign-in is existing-users-only.** Two distinct endpoints. See "Onboarding flow" below. | Distinct paths because they have different access requirements: sign-up has to call the InstanceProvisioner; sign-in must not.               |
 
 ### Onboarding flow — sign-up + PKCE-on-first-signin
 
@@ -276,17 +276,17 @@ Per-request data flow after sign-in:
 
 The huckleberry side holds two credentials per session, plus an optional one-shot provisioner credential:
 
-| # | Credential | Power | Storage | When used |
-|---|---|---|---|---|
-| 1 | **Provisioner credential** | Mints Domo instances. Held by huckleberry-the-service, never by users. | Env (today) → AWS Secrets Manager (later). Single value, rotatable. | Once per sign-up. Never at runtime. |
-| 2 | **Per-user Domo refresh token** | Lets the BFF mint short-lived access tokens that act *as the user* on Domo. Token's scopes are the union granted at consent. | Aurora row in `domo_oauth_tokens` (KMS-encrypted at rest when Aurora wiring lands). One per user. Rotated on every use. | Every runtime Domo call (broker mints a fresh access token off it). |
-| 3 | **Huckleberry session cookie** (`hb_session`) | SPA features only. No Domo authority. | HttpOnly cookie + Redis-backed `sid`. | Per request |
+| #   | Credential                                    | Power                                                                                                                        | Storage                                                                                                                 | When used                                                           |
+| --- | --------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| 1   | **Provisioner credential**                    | Mints Domo instances. Held by huckleberry-the-service, never by users.                                                       | Env (today) → AWS Secrets Manager (later). Single value, rotatable.                                                     | Once per sign-up. Never at runtime.                                 |
+| 2   | **Per-user Domo refresh token**               | Lets the BFF mint short-lived access tokens that act _as the user_ on Domo. Token's scopes are the union granted at consent. | Aurora row in `domo_oauth_tokens` (KMS-encrypted at rest when Aurora wiring lands). One per user. Rotated on every use. | Every runtime Domo call (broker mints a fresh access token off it). |
+| 3   | **Huckleberry session cookie** (`hb_session`) | SPA features only. No Domo authority.                                                                                        | HttpOnly cookie + Redis-backed `sid`.                                                                                   | Per request                                                         |
 
 Compromise impact:
 
 - **#1 leaked** → attacker can create freemium instances under our name. Bad but recoverable: rotate the provisioner credential, audit the new-instance log, delete fraudulent tenants.
 - **#2 leaked** (single row) → attacker can act as **that one user** on Domo within the granted scope set. Customer/user can revoke any time by signing out of Domo or having Gatekeeper revoke the refresh token. Rotation on every refresh means a stolen token gets cascade-revoked the next time the legitimate user signs in.
-- **#3 leaked** → attacker is *one* huckleberry user. Per-user revocation via session-id lookup; no Domo authority.
+- **#3 leaked** → attacker is _one_ huckleberry user. Per-user revocation via session-id lookup; no Domo authority.
 
 The BFF never holds Domo admin authority at runtime. The provisioning credential is the only "powerful" thing it has, and it's used only at sign-up time, not on every request.
 

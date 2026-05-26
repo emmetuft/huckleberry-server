@@ -32,7 +32,7 @@ async function seedUser(
   const now = new Date();
   const user: User = {
     id: 'user-1',
-    email: 'demo@huckleberry.com',
+    email: 'demo@huckleberry.ai',
     emailVerified: false,
     displayName: 'Demo',
     status: 'pending_link',
@@ -63,26 +63,26 @@ describe('AuthService — magic-link issuance + consumption', () => {
 
   it('issues a magic-link email for a known user', async () => {
     await seedUser(users);
-    await service.requestMagicLink('demo@huckleberry.com', '127.0.0.1');
+    await service.requestMagicLink('demo@huckleberry.ai', '127.0.0.1');
     expect(email.sent).toHaveLength(1);
-    expect(email.sent[0].to).toBe('demo@huckleberry.com');
+    expect(email.sent[0].to).toBe('demo@huckleberry.ai');
     expect(email.sent[0].url).toContain('/auth/signin?token=');
   });
 
   it('silently no-ops for an unknown email (no account-existence leak)', async () => {
-    await service.requestMagicLink('nobody@huckleberry.com', '127.0.0.1');
+    await service.requestMagicLink('nobody@huckleberry.ai', '127.0.0.1');
     expect(email.sent).toHaveLength(0);
   });
 
   it('silently no-ops for a suspended user', async () => {
     await seedUser(users, { status: 'suspended' });
-    await service.requestMagicLink('demo@huckleberry.com', '127.0.0.1');
+    await service.requestMagicLink('demo@huckleberry.ai', '127.0.0.1');
     expect(email.sent).toHaveLength(0);
   });
 
   it('consumes a valid token, marks user verified, returns needsLinkage=true for pending_link', async () => {
     await seedUser(users);
-    await service.requestMagicLink('demo@huckleberry.com', '127.0.0.1');
+    await service.requestMagicLink('demo@huckleberry.ai', '127.0.0.1');
     const token = extractTokenFromUrl(email.sent[0].url);
 
     const result = await service.consumeMagicLink(token);
@@ -93,7 +93,7 @@ describe('AuthService — magic-link issuance + consumption', () => {
 
   it('returns needsLinkage=false when user is already active', async () => {
     await seedUser(users, { status: 'active', emailVerified: true });
-    await service.requestMagicLink('demo@huckleberry.com', '127.0.0.1');
+    await service.requestMagicLink('demo@huckleberry.ai', '127.0.0.1');
     const token = extractTokenFromUrl(email.sent[0].url);
 
     const result = await service.consumeMagicLink(token);
@@ -102,7 +102,7 @@ describe('AuthService — magic-link issuance + consumption', () => {
 
   it('rejects a second use of the same token (single-use)', async () => {
     await seedUser(users);
-    await service.requestMagicLink('demo@huckleberry.com', '127.0.0.1');
+    await service.requestMagicLink('demo@huckleberry.ai', '127.0.0.1');
     const token = extractTokenFromUrl(email.sent[0].url);
 
     await service.consumeMagicLink(token);
@@ -119,7 +119,7 @@ describe('AuthService — magic-link issuance + consumption', () => {
       email,
     );
     await seedUser(users);
-    await service.requestMagicLink('demo@huckleberry.com', '127.0.0.1');
+    await service.requestMagicLink('demo@huckleberry.ai', '127.0.0.1');
     const token = extractTokenFromUrl(email.sent[0].url);
 
     await expect(service.consumeMagicLink(token)).rejects.toThrow(
@@ -129,7 +129,7 @@ describe('AuthService — magic-link issuance + consumption', () => {
 
   it('rejects a tampered token', async () => {
     await seedUser(users);
-    await service.requestMagicLink('demo@huckleberry.com', '127.0.0.1');
+    await service.requestMagicLink('demo@huckleberry.ai', '127.0.0.1');
     const token = extractTokenFromUrl(email.sent[0].url);
     const tampered = token.slice(0, -1) + (token.slice(-1) === 'a' ? 'b' : 'a');
 

@@ -9,34 +9,50 @@ End-to-end runbook for getting `huckleberry-server` running in AWS, with a CD pi
 ## What you're standing up
 
 ```
-       Route 53                    CloudFront                       ALB
-   huckleberry.com  ────►   distribution (us-east-1 cert)  ──►  api target group
-                                  │                              │
-                                  │ /* → S3 origin               │
-                                  │ /api/* → ALB origin          ▼
-                                  ▼                          ECS Fargate
-                            S3 (SPA bundle)            ┌──── huckleberry-bff ────┐
-                                                       │  task 1   task 2  …    │
-                                                       └──┬──────────┬──────────┘
-                                                          │          │
-                                                          ▼          ▼
-                                                   Aurora MySQL 8.4 (IAM-auth)
-                                                          │
-                                                          ▼
-                                                  Secrets Mgr · SSM · KMS · SES
+       Route 53                    CloudFront                          ALB
+   huckleberry.ai  ────►   distribution (us-east-1 cert)  ──►  (AWS Load Balancer Controller)
+                                  │                                   │
+                                  │ /* → S3 origin                    │
+                                  │ /api/* → ALB origin               ▼
+                                  ▼                            EKS cluster (Fargate profile)
+                            S3 (SPA bundle)         ┌─────── huckleberry-bff namespace ───────┐
+                                                    │  Deployment: pod 1   pod 2   …          │
+                                                    │  Service (ClusterIP) → Ingress → ALB    │
+                                                    │  ServiceAccount + IRSA → AWS IAM        │
+                                                    │  ExternalSecret ← Secrets Manager       │
+                                                    │  Job (migrations, one-shot)             │
+                                                    └─────────────┬───────────────────────────┘
+                                                                  │
+                                                                  ▼
+                                                       Aurora MySQL 8.4 (IAM-auth)
+                                                                  │
+                                                                  ▼
+                                                       Secrets Mgr · SSM · KMS · SES
 ```
 
 What each piece is for:
 
-- **ECR** — private Docker image registry. Each commit pushes a tagged image here, and ECS pulls from it.
-- **ECS Fargate** — runs the containerized BFF without managing EC2 hosts. 2+ tasks behind an ALB for HA.
-- **ALB** — terminates TLS, health-checks `/health`, distributes to ECS tasks. Lives in a public subnet.
-- **Aurora MySQL 8.4** — your existing cluster. Connect via IAM auth: the ECS task role signs a 15-min token instead of holding a password.
-- **Secrets Manager + SSM Parameter Store** — secrets vs. non-secret config; the task reads both at boot. SM costs $0.40/secret/month, SSM is free for standard parameters.
-- **CloudFront** — fronts both the SPA (S3 origin) and the API (ALB origin), so the browser stays same-origin. The same `hb_session` cookie covers `huckleberry.com` and `huckleberry.com/api/*`.
-- **GitHub Actions + OIDC** — the CD pipeline. No long-lived AWS keys stored in GitHub; each workflow run assumes an IAM role via short-lived OIDC tokens.
+- **ECR** — private Docker image registry. Each commit pushes a tagged image here, and EKS pulls from it.
+- **EKS (Fargate profile)** — managed Kubernetes control plane + serverless pod compute. The Fargate profile lets us run pods without managing EC2 nodes — same operational story as ECS Fargate, but with the Kubernetes API on top. Helm chart in this repo (`infra/chart/`) defines the Deployment, Service, Ingress, ServiceAccount, ExternalSecret, and HPA.
+- **AWS Load Balancer Controller** — runs in-cluster. Watches `Ingress` resources and provisions / configures an ALB to match. We declare ALB shape in YAML; it manages the underlying AWS resources.
+- **External Secrets Operator** — runs in-cluster. Watches `ExternalSecret` resources and syncs values from AWS Secrets Manager into Kubernetes `Secret` objects, which are then mounted into pods. No AWS SDK calls in the BFF for secret reads.
+- **IRSA (IAM Roles for Service Accounts)** — modern AWS-auth pattern for k8s. The pod's ServiceAccount is annotated with an IAM role ARN; EKS's OIDC provider federates with IAM so pods get scoped, short-lived AWS credentials at runtime. Replaces ECS's "task role" concept; same semantics.
+- **Aurora MySQL 8.4** — your existing cluster. Connect via IAM auth: the pod's IRSA role signs a 15-min RDS auth token instead of holding a password.
+- **Secrets Manager + SSM Parameter Store** — secrets vs. non-secret config. ExternalSecret/ExternalParameter resources sync them into k8s; pods mount the resulting `Secret`/`ConfigMap`.
+- **CloudFront** — fronts both the SPA (S3 origin) and the API (ALB origin), so the browser stays same-origin. The same `hb_session` cookie covers `huckleberry.ai` and `huckleberry.ai/api/*`.
+- **GitHub Actions + OIDC** — the CD pipeline. No long-lived AWS keys stored in GitHub; each workflow run assumes an IAM role via short-lived OIDC tokens, then uses `aws eks update-kubeconfig` + `helm upgrade` to roll the deployment.
 
-Assumptions throughout: region **`us-east-1`**. Domain **`huckleberry.com`**.
+Assumptions throughout: region **`us-east-1`**. Domain **`huckleberry.ai`**. EKS cluster name `huckleberry`. Kubernetes namespace `huckleberry-bff`.
+
+### Why EKS over ECS
+
+ECS Fargate would also work — one option per ARN, simpler control plane, $0/mo for the orchestrator. EKS wins when:
+
+- The org has multiple workloads converging on Kubernetes (operators, GitOps, Helm-based catalogs).
+- We want to use the broader k8s ecosystem (ExternalSecrets, ALB Controller, Karpenter, Argo, OPA Gatekeeper, Prometheus / Grafana stack out of the box).
+- We want a portable deployment artifact (Helm chart) that runs identically on any conformant k8s — useful if we ever offer self-hosted.
+
+Trade-offs: EKS adds a **$73/month** control-plane fee per cluster, and the YAML surface area is bigger than an ECS task definition.
 
 ---
 
@@ -44,11 +60,11 @@ Assumptions throughout: region **`us-east-1`**. Domain **`huckleberry.com`**.
 
 Each environment has its own AWS resources following the naming pattern `<env>-huckleberry-*`. The doc uses `<env>` as a placeholder so the same instructions cover dev3 / staging / prod.
 
-| Env | Aurora cluster | Master-cred secret | SM prefix | SSM prefix |
-|---|---|---|---|---|
-| **dev3** | `dev3-huckleberry-1-cluster` | `dev3-huckleberry` | `dev3-huckleberry/*` | `/dev3-huckleberry/*` |
-| staging | _TBD_ | _TBD_ | `staging-huckleberry/*` | `/staging-huckleberry/*` |
-| prod | _TBD_ | _TBD_ | `huckleberry/*` (no env prefix) | `/huckleberry/*` |
+| Env      | Aurora cluster               | Master-cred secret | SM prefix                       | SSM prefix               |
+| -------- | ---------------------------- | ------------------ | ------------------------------- | ------------------------ |
+| **dev3** | `dev3-huckleberry-1-cluster` | `dev3-huckleberry` | `dev3-huckleberry/*`            | `/dev3-huckleberry/*`    |
+| staging  | _TBD_                        | _TBD_              | `staging-huckleberry/*`         | `/staging-huckleberry/*` |
+| prod     | _TBD_                        | _TBD_              | `huckleberry/*` (no env prefix) | `/huckleberry/*`         |
 
 **dev3 endpoints** (current):
 
@@ -98,32 +114,34 @@ Trust policy (who can assume it): GitHub Actions OIDC, scoped to your repo:
 ```json
 {
   "Version": "2012-10-17",
-  "Statement": [{
-    "Effect": "Allow",
-    "Principal": {
-      "Federated": "arn:aws:iam::<ACCOUNT_ID>:oidc-provider/token.actions.githubusercontent.com"
-    },
-    "Action": "sts:AssumeRoleWithWebIdentity",
-    "Condition": {
-      "StringEquals": {
-        "token.actions.githubusercontent.com:aud": "sts.amazonaws.com"
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Principal": {
+        "Federated": "arn:aws:iam::<ACCOUNT_ID>:oidc-provider/token.actions.githubusercontent.com"
       },
-      "StringLike": {
-        "token.actions.githubusercontent.com:sub":
-          "repo:domo-development/huckleberry-server:*"
+      "Action": "sts:AssumeRoleWithWebIdentity",
+      "Condition": {
+        "StringEquals": {
+          "token.actions.githubusercontent.com:aud": "sts.amazonaws.com"
+        },
+        "StringLike": {
+          "token.actions.githubusercontent.com:sub": "repo:domo-development/huckleberry-server:*"
+        }
       }
     }
-  }]
+  ]
 }
 ```
 
-Permissions (what it can do): push to ECR, register task defs, update the ECS service, run one-off tasks (for migrations), and read deployment status.
+Permissions (what it can do): push to ECR, read EKS cluster config so the workflow can build a kubeconfig, and read CloudWatch logs to surface migration / pod failures back to the CI logs.
 
 ```json
 {
   "Version": "2012-10-17",
   "Statement": [
     {
+      "Sid": "PushToEcr",
       "Effect": "Allow",
       "Action": [
         "ecr:GetAuthorizationToken",
@@ -136,47 +154,70 @@ Permissions (what it can do): push to ECR, register task defs, update the ECS se
       "Resource": "*"
     },
     {
+      "Sid": "EksKubeconfig",
       "Effect": "Allow",
-      "Action": [
-        "ecs:RegisterTaskDefinition",
-        "ecs:UpdateService",
-        "ecs:DescribeServices",
-        "ecs:DescribeTasks",
-        "ecs:RunTask",
-        "ecs:DescribeTaskDefinition"
-      ],
-      "Resource": "*"
+      "Action": ["eks:DescribeCluster"],
+      "Resource": "arn:aws:eks:us-east-1:<ACCOUNT_ID>:cluster/huckleberry"
     },
     {
+      "Sid": "ReadCloudWatchLogs",
       "Effect": "Allow",
-      "Action": "iam:PassRole",
-      "Resource": [
-        "arn:aws:iam::<ACCOUNT_ID>:role/huckleberry-bff-task",
-        "arn:aws:iam::<ACCOUNT_ID>:role/huckleberry-bff-exec"
-      ]
+      "Action": [
+        "logs:GetLogEvents",
+        "logs:FilterLogEvents",
+        "logs:DescribeLogStreams"
+      ],
+      "Resource": "arn:aws:logs:us-east-1:<ACCOUNT_ID>:log-group:/aws/eks/huckleberry/*"
     }
   ]
 }
 ```
 
+The deploy role doesn't need `iam:PassRole` for the pod role — that association lives on the ServiceAccount inside the cluster, not at AWS-API level. The workflow only needs to push images and run `kubectl`/`helm` against the cluster.
+
+In addition, **map the deploy role to a Kubernetes group** in the cluster's `aws-auth` ConfigMap (or via EKS Access Entries on modern clusters) so it has permission to apply Helm releases:
+
+```bash
+# One-time, via the cluster admin
+eksctl create iamidentitymapping \
+  --cluster huckleberry --region us-east-1 \
+  --arn arn:aws:iam::<ACCOUNT_ID>:role/huckleberry-bff-deploy \
+  --group system:masters \
+  --username github-actions:huckleberry-bff
+```
+
+`system:masters` is broad — tighten to a custom Role/RoleBinding scoped to the `huckleberry-bff` namespace once the chart is stable. The over-broad start makes the first deploy easier to debug.
+
 Save the role ARN — the GitHub workflow needs it.
 
-### 4. IAM: ECS task role (what the running BFF can do)
+### 4. IAM: Pod role via IRSA (what the running BFF can do)
 
-The **task role** is what the container's process sees as its AWS identity. Distinct from the **execution role** (next step) which is what ECS itself uses to pull the image and write logs.
+The **pod role** is what the BFF container's process sees as its AWS identity. In Kubernetes-land this is set up via **IRSA** (IAM Roles for Service Accounts): the pod's ServiceAccount is annotated with an IAM role ARN, and the EKS cluster's OIDC provider federates with IAM to issue short-lived STS credentials to that pod.
 
-Trust policy: only ECS tasks can assume it.
+Trust policy: only the specific ServiceAccount inside the cluster can assume it.
 
 ```json
 {
   "Version": "2012-10-17",
-  "Statement": [{
-    "Effect": "Allow",
-    "Principal": { "Service": "ecs-tasks.amazonaws.com" },
-    "Action": "sts:AssumeRole"
-  }]
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Principal": {
+        "Federated": "arn:aws:iam::<ACCOUNT_ID>:oidc-provider/<EKS_OIDC_URL>"
+      },
+      "Action": "sts:AssumeRoleWithWebIdentity",
+      "Condition": {
+        "StringEquals": {
+          "<EKS_OIDC_URL>:aud": "sts.amazonaws.com",
+          "<EKS_OIDC_URL>:sub": "system:serviceaccount:huckleberry-bff:huckleberry-bff"
+        }
+      }
+    }
+  ]
 }
 ```
+
+`<EKS_OIDC_URL>` looks like `oidc.eks.us-east-1.amazonaws.com/id/ABCD1234...` and comes from `aws eks describe-cluster --name huckleberry --query 'cluster.identity.oidc.issuer'` (drop the `https://` prefix when pasting into the policy). The `sub` condition reads `system:serviceaccount:<namespace>:<serviceaccount-name>` — pinning the role to a specific SA in a specific namespace.
 
 Permissions: connect to Aurora via IAM, read its secrets + parameters, send mail via SES.
 
@@ -199,7 +240,11 @@ Permissions: connect to Aurora via IAM, read its secrets + parameters, send mail
     {
       "Sid": "ReadParams",
       "Effect": "Allow",
-      "Action": ["ssm:GetParameter", "ssm:GetParameters", "ssm:GetParametersByPath"],
+      "Action": [
+        "ssm:GetParameter",
+        "ssm:GetParameters",
+        "ssm:GetParametersByPath"
+      ],
       "Resource": "arn:aws:ssm:us-east-1:<ACCOUNT_ID>:parameter/huckleberry/*"
     },
     {
@@ -214,15 +259,69 @@ Permissions: connect to Aurora via IAM, read its secrets + parameters, send mail
 
 `<DB_CLUSTER_RESOURCE_ID>` is the Aurora cluster's resource ID (looks like `cluster-ABCD1234...`), not its arn. `aws rds describe-db-clusters --query 'DBClusters[0].DbClusterResourceId'` gets it.
 
-### 5. IAM: ECS execution role
+The role gets associated with the cluster ServiceAccount via an annotation in the Helm chart (`infra/chart/templates/serviceaccount.yaml`):
 
-What ECS uses to do bookkeeping — pull the image, write logs. Standard AWS-managed policy works:
+```yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: huckleberry-bff
+  namespace: huckleberry-bff
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::<ACCOUNT_ID>:role/huckleberry-bff-pod
+```
+
+No "execution role" needed — that ECS concept doesn't exist in EKS. Pulling images from ECR is handled by the Fargate profile's underlying execution role (created automatically by EKS when the cluster is provisioned). CloudWatch log writes go through Fluent Bit shipped with the Fargate platform.
+
+### 5. EKS cluster + Fargate profile
+
+Cluster (one-time per environment). Recommended: `eksctl` over raw CloudFormation — it'll wire up the OIDC provider, IAM roles, and the default node group / Fargate profile in one shot.
 
 ```bash
-aws iam create-role --role-name huckleberry-bff-exec ...
-aws iam attach-role-policy --role-name huckleberry-bff-exec \
-  --policy-arn arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+brew install eksctl
+
+# Saves a cluster config you can re-apply
+cat > infra/eksctl/huckleberry-cluster.yaml <<'EOF'
+apiVersion: eksctl.io/v1alpha5
+kind: ClusterConfig
+metadata:
+  name: huckleberry
+  region: us-east-1
+  version: "1.30"
+
+iam:
+  withOIDC: true   # required for IRSA
+
+fargateProfiles:
+  - name: huckleberry-bff
+    selectors:
+      - namespace: huckleberry-bff
+      - namespace: kube-system          # for AWS LB Controller, ExternalSecrets, etc.
+EOF
+
+eksctl create cluster -f infra/eksctl/huckleberry-cluster.yaml
 ```
+
+This takes ~15 minutes the first time. It creates: the EKS control plane, the OIDC provider for IRSA, a Fargate profile that matches the `huckleberry-bff` and `kube-system` namespaces, and a default kubeconfig context. Cost: $0.10/hour (~$73/month) for the control plane, plus per-pod Fargate compute.
+
+After it's up, install the two operators the chart depends on:
+
+```bash
+# 1. AWS Load Balancer Controller — watches Ingress resources, provisions ALBs
+helm repo add eks https://aws.github.io/eks-charts
+helm install aws-load-balancer-controller eks/aws-load-balancer-controller \
+  -n kube-system \
+  --set clusterName=huckleberry \
+  --set serviceAccount.create=true \
+  --set serviceAccount.name=aws-load-balancer-controller
+
+# 2. External Secrets Operator — syncs Secrets Manager → k8s Secrets
+helm repo add external-secrets https://charts.external-secrets.io
+helm install external-secrets external-secrets/external-secrets \
+  -n external-secrets --create-namespace
+```
+
+Each operator needs its own IRSA role with scoped permissions — the AWS LB Controller chart documents what; same for ESO. Both are one-time per cluster.
 
 ### 6. Secrets Manager + SSM Parameter Store
 
@@ -246,7 +345,7 @@ aws ssm put-parameter --name /huckleberry/database/name       --value huckleberr
 aws ssm put-parameter --name /huckleberry/database/user       --value huckleberry_app --type String
 aws ssm put-parameter --name /huckleberry/domo-oauth/client-id --value <DCR client_id> --type String
 aws ssm put-parameter --name /huckleberry/gatekeeper/issuers   --value <comma-list> --type StringList
-aws ssm put-parameter --name /huckleberry/magic-link/base-url  --value https://huckleberry.com --type String
+aws ssm put-parameter --name /huckleberry/magic-link/base-url  --value https://huckleberry.ai --type String
 ```
 
 The BFF reads both at boot and assembles `process.env` equivalents — keeps `.env`-style code without `.env` files in the container.
@@ -307,84 +406,177 @@ ACM cert in `us-east-1` (where the ALB lives — separate cert in us-east-1 will
 
 ```bash
 aws acm request-certificate \
-  --domain-name api.huckleberry.com \
+  --domain-name api.huckleberry.ai \
   --validation-method DNS \
   --region us-east-1
 ```
 
 Validate by adding the CNAME record ACM provides into Route 53. Standard 5–15 minute wait.
 
-Then create the ALB pointing at port 443 with that cert, a target group for the BFF (port 3000, health check `GET /health`, healthy threshold 2, interval 15s), and a Route 53 alias `api.huckleberry.com` → ALB.
+Then create the ALB pointing at port 443 with that cert, a target group for the BFF (port 3000, health check `GET /health`, healthy threshold 2, interval 15s), and a Route 53 alias `api.huckleberry.ai` → ALB.
 
-### 10. ECS cluster + task definition + service
+### 10. Helm chart for the BFF (committed to `infra/chart/`)
 
-Cluster:
+The chart packages the BFF's Kubernetes resources into one parameterized unit. Layout:
 
-```bash
-aws ecs create-cluster --cluster-name huckleberry --region us-east-1
+```
+infra/chart/
+  Chart.yaml
+  values.yaml                          ← defaults (env-agnostic)
+  values-dev3.yaml                     ← per-env overrides
+  values-staging.yaml
+  values-prod.yaml
+  templates/
+    namespace.yaml                     ← huckleberry-bff namespace
+    serviceaccount.yaml                ← IRSA-annotated SA
+    deployment.yaml                    ← BFF Deployment (image tag from values)
+    service.yaml                       ← ClusterIP Service on :3000
+    ingress.yaml                       ← ALB Ingress (Load Balancer Controller picks up)
+    hpa.yaml                           ← HorizontalPodAutoscaler
+    externalsecret-session.yaml        ← syncs huckleberry/session-signing-key
+    externalsecret-admin.yaml          ← syncs huckleberry/admin-api-key
+    configmap.yaml                     ← non-secret config (DATABASE_HOST, etc.)
+    job-migrate.yaml                   ← run-on-demand migration Job
+    secretstore.yaml                   ← ExternalSecrets ↔ AWS Secrets Manager binding
 ```
 
-Task definition (committed in the repo at `infra/ecs/bff-task-def.json` — generate-and-commit pattern):
+Skeletons for the load-bearing files:
 
-```json
-{
-  "family": "huckleberry-bff",
-  "networkMode": "awsvpc",
-  "requiresCompatibilities": ["FARGATE"],
-  "cpu": "512",
-  "memory": "1024",
-  "executionRoleArn": "arn:aws:iam::<ACCOUNT_ID>:role/huckleberry-bff-exec",
-  "taskRoleArn": "arn:aws:iam::<ACCOUNT_ID>:role/huckleberry-bff-task",
-  "containerDefinitions": [{
-    "name": "bff",
-    "image": "<ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/huckleberry-bff:<TAG_REPLACED_AT_DEPLOY>",
-    "essential": true,
-    "portMappings": [{ "containerPort": 3000, "protocol": "tcp" }],
-    "environment": [
-      { "name": "NODE_ENV", "value": "production" },
-      { "name": "AWS_REGION", "value": "us-east-1" }
-    ],
-    "secrets": [
-      {
-        "name": "SESSION_SIGNING_KEY",
-        "valueFrom": "arn:aws:secretsmanager:us-east-1:<ACCT>:secret:huckleberry/session-signing-key"
-      },
-      {
-        "name": "ADMIN_API_KEY",
-        "valueFrom": "arn:aws:secretsmanager:us-east-1:<ACCT>:secret:huckleberry/admin-api-key"
-      }
-    ],
-    "logConfiguration": {
-      "logDriver": "awslogs",
-      "options": {
-        "awslogs-group": "/ecs/huckleberry-bff",
-        "awslogs-region": "us-east-1",
-        "awslogs-stream-prefix": "bff"
-      }
-    },
-    "healthCheck": {
-      "command": ["CMD-SHELL", "node -e \"fetch('http://localhost:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""],
-      "interval": 15, "timeout": 5, "retries": 3, "startPeriod": 30
-    }
-  }]
-}
+**`deployment.yaml`** — the BFF itself:
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: huckleberry-bff
+  namespace: {{ .Values.namespace }}
+spec:
+  replicas: {{ .Values.replicas | default 2 }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0           # equivalent of ECS minimumHealthyPercent=100
+      maxSurge: 1                 # equivalent of ECS maximumPercent=200 (with 2 replicas)
+  selector:
+    matchLabels: { app: huckleberry-bff }
+  template:
+    metadata:
+      labels: { app: huckleberry-bff }
+    spec:
+      serviceAccountName: huckleberry-bff
+      containers:
+        - name: bff
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          ports: [{ containerPort: 3000, protocol: TCP }]
+          env:
+            - { name: NODE_ENV,   value: production }
+            - { name: AWS_REGION, value: us-east-1 }
+          envFrom:
+            - configMapRef: { name: huckleberry-bff-config }
+            - secretRef:    { name: huckleberry-bff-secrets }
+          resources:
+            requests: { cpu: "250m", memory: "512Mi" }
+            limits:   { cpu: "1000m", memory: "1Gi" }
+          readinessProbe:
+            httpGet: { path: /health, port: 3000 }
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /health, port: 3000 }
+            initialDelaySeconds: 30
+            periodSeconds: 15
 ```
 
-ECS service:
+**`ingress.yaml`** — declarative ALB:
 
-```bash
-aws ecs create-service \
-  --cluster huckleberry \
-  --service-name bff \
-  --task-definition huckleberry-bff \
-  --desired-count 2 \
-  --launch-type FARGATE \
-  --network-configuration "awsvpcConfiguration={subnets=[subnet-priv-a,subnet-priv-b],securityGroups=[sg-bff],assignPublicIp=DISABLED}" \
-  --load-balancers "targetGroupArn=<TG_ARN>,containerName=bff,containerPort=3000" \
-  --deployment-configuration "minimumHealthyPercent=100,maximumPercent=200"
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: huckleberry-bff
+  namespace: {{ .Values.namespace }}
+  annotations:
+    kubernetes.io/ingress.class: alb
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS":443}]'
+    alb.ingress.kubernetes.io/certificate-arn: {{ .Values.acmCertArn }}
+    alb.ingress.kubernetes.io/healthcheck-path: /health
+    alb.ingress.kubernetes.io/healthcheck-interval-seconds: "15"
+spec:
+  rules:
+    - host: api.huckleberry.ai
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend: { service: { name: huckleberry-bff, port: { number: 3000 } } }
 ```
 
-`min=100/max=200` is the rolling-deploy default — at least all old tasks stay healthy while new ones come up, then old drain. Zero-downtime updates.
+The AWS Load Balancer Controller sees this Ingress and provisions the matching ALB + target group automatically — no manual `create-load-balancer` step.
+
+**`externalsecret-session.yaml`** — syncs one Secrets Manager secret to a k8s Secret:
+
+```yaml
+apiVersion: external-secrets.io/v1beta1
+kind: ExternalSecret
+metadata:
+  name: huckleberry-bff-session
+  namespace: {{ .Values.namespace }}
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: aws-secrets-manager
+    kind: ClusterSecretStore
+  target:
+    name: huckleberry-bff-secrets    # the Secret pods mount
+    creationPolicy: Owner
+  data:
+    - secretKey: SESSION_SIGNING_KEY
+      remoteRef:
+        key: {{ .Values.envPrefix }}/session-signing-key
+    - secretKey: ADMIN_API_KEY
+      remoteRef:
+        key: {{ .Values.envPrefix }}/admin-api-key
+```
+
+**`job-migrate.yaml`** — one-shot DB migration:
+
+```yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: huckleberry-migrate-{{ .Values.image.tag }}    # tag in name keeps each deploy's Job unique
+  namespace: {{ .Values.namespace }}
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 86400
+  template:
+    spec:
+      serviceAccountName: huckleberry-bff
+      restartPolicy: Never
+      containers:
+        - name: migrate
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          command: ["node", "dist/scripts/migrate-prod.js"]
+          envFrom:
+            - configMapRef: { name: huckleberry-bff-config }
+            - secretRef:    { name: huckleberry-bff-secrets }
+```
+
+The Job's `migrate-prod.ts` script uses the same `GET_LOCK('hb_migrate', 30)` pattern from the code-gaps section — one process wins, others bail, the Deployment never gets the new image until the Job exits 0.
+
+**`values-dev3.yaml`** — what the CD pipeline parameterizes:
+
+```yaml
+namespace: huckleberry-bff
+envPrefix: dev3-huckleberry
+replicas: 2
+image:
+  repository: <ACCT>.dkr.ecr.us-east-1.amazonaws.com/huckleberry-bff
+  tag: <FILLED_IN_BY_CD>           # set to the git SHA at deploy time
+acmCertArn: arn:aws:acm:us-east-1:<ACCT>:certificate/<ID>
+```
 
 ---
 
@@ -444,8 +636,8 @@ const pool = createPool({
   port: 3306,
   user: app.databaseUser,
   database: app.databaseName,
-  password: async () => signer.getAuthToken(),  // 15-min token; mysql2 refreshes per connection
-  ssl: { rejectUnauthorized: true },             // Aurora's CA bundle is in the base image
+  password: async () => signer.getAuthToken(), // 15-min token; mysql2 refreshes per connection
+  ssl: { rejectUnauthorized: true }, // Aurora's CA bundle is in the base image
   // …
 });
 ```
@@ -461,10 +653,14 @@ import { createPool, sql } from 'mysql2/promise';
 import { Signer } from '@aws-sdk/rds-signer';
 // …config load…
 
-const pool = createPool({ /* IAM-auth, migrate user */ });
+const pool = createPool({
+  /* IAM-auth, migrate user */
+});
 const db = drizzle(pool);
 
-const [lockRow] = await pool.execute("SELECT GET_LOCK('hb_migrate', 30) AS got");
+const [lockRow] = await pool.execute(
+  "SELECT GET_LOCK('hb_migrate', 30) AS got",
+);
 if ((lockRow as any)[0].got !== 1) {
   throw new Error('Another deploy is migrating; aborting');
 }
@@ -495,18 +691,22 @@ docker build -t huckleberry-bff:$TAG .
 docker tag huckleberry-bff:$TAG <ACCT>.dkr.ecr.us-east-1.amazonaws.com/huckleberry-bff:$TAG
 docker push <ACCT>.dkr.ecr.us-east-1.amazonaws.com/huckleberry-bff:$TAG
 
-# Run migrations once
-aws ecs run-task --cluster huckleberry \
-  --task-definition huckleberry-bff-migrate \
-  --launch-type FARGATE \
-  --network-configuration "awsvpcConfiguration={subnets=[subnet-priv-a],securityGroups=[sg-bff]}"
+# Update local kubeconfig to point at the EKS cluster
+aws eks update-kubeconfig --name huckleberry --region us-east-1
 
-# Update service to the new image
-aws ecs update-service --cluster huckleberry --service bff \
-  --task-definition $(aws ecs register-task-definition --cli-input-json file://task-def-rendered.json --query 'taskDefinition.taskDefinitionArn' --output text)
+# Deploy the Helm chart (creates namespace, ServiceAccount, Deployment,
+# Service, Ingress, ExternalSecret, Job in one shot)
+helm upgrade --install huckleberry-bff infra/chart/ \
+  --namespace huckleberry-bff --create-namespace \
+  --values infra/chart/values-dev3.yaml \
+  --set image.tag=$TAG \
+  --wait --timeout 5m
 
-# Smoke
-curl https://api.huckleberry.com/health
+# The migration Job runs as part of the chart. Watch it:
+kubectl -n huckleberry-bff logs -l job-name=huckleberry-migrate-$TAG -f
+
+# Smoke (after the Ingress finishes provisioning the ALB, ~2 min)
+curl https://api.huckleberry.ai/health
 ```
 
 ---
@@ -522,15 +722,16 @@ on:
   workflow_dispatch:
 
 permissions:
-  id-token: write   # required for OIDC
+  id-token: write # required for OIDC
   contents: read
 
 env:
   AWS_REGION: us-east-1
   ECR_REPO: huckleberry-bff
-  ECS_CLUSTER: huckleberry
-  ECS_SERVICE: bff
-  TASK_FAMILY: huckleberry-bff
+  EKS_CLUSTER: huckleberry
+  K8S_NAMESPACE: huckleberry-bff
+  HELM_RELEASE: huckleberry-bff
+  ENV_VALUES: infra/chart/values-dev3.yaml
 
 jobs:
   deploy:
@@ -555,93 +756,75 @@ jobs:
           docker build -t $IMAGE_URI .
           docker push $IMAGE_URI
           echo "image=$IMAGE_URI" >> $GITHUB_OUTPUT
+          echo "tag=${{ github.sha }}" >> $GITHUB_OUTPUT
 
-      - name: Render migrate task definition
-        run: |
-          jq --arg img "${{ steps.build.outputs.image }}" \
-             '.containerDefinitions[0].image = $img' \
-             infra/ecs/bff-migrate-task-def.json > migrate.rendered.json
+      - name: Set up kubectl + helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.16.0
 
-      - name: Register migrate task def
-        id: migrate-td
+      - name: Update kubeconfig
         run: |
-          ARN=$(aws ecs register-task-definition \
-                  --cli-input-json file://migrate.rendered.json \
-                  --query 'taskDefinition.taskDefinitionArn' --output text)
-          echo "arn=$ARN" >> $GITHUB_OUTPUT
+          aws eks update-kubeconfig \
+            --name ${{ env.EKS_CLUSTER }} \
+            --region ${{ env.AWS_REGION }}
 
-      - name: Run migrations
+      - name: Helm upgrade — runs migration Job, then rolls Deployment
         run: |
-          TASK_ARN=$(aws ecs run-task --cluster ${{ env.ECS_CLUSTER }} \
-            --task-definition ${{ steps.migrate-td.outputs.arn }} \
-            --launch-type FARGATE \
-            --network-configuration "awsvpcConfiguration={subnets=[$SUBNET],securityGroups=[$SG],assignPublicIp=DISABLED}" \
-            --query 'tasks[0].taskArn' --output text)
-          aws ecs wait tasks-stopped --cluster ${{ env.ECS_CLUSTER }} --tasks $TASK_ARN
-          EXIT=$(aws ecs describe-tasks --cluster ${{ env.ECS_CLUSTER }} --tasks $TASK_ARN \
-                 --query 'tasks[0].containers[0].exitCode' --output text)
-          [ "$EXIT" = "0" ] || { echo "Migration failed"; exit 1; }
-        env:
-          SUBNET: ${{ vars.PRIVATE_SUBNET_A }}
-          SG: ${{ vars.SG_BFF }}
+          helm upgrade --install ${{ env.HELM_RELEASE }} infra/chart/ \
+            --namespace ${{ env.K8S_NAMESPACE }} --create-namespace \
+            --values ${{ env.ENV_VALUES }} \
+            --set image.tag=${{ steps.build.outputs.tag }} \
+            --wait --timeout 10m
 
-      - name: Render service task definition
+      - name: Surface migration Job logs (success or failure)
+        if: always()
         run: |
-          jq --arg img "${{ steps.build.outputs.image }}" \
-             '.containerDefinitions[0].image = $img' \
-             infra/ecs/bff-task-def.json > service.rendered.json
-
-      - name: Register service task def
-        id: service-td
-        run: |
-          ARN=$(aws ecs register-task-definition \
-                  --cli-input-json file://service.rendered.json \
-                  --query 'taskDefinition.taskDefinitionArn' --output text)
-          echo "arn=$ARN" >> $GITHUB_OUTPUT
-
-      - name: Deploy
-        run: |
-          aws ecs update-service \
-            --cluster ${{ env.ECS_CLUSTER }} \
-            --service ${{ env.ECS_SERVICE }} \
-            --task-definition ${{ steps.service-td.outputs.arn }} \
-            --force-new-deployment
-
-      - name: Wait for stable
-        run: |
-          aws ecs wait services-stable \
-            --cluster ${{ env.ECS_CLUSTER }} \
-            --services ${{ env.ECS_SERVICE }}
+          kubectl -n ${{ env.K8S_NAMESPACE }} logs \
+            -l job-name=huckleberry-migrate-${{ steps.build.outputs.tag }} \
+            --tail=200 || true
 
       - name: Smoke test
-        run: curl --fail https://api.huckleberry.com/health
+        run: curl --fail https://api.huckleberry.ai/health
 ```
 
 Pipeline phases:
+
 1. Checkout + assume the deploy role via OIDC.
 2. Build the image, tag with the commit SHA, push to ECR.
-3. Run the migration ECS task as a one-shot; wait for exit code 0.
-4. Register a new service task definition pointing at the new image.
-5. `update-service --force-new-deployment` triggers rolling replacement (min healthy 100% / max 200%).
-6. Wait for the service to reach steady state; smoke `/health` from outside.
+3. Pull the EKS kubeconfig.
+4. `helm upgrade --install --wait` — Helm creates the migration Job first (it's annotated with the `pre-install,pre-upgrade` Helm hook), waits for it to complete, then applies the Deployment update. If the Job fails, Helm aborts the upgrade and the cluster keeps serving the previous version.
+5. Smoke `/health` from outside.
 
-If migrations fail, the service never gets the new image — the cluster keeps serving the previous version, no traffic impact.
+The chart's `job-migrate.yaml` is annotated:
+
+```yaml
+annotations:
+  "helm.sh/hook": pre-upgrade,pre-install
+  "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+  "helm.sh/hook-weight": "1"
+```
+
+That hook annotation is what gates the Deployment rollout on migration success — same mechanic as the ECS "run migration task first, then update service" pattern but expressed in Kubernetes-native terms.
 
 ---
 
 ## Observability
 
-CloudWatch picks up the BFF's stdout/stderr via the `awslogs` log driver — `pino` or `nestjs/common` `Logger` output lands at `/ecs/huckleberry-bff`.
+CloudWatch picks up pod stdout/stderr via the Fargate platform's built-in Fluent Bit — `pino` or `nestjs/common` `Logger` output lands at `/aws/eks/huckleberry/huckleberry-bff/*` log streams.
 
-Three alarms worth setting up on day 1:
+Day-1 alarms:
 
-| Alarm | Metric | Threshold |
-|---|---|---|
-| Service unhealthy | `ECS / RunningTaskCount` < desired for 2 min | Page |
-| 5xx surge | ALB `HTTPCode_Target_5XX_Count` > 10 in 5 min | Page |
-| Aurora connection saturation | RDS `DatabaseConnections` > 80% of max | Warn |
+| Alarm                        | Metric                                                        | Threshold |
+| ---------------------------- | ------------------------------------------------------------- | --------- |
+| Deployment under-scaled      | `kube_deployment_status_replicas_available` < `replicas`      | Page      |
+| 5xx surge                    | ALB `HTTPCode_Target_5XX_Count` > 10 in 5 min                 | Page      |
+| Aurora connection saturation | RDS `DatabaseConnections` > 80% of max                        | Warn      |
+| HPA pinned at max            | `kube_horizontalpodautoscaler_status_current_replicas` == max | Warn      |
 
-Aurora Performance Insights is on by default and is the first thing you'll want when a query is slow. RDS Slow Query Logs to CloudWatch for queries over 1s.
+To get the k8s metrics into CloudWatch, deploy **CloudWatch Container Insights** (one Helm install) or use the **OpenTelemetry Collector** if you want vendor-neutral metrics. Aurora Performance Insights is on by default — first stop when a query's slow.
+
+For local debugging — `kubectl logs -n huckleberry-bff -l app=huckleberry-bff -f --tail=200` streams from all pods.
 
 ---
 
@@ -649,23 +832,31 @@ Aurora Performance Insights is on by default and is the first thing you'll want 
 
 Two paths, fast to slow:
 
-1. **Bad service, schema's fine** — `aws ecs update-service --task-definition huckleberry-bff:<PREVIOUS_REVISION>`. ECS rolls back in 1–2 minutes.
-2. **Bad migration** — the migration ran and broke something. Drizzle migrations are forward-only by design; you write a new corrective migration and deploy again. If the issue is data corruption: restore from a point-in-time snapshot, which Aurora keeps for 35 days by default. Plan: write down `aws rds restore-db-cluster-to-point-in-time --target-db-cluster-identifier huckleberry-rollback --source-db-cluster-identifier huckleberry-prod --restore-to-time <ISO>` somewhere accessible. It creates a parallel cluster you cut over to.
+1. **Bad release, schema's fine** — `helm rollback huckleberry-bff <REVISION> -n huckleberry-bff`. Helm reverts the Deployment to the previous ReplicaSet; pods roll back in 1–2 minutes. `helm history huckleberry-bff -n huckleberry-bff` lists revisions.
+2. **Bad migration** — same forward-only story as before. Drizzle migrations don't have a down-migration concept; write a new corrective migration and deploy. If data is corrupted: restore from Aurora point-in-time, which keeps 35 days by default:
+   ```bash
+   aws rds restore-db-cluster-to-point-in-time \
+     --target-db-cluster-identifier huckleberry-rollback \
+     --source-db-cluster-identifier dev3-huckleberry-1-cluster \
+     --restore-to-time <ISO>
+   ```
+   Creates a parallel cluster you cut the BFF over to via a Helm value update.
 
 ---
 
 ## Cost estimate (rough, us-east-1, low traffic)
 
-| Resource | Monthly |
-|---|---|
-| Aurora MySQL Serverless v2 (0.5–2 ACU) | $50–200 |
-| ECS Fargate (2 × 0.5 vCPU / 1 GB) | $20–25 |
-| ALB | $20 |
-| Secrets Manager (4 secrets × $0.40) | $1.60 |
-| SSM Parameter Store (standard) | free |
-| CloudWatch Logs (~5 GB) | $2 |
-| SES (10k emails) | $1 |
-| Data transfer out (1 GB) | $0.09 |
-| **Total** | **~$95–250** |
+| Resource                                | Monthly       |
+| --------------------------------------- | ------------- |
+| Aurora MySQL Serverless v2 (0.5–2 ACU)  | $50–200       |
+| EKS control plane                       | $73           |
+| EKS Fargate (2 pods × 0.5 vCPU / 1 GB)  | $25–30        |
+| ALB                                     | $20           |
+| Secrets Manager (4 secrets × $0.40)     | $1.60         |
+| SSM Parameter Store (standard)          | free          |
+| CloudWatch Logs (~5 GB)                 | $2            |
+| SES (10k emails)                        | $1            |
+| Data transfer out (1 GB)                | $0.09         |
+| **Total**                               | **~$170–325** |
 
-Aurora dominates. Use Serverless v2 with min capacity 0.5 ACU until traffic justifies more.
+EKS costs $73/mo more than ECS (the control-plane fee), but you reuse the cluster for everything else you bring to k8s — additional services run for $0 extra control-plane cost. If huckleberry-bff is the only k8s workload long-term, ECS Fargate is the cheaper call.

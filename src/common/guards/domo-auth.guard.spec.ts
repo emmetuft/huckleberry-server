@@ -49,7 +49,7 @@ describe('DomoAuthGuard', () => {
     const users = {
       findById: jest.fn().mockResolvedValue({
         id: 'user-1',
-        email: 'demo@huckleberry.com',
+        email: 'demo@huckleberry.ai',
         status: 'active',
       }),
     } as unknown as UserRepository;

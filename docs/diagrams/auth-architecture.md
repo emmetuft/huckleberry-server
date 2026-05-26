@@ -1,6 +1,6 @@
 # Auth & Data Architecture — MVP
 
-Where auth state lives. **Standalone huckleberry.com with native identity + BFF-as-confidential-OAuth-client to Domo.** Both layers are stored.
+Where auth state lives. **Standalone huckleberry.ai with native identity + BFF-as-confidential-OAuth-client to Domo.** Both layers are stored.
 
 - **Layer A (huckleberry identity):** `users`, `magic_links`, server-side sessions in Redis.
 - **Layer B (Domo linkage):** `linked_domo_instances`, `domo_oauth_tokens` (KMS-encrypted refresh tokens).
@@ -12,7 +12,7 @@ See `../authentication.md` for design rationale; `oauth-flow.md` for sequences.
 
 ```mermaid
 graph LR
-    UI[Huckleberry UI<br/>huckleberry.com]
+    UI[Huckleberry UI<br/>huckleberry.ai]
 
     subgraph "NestJS BFF"
         HAG[HuckleberryAuthGuard<br/>cookie → principal]
@@ -166,15 +166,15 @@ Note that **memory tables are not here.** Memory lives in Mako's graph device, a
 
 ## Service ↔ Table matrix
 
-| Service | Tables | R/W |
-|---|---|---|
-| Auth (Layer A) | `users`, `magic_links` | R/W |
-| Sessions (Layer A) | none (Redis) | — |
-| DomoLink (Layer B) | `linked_domo_instances`, `domo_oauth_tokens` | R/W |
-| DomoAuthBroker (Layer B) | `domo_oauth_tokens` (refresh rotation), `linked_domo_instances` (last_used_at) | R/W |
-| Personas (Category B) | `personas` | R/W |
-| MCP (Category B) | `mcp_servers`, `mcp_oauth_tokens` | R/W |
-| Identity, People, Agents, Sessions (controllers), AI Services, Graph, DataSources, Connectors, Toolkits, Huckleberry | none | — |
+| Service                                                                                                              | Tables                                                                         | R/W |
+| -------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ | --- |
+| Auth (Layer A)                                                                                                       | `users`, `magic_links`                                                         | R/W |
+| Sessions (Layer A)                                                                                                   | none (Redis)                                                                   | —   |
+| DomoLink (Layer B)                                                                                                   | `linked_domo_instances`, `domo_oauth_tokens`                                   | R/W |
+| DomoAuthBroker (Layer B)                                                                                             | `domo_oauth_tokens` (refresh rotation), `linked_domo_instances` (last_used_at) | R/W |
+| Personas (Category B)                                                                                                | `personas`                                                                     | R/W |
+| MCP (Category B)                                                                                                     | `mcp_servers`, `mcp_oauth_tokens`                                              | R/W |
+| Identity, People, Agents, Sessions (controllers), AI Services, Graph, DataSources, Connectors, Toolkits, Huckleberry | none                                                                           | —   |
 
 ## Multi-tenant scoping
 
@@ -185,11 +185,11 @@ Note that **memory tables are not here.** Memory lives in Mako's graph device, a
 
 ## What's encrypted at the column level
 
-| Column | Why |
-|---|---|
+| Column                            | Why                                                                                                              |
+| --------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
 | `domo_oauth_tokens.refresh_token` | Per-link Domo refresh credential. If a backup leaks, attacker shouldn't be able to act as the user against Domo. |
-| `mcp_oauth_tokens.access_token` | Third-party MCP credentials. Same logic. |
-| `mcp_oauth_tokens.refresh_token` | Same. |
+| `mcp_oauth_tokens.access_token`   | Third-party MCP credentials. Same logic.                                                                         |
+| `mcp_oauth_tokens.refresh_token`  | Same.                                                                                                            |
 
 No password hashes are stored (magic-link only). `magic_links.token_hash` is SHA-256 of the random token; the token itself never lands in the DB. Rate-limit `/auth/signin/request` per email + per IP to stop email-flood abuse.
 

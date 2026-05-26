@@ -7,7 +7,7 @@
 #   - .env has SESSION_SIGNING_KEY + ADMIN_API_KEY set
 #
 # Usage:
-#   ./scripts/demo-auth.sh [email]     (default: demo@huckleberry.com)
+#   ./scripts/demo-auth.sh [email]     (default: demo@huckleberry.ai)
 #
 # What it does:
 #   1. POST /api/admin/users to seed a user — response includes magicLinkUrl in dev
@@ -17,7 +17,7 @@
 
 set -euo pipefail
 
-EMAIL="${1:-demo@huckleberry.com}"
+EMAIL="${1:-demo@huckleberry.ai}"
 BFF="${BFF_URL:-http://localhost:3000}"
 COOKIE_JAR="$(mktemp -t hb_demo_cookies.XXXXXX)"
 trap 'rm -f "$COOKIE_JAR"' EXIT

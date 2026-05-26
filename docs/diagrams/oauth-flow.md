@@ -18,7 +18,7 @@ Two distinct entry points:
 sequenceDiagram
     autonumber
     participant U as User
-    participant FE as Huckleberry UI<br/>(huckleberry.com)
+    participant FE as Huckleberry UI<br/>(huckleberry.ai)
     participant BFF as Huckleberry BFF
     participant DB as Aurora MySQL
     participant R as Redis
@@ -32,7 +32,7 @@ sequenceDiagram
     alt user exists and verified
         BFF->>BFF: generate random token (32 bytes), token_hash = SHA-256
         BFF->>DB: INSERT magic_links (token_hash, user_id, expires_at=NOW()+15m)
-        BFF->>SES: send email with link huckleberry.com/auth/signin?token=<raw>
+        BFF->>SES: send email with link huckleberry.ai/auth/signin?token=<raw>
     end
     BFF-->>FE: 202 (regardless of existence — don't leak)
     FE-->>U: "Check your inbox"
@@ -105,10 +105,10 @@ sequenceDiagram
     BFF-->>FE: 200 { authorizeUrl }
     FE-->>U: 302 to authorizeUrl
 
-    U->>GK: GET /oauth2/authorize?<br/>client_id=huckleberry-prod&redirect_uri=https://huckleberry.com/auth/domo/callback<br/>&response_type=code&scope=...&state=...&code_challenge=...&code_challenge_method=S256
+    U->>GK: GET /oauth2/authorize?<br/>client_id=huckleberry-prod&redirect_uri=https://huckleberry.ai/auth/domo/callback<br/>&response_type=code&scope=...&state=...&code_challenge=...&code_challenge_method=S256
     GK-->>U: DomoWeb login (if needed), then consent (first time)
     U->>GK: Allow
-    GK-->>U: 302 to https://huckleberry.com/auth/domo/callback?code=...&state=...
+    GK-->>U: 302 to https://huckleberry.ai/auth/domo/callback?code=...&state=...
 
     U->>FE: arrives at /auth/domo/callback (browser leg)
     FE->>BFF: GET /auth/domo/callback?code=...&state=... (Cookie)
@@ -180,20 +180,20 @@ Gatekeeper enforces single-use refresh tokens. Every refresh exchange:
 
 If the BFF presents a rotated-out refresh token, Gatekeeper **cascade-revokes the entire authorization** — every live token from that row stops working immediately. Practical implication for our `domo_oauth_tokens` table:
 
-- Every refresh response *must* atomically overwrite the stored refresh token. If the write fails after the exchange succeeded, we've lost the new refresh and the link is effectively dead.
+- Every refresh response _must_ atomically overwrite the stored refresh token. If the write fails after the exchange succeeded, we've lost the new refresh and the link is effectively dead.
 - Implement the write as a `BEGIN TRANSACTION; UPDATE ...; COMMIT;` with a guaranteed-durable Aurora write — and if it errors, surface to the user as "Re-link your Domo account."
 - Never retry a failed refresh with the same refresh token. The reuse signal is fatal at Gatekeeper.
 
 ## Endpoints we use against Gatekeeper
 
-| Purpose | Path |
-|---|---|
-| Authorization | `GET /oauth2/authorize` |
-| Token (auth code, refresh) | `POST /oauth2/token` |
-| JWKS | `GET /oauth2/jwks` |
-| Revocation | `POST /oauth2/revoke` |
-| Discovery | `GET /.well-known/oauth-authorization-server` |
-| UserInfo (optional) | `GET /userinfo` |
+| Purpose                    | Path                                          |
+| -------------------------- | --------------------------------------------- |
+| Authorization              | `GET /oauth2/authorize`                       |
+| Token (auth code, refresh) | `POST /oauth2/token`                          |
+| JWKS                       | `GET /oauth2/jwks`                            |
+| Revocation                 | `POST /oauth2/revoke`                         |
+| Discovery                  | `GET /.well-known/oauth-authorization-server` |
+| UserInfo (optional)        | `GET /userinfo`                               |
 
 All paths live on the tenant hostname (`https://{customer}.domo.com`). The BFF discovers them once per linked instance at startup (cached) rather than hardcoding paths.
 
@@ -201,14 +201,14 @@ All paths live on the tenant hostname (`https://{customer}.domo.com`). The BFF d
 
 Huckleberry registers with Gatekeeper as a **public PKCE OAuth 2.1 client**:
 
-| Field | Value |
-|---|---|
-| `client_name` | `Huckleberry` |
-| `redirect_uris` | `https://huckleberry.com/auth/domo/callback`, plus staging/dev variants |
-| `grant_types` | `["authorization_code", "refresh_token"]` |
-| `response_types` | `["code"]` |
-| `token_endpoint_auth_method` | `none` (public PKCE client) |
-| `scope` | union of all scopes we ever request across features — `ai:read ai:execute content:meta:read content:data:read dataset:meta:read dataset:data:read identity:read search:read` |
+| Field                        | Value                                                                                                                                                                        |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `client_name`                | `Huckleberry`                                                                                                                                                                |
+| `redirect_uris`              | `https://huckleberry.ai/auth/domo/callback`, plus staging/dev variants                                                                                                       |
+| `grant_types`                | `["authorization_code", "refresh_token"]`                                                                                                                                    |
+| `response_types`             | `["code"]`                                                                                                                                                                   |
+| `token_endpoint_auth_method` | `none` (public PKCE client)                                                                                                                                                  |
+| `scope`                      | union of all scopes we ever request across features — `ai:read ai:execute content:meta:read content:data:read dataset:meta:read dataset:data:read identity:read search:read` |
 
 There is no `client_secret`. PKCE (S256 code-challenge) is the proof-of-possession. The verifier never leaves the BFF — it's stored in the `OAuthStateStore` keyed by `state` for the duration of the round-trip.
 
@@ -226,10 +226,9 @@ Open question: does each Domo customer require us to register separately, or doe
 8. **Exact redirect URI match.** `/auth/domo/callback` is the only valid callback path; no trailing slashes, no path params.
 9. **Bind the OAuth `state` to the huckleberry session.** The `state` lookup in Redis must include the `userId` from the session cookie — a callback hitting our endpoint without the matching huckleberry session is rejected.
 
-## Why this is the right model for standalone huckleberry.com
+## Why this is the right model for standalone huckleberry.ai
 
 - Users sign in once with a huckleberry credential. Their session survives Domo session expiries.
 - One huckleberry user can link multiple Domo instances and switch without re-authing each one.
 - Refresh tokens live server-side, so we can do background work (memory extraction, scheduled jobs) on behalf of the user when the browser is closed.
 - The PKCE verifier lives only inside the BFF process — never reaches the browser. The SPA's job ends at the authorize redirect; the callback hits the BFF directly.
-
