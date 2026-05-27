@@ -1,0 +1,28 @@
+# Dependencies and build output
+node_modules
+dist
+
+# Environment files — never bake secrets into the image
+.env
+.env.*
+!.env.example
+
+# Dev tooling
+.git
+.github
+coverage
+*.log
+
+# Local infra
+docker-compose.yml
+docker-compose.*.yml
+
+# Docs / scripts (not needed at runtime)
+docs
+scripts
+infra
+
+# Test files
+test
+**/*.spec.ts
+**/*.e2e-spec.ts
