@@ -30,10 +30,11 @@ WORKDIR /app
 # Non-root user
 RUN addgroup -S huckleberry && adduser -S huckleberry -G huckleberry
 
-# Copy compiled output + prod node_modules only
+# Copy compiled output + prod node_modules + migrations
 COPY --from=builder --chown=huckleberry:huckleberry /app/dist ./dist
 COPY --from=builder --chown=huckleberry:huckleberry /app/node_modules ./node_modules
 COPY --from=builder --chown=huckleberry:huckleberry /app/package.json ./package.json
+COPY --from=builder --chown=huckleberry:huckleberry /app/drizzle ./drizzle
 
 USER huckleberry
 
