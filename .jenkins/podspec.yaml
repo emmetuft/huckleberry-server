@@ -1,0 +1,41 @@
+apiVersion: v1
+kind: Pod
+metadata: {}
+spec:
+  volumes:
+  - name: fuse
+    hostPath:
+      path: /dev/fuse
+  containers:
+  - name: docker
+    image: 972900829293.dkr.ecr.us-east-1.amazonaws.com/build/docker:29.3.1-cli-alpine3.23
+    command:
+    - sleep
+    args:
+    - 99d
+    tty: true
+    resources:
+      requests:
+        cpu: 250m
+        memory: 256Mi
+      limits:
+        cpu: 250m
+        memory: 512Mi
+  - name: buildah
+    image: 972900829293.dkr.ecr.us-east-1.amazonaws.com/build/buildah:v1.42.2-slim
+    command:
+    - sleep
+    args:
+    - 99d
+    tty: true
+    securityContext:
+      privileged: true
+    volumeMounts:
+    - name: fuse
+      mountPath: /dev/fuse
+    resources:
+      requests:
+        cpu: 1500m
+        memory: 4Gi
+      limits:
+        memory: 8Gi
