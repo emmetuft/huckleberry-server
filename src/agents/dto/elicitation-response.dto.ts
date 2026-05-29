@@ -8,7 +8,7 @@ export enum ElicitationAction {
 
 export class ElicitationItemDto {
   @IsEnum(ElicitationAction)
-  action: ElicitationAction;
+  action!: ElicitationAction;
 
   @IsObject()
   @IsOptional()
@@ -17,5 +17,5 @@ export class ElicitationItemDto {
 
 export class ElicitationResponseDto {
   @IsObject()
-  items: Record<string, ElicitationItemDto>;
+  items!: Record<string, ElicitationItemDto>;
 }

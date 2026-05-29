@@ -13,17 +13,17 @@ import {
 
 export class SearchFilterDto {
   @IsString()
-  type: string;
+  type!: string;
 
   @IsBoolean()
-  not: boolean;
+  not!: boolean;
 
   @IsArray()
   @IsString({ each: true })
-  values: string[];
+  values!: string[];
 
   @IsString()
-  operator: string;
+  operator!: string;
 }
 
 export class SearchAgentsDto {
