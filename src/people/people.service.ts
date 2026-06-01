@@ -14,6 +14,10 @@ export class PeopleService {
     return this.domo.get<DomoUser>(`/api/content/v3/users?id=${id}`);
   }
 
+  async getUsersByIdBulk(ids: string): Promise<DomoUser[]> {
+    return this.domo.get<DomoUser[]>(`/users/index?cvUserIds=${ids}`);
+  }
+
   async getGroups(limit = 100, offset?: number): Promise<DomoGroup[]> {
     const query: Record<string, string> = {
       ascending: 'true',

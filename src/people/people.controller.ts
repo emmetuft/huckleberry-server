@@ -10,7 +10,10 @@ export class PeopleController {
   constructor(private readonly peopleService: PeopleService) {}
 
   @Get('users')
-  getUsers() {
+  getUsers(@Query('ids') ids?: string) {
+    if (ids && ids.length > 0) {
+      return this.peopleService.getUsersByIdBulk(ids);
+    }
     return this.peopleService.getUsers();
   }
 
