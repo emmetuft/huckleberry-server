@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Get,
   HttpCode,
   HttpStatus,
   Post,
@@ -35,5 +36,11 @@ export class AiServicesController {
   @HttpCode(HttpStatus.OK)
   textToSql(@Body() dto: TextToSqlDto) {
     return this.aiServices.textToSql(dto);
+  }
+
+  @Get('models')
+  @HttpCode(HttpStatus.OK)
+  getModels() {
+    return this.aiServices.getModels();
   }
 }

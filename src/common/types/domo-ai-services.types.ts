@@ -133,3 +133,42 @@ export interface TextToSQLRequest {
   dataSourceSchemas?: AIDataSourceSchema[];
   sqlRequestOption?: SqlRequestOption;
 }
+
+export interface GetModelsResponse {
+  domoProvidedServiceModels: [
+    {
+      model: AIModel;
+      serviceModel: ServiceModel;
+    },
+  ];
+  serviceModels: [
+    {
+      model: AIModel;
+      serviceModel: ServiceModel;
+    },
+  ];
+  pageContext: {
+    count: number;
+    offset: number;
+    totalCount: number;
+  };
+}
+
+interface AIModel {
+  id: string;
+  name: string;
+  type: string;
+  description: string;
+  tasks: any[];
+  executionTypes: string[];
+  capabilities: any;
+  batchModelConfiguration: any;
+}
+
+interface ServiceModel {
+  modelId: string;
+  promptTemplate: string;
+  service: string;
+  systemMessage: string;
+  task: string;
+}
