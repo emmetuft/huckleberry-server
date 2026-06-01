@@ -8,6 +8,7 @@
 .idea/**/tasks.xml
 .idea/dictionaries
 /*.yaml
+!pnpm-lock.yaml
 
 # Sensitive or high-churn files:
 .idea/**/dataSources/
@@ -403,3 +404,4 @@ dist
 # pnpm is the package manager. Don't track competing lockfiles.
 package-lock.json
 yarn.lock
+.pnpm-store/
