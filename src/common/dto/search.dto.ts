@@ -11,10 +11,10 @@ import {
 
 export class SearchFilterDto {
   @IsString()
-  filterType: string;
+  filterType?: string;
 
   @IsString()
-  field: string;
+  field?: string;
 
   @IsOptional()
   @IsString()
@@ -28,7 +28,7 @@ export class SearchFilterDto {
   not?: boolean;
 }
 
-export class SearchConnectorsDto {
+export class SearchDto {
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => SearchFilterDto)

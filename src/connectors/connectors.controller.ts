@@ -12,7 +12,7 @@ import type { Response as ExpressResponse } from 'express';
 import { Readable } from 'node:stream';
 import { ConnectorsService } from './connectors.service.js';
 import { DomoAuthGuard } from '../common/guards/domo-auth.guard.js';
-import { SearchConnectorsDto } from './dto/search-connectors.dto.js';
+import { SearchDto } from '../common/dto/search.dto.js';
 import { DomoApiError } from '../common/filters/domo-exception.filter.js';
 
 @ApiTags('Connectors')
@@ -39,7 +39,7 @@ export class ConnectorsController {
   }
 
   @Post()
-  async fetchConnectors(@Body() dto: SearchConnectorsDto) {
+  async fetchConnectors(@Body() dto: SearchDto) {
     const domoResponse = await this.connectorsService.fetchConnectors(dto);
     const result = domoResponse as { searchObjects?: unknown[] };
     return result.searchObjects ?? [];

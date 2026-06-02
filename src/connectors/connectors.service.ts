@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { DomoProxyService } from '../domo-proxy/domo-proxy.service.js';
-import { SearchConnectorsDto } from './dto/search-connectors.dto.js';
+import { SearchDto } from '../common/dto/search.dto.js';
 
 @Injectable()
 export class ConnectorsService {
@@ -12,7 +12,7 @@ export class ConnectorsService {
     );
   }
 
-  async fetchConnectors(dto: SearchConnectorsDto): Promise<unknown[]> {
+  async fetchConnectors(dto: SearchDto): Promise<unknown[]> {
     const payload = {
       ...dto,
       entities: ['CONNECTOR'],

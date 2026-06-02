@@ -22,6 +22,7 @@ import { PeopleModule } from './people/people.module.js';
 import { PersonasModule } from './personas/personas.module.js';
 import { SessionsModule } from './sessions/sessions.module.js';
 import { ToolkitsModule } from './toolkits/toolkits.module.js';
+import { WorkflowsModule } from './workflows/workflows.module.js';
 
 @Module({
   imports: [
@@ -56,6 +57,7 @@ import { ToolkitsModule } from './toolkits/toolkits.module.js';
     PeopleModule,
     SessionsModule,
     ToolkitsModule,
+    WorkflowsModule,
   ],
   providers: [
     {
