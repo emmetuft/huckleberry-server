@@ -15,15 +15,17 @@ export class SearchFilterDto {
   @IsString()
   type!: string;
 
-  @IsBoolean()
-  not!: boolean;
-
   @IsArray()
   @IsString({ each: true })
   values!: string[];
 
   @IsString()
-  operator!: string;
+  @IsOptional()
+  operator?: string;
+
+  @IsBoolean()
+  @IsOptional()
+  not?: boolean;
 }
 
 export class SearchAgentsDto {

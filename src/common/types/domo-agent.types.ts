@@ -1,56 +1,65 @@
-import { AgentType, CustomAgentAccessLevel } from './domo-common.types.js';
+import { CustomAgentAccessLevel } from './domo-common.types';
 
-/** File set reference for agent context */
-export interface FileSet {
+/** Full Domo CustomAgent resource */
+export interface CustomAgent {
+  id: string;
+  customer: string;
+  owner: string;
+  name: string;
+  description: string;
+  prompt: string;
+  systemMessage?: string;
+  model?: string;
+  settings?: CustomAgentSettings;
+  uiSettings?: Record<string, any>;
+  theme?: Record<string, any>;
+  context?: AgentContext;
+  toolkitIds?: string[];
+  created?: string;
+  createdBy?: string;
+  updated?: string;
+  updatedBy?: string;
+  permission: CustomAgentAccessLevel;
+}
+
+/** Agent context — data sources, cards, pages, file sets the agent can access */
+export interface AgentContext {
+  id?: string;
+  dataSourceIds?: string[];
+  cardIds?: string[];
+  pageIds?: number[];
+  ignorableDataSourceIds?: string[];
+  filters?: Object[];
+  dateRangeFilter?: DateRangeFilter;
+  fileSets?: FileSet[];
+  descriptions?: Record<string, string>;
+}
+
+interface FileSet {
   id: string;
   name?: string;
 }
-
-/** Date range filter for agent context */
-export interface DateRangeFilter {
+interface DateRangeFilter {
   startDate?: string;
   endDate?: string;
   column?: string;
 }
 
-/** Agent context — data sources, cards, pages, file sets the agent can access */
-export interface AgentContext {
-  dataSourceIds?: string[];
-  cardIds?: string[];
-  pageIds?: number[];
-  ignorableDataSourceIds?: string[];
-  fileSets?: FileSet[];
-  dateRangeFilter?: DateRangeFilter;
-  descriptions?: Record<string, string>;
-}
-
-/** Access control entry for an agent */
-export interface CustomAgentAccess {
-  userId: string;
-  accessLevel: CustomAgentAccessLevel;
-}
-
-/** Full Domo CustomAgent resource */
-export interface CustomAgent {
-  id: string;
-  name: string;
-  prompt: string;
-  systemMessage?: string;
-  context?: AgentContext;
-  toolkitIds?: string[];
-  agentType?: AgentType;
-  access?: CustomAgentAccess[];
-  createdBy?: string;
-  createdDate?: string;
-  lastModifiedBy?: string;
-  lastModifiedDate?: string;
+export interface CustomAgentSettings {
+  id?: string;
+  properties?: Record<string, any>;
 }
 
 /** Request body for POST /api/ai/v1/agents */
 export interface CreateCustomAgentRequest {
   name: string;
+  description: string;
   prompt: string;
   systemMessage?: string;
+  model?: string;
+  settings?: CustomAgentSettings;
+  uiSettings?: Record<string, any>;
+  theme?: Record<string, any>;
   context?: AgentContext;
   toolkitIds?: string[];
 }
@@ -73,9 +82,9 @@ export interface AgentContextUpdateRequest {
 /** Individual filter for the Domo agent search API */
 export interface SearchFilter {
   type: string;
-  not: boolean;
   values: string[];
-  operator: string;
+  operator?: string;
+  not?: boolean;
 }
 
 /** Search agents request — matches the Domo POST /agents/search payload */

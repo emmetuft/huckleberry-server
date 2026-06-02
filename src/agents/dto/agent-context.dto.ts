@@ -53,15 +53,19 @@ export class AgentContextDto {
   ignorableDataSourceIds?: string[];
 
   @IsArray()
-  @ValidateNested({ each: true })
-  @Type(() => FileSetDto)
   @IsOptional()
-  fileSets?: FileSetDto[];
+  filters?: Object[];
 
   @ValidateNested()
   @Type(() => DateRangeFilterDto)
   @IsOptional()
   dateRangeFilter?: DateRangeFilterDto;
+
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => FileSetDto)
+  @IsOptional()
+  fileSets?: FileSetDto[];
 
   @IsObject()
   @IsOptional()
