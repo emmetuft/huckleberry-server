@@ -396,6 +396,7 @@ Temporary Items
 
 =======
 # Local
+.claude/settings.local.json
 .env
 dist
 .webpack
