@@ -1,0 +1,20 @@
+# CODEOWNERS defines who is automatically requested to review pull requests.
+#
+# How it works:
+#   - Each line is a file pattern followed by one or more GitHub usernames or teams.
+#   - The last matching pattern wins, so more specific rules below override broader ones above.
+#   - Owners are automatically added as reviewers when a PR touches matching files.
+#   - Review from a code owner can be made required via branch protection settings:
+#     Settings → Branches → Require review from Code Owners.
+#
+# Pattern syntax (same as .gitignore):
+#   *        matches any file in the repo (root catch-all)
+#   src/     matches everything under the src/ directory
+#   *.ts     matches all TypeScript files anywhere in the repo
+#
+# Examples:
+#   *                    @alice @bob          # all files
+#   src/payments/        @payments-team       # a subdirectory
+#   *.sql                @dba-team            # all SQL files
+
+* @emme-tuft_domo @jon-tiritilli_domo
