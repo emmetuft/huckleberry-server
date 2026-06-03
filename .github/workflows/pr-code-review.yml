@@ -1,0 +1,19 @@
+name: Claude Auto Review
+on:
+  pull_request:
+    types: [opened, synchronize, ready_for_review, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+  id-token: write
+
+jobs:
+  build:
+    uses: domo-development/domo-actions/.github/workflows/pr-code-review.yml@v2.8
+    with:
+      repository: ${{ github.repository }}
+      pr_number: ${{ github.event.pull_request.number }}
+    secrets:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      DOMO_ACTIONS_TOKEN: ${{ secrets.DOMO_ACTIONS_TOKEN }}
