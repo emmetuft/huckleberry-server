@@ -1,4 +1,4 @@
-// ── Enums ──────────────────────────────────────────────────────────────────
+// Enums
 
 export enum OutputStyle {
   BULLETED = 'bulleted',
@@ -25,113 +25,38 @@ export enum SeparatorType {
   SEMICOLON = 'SEMICOLON',
 }
 
-// ── Shared / Supporting types ──────────────────────────────────────────────
+// Shared / Supporting types
 
-export interface ParameterizedPromptTemplate {
-  template: string;
-  parameters?: Record<string, string>;
-}
-
-export interface ReasoningConfig {
-  enabled?: boolean;
-  effort?: ReasoningEffort;
-}
-
-export interface ModelProviderUsage {
-  promptTokens?: number;
-  completionTokens?: number;
-  totalTokens?: number;
-}
-
-export interface Choice {
-  index: number;
-  message?: string;
-  finishReason?: string;
-}
-
-export interface JsonResponseFormat {
-  type: string;
-  schema?: Record<string, unknown>;
-}
-
-export interface AISchemaColumn {
+interface AIModel {
+  id: string;
   name: string;
   type: string;
-  description?: string;
-  sampleValues?: string[];
+  description: string;
+  tasks: any[];
+  executionTypes: string[];
+  capabilities: any;
+  batchModelConfiguration: any;
 }
 
-export interface AIDataSourceSchema {
-  dataSourceId: string;
-  columns?: AISchemaColumn[];
+interface ServiceModel {
+  modelId: string;
+  promptTemplate: string;
+  service: string;
+  systemMessage: string;
+  task: string;
 }
 
-export interface SizeBoundary {
-  min?: number;
-  max?: number;
-}
+// Response types
 
-export interface ChunkingConfiguration {
-  enabled?: boolean;
-  sizeBoundary?: SizeBoundary;
-  separatorType?: SeparatorType;
-}
-
-// ── Response ───────────────────────────────────────────────────────────────
-
-export interface TextAIResponse {
-  id?: string;
-  object?: string;
-  created?: number;
-  model?: string;
-  choices?: Choice[];
-  usage?: ModelProviderUsage;
-}
-
-// ── Request types ──────────────────────────────────────────────────────────
-
-export interface TextGenerationRequest {
-  input: string;
+export interface AIServiceResponse {
+  choices?: { output: string }[];
+  isCustomerModel?: boolean;
+  modelId?: string;
+  modelProviderUsage?: any;
+  output?: string;
+  prompt?: string;
+  requestId?: string;
   sessionId?: string;
-  model?: string;
-  system?: string;
-  promptTemplate?: ParameterizedPromptTemplate;
-  parameters?: Record<string, unknown>;
-  modelConfiguration?: Record<string, unknown>;
-  temperature?: number;
-  maxTokens?: number;
-  reasoningConfig?: ReasoningConfig;
-  responseFormat?: JsonResponseFormat;
-}
-
-export interface TextSummarizationRequest {
-  input: string;
-  sessionId?: string;
-  model?: string;
-  system?: string;
-  promptTemplate?: ParameterizedPromptTemplate;
-  parameters?: Record<string, unknown>;
-  modelConfiguration?: Record<string, unknown>;
-  temperature?: number;
-  maxTokens?: number;
-  reasoningConfig?: ReasoningConfig;
-  outputStyle?: OutputStyle;
-  chunkingConfiguration?: ChunkingConfiguration;
-}
-
-export interface TextToSQLRequest {
-  input: string;
-  sessionId?: string;
-  model?: string;
-  system?: string;
-  promptTemplate?: ParameterizedPromptTemplate;
-  parameters?: Record<string, unknown>;
-  modelConfiguration?: Record<string, unknown>;
-  temperature?: number;
-  maxTokens?: number;
-  reasoningConfig?: ReasoningConfig;
-  dataSourceSchemas?: AIDataSourceSchema[];
-  sqlRequestOption?: SqlRequestOption;
 }
 
 export interface GetModelsResponse {
@@ -152,23 +77,4 @@ export interface GetModelsResponse {
     offset: number;
     totalCount: number;
   };
-}
-
-interface AIModel {
-  id: string;
-  name: string;
-  type: string;
-  description: string;
-  tasks: any[];
-  executionTypes: string[];
-  capabilities: any;
-  batchModelConfiguration: any;
-}
-
-interface ServiceModel {
-  modelId: string;
-  promptTemplate: string;
-  service: string;
-  systemMessage: string;
-  task: string;
 }

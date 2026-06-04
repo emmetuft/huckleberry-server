@@ -30,10 +30,3 @@ export interface Persona {
   createdAt: string;
   updatedAt: string;
 }
-
-export type CreatePersonaInput = Omit<
-  Persona,
-  'id' | 'isDefault' | 'createdAt' | 'updatedAt'
->;
-
-export type UpdatePersonaInput = Partial<CreatePersonaInput>;

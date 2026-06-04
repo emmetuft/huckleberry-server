@@ -2,12 +2,10 @@ import { Type } from 'class-transformer';
 import {
   IsArray,
   IsBoolean,
-  IsIn,
   IsNumber,
   IsObject,
   IsOptional,
   IsString,
-  Min,
   ValidateNested,
 } from 'class-validator';
 
@@ -29,6 +27,18 @@ export class SearchFilterDto {
 }
 
 export class SearchAgentsDto {
+  @IsNumber()
+  @IsOptional()
+  limit?: number;
+
+  @IsNumber()
+  @IsOptional()
+  offset?: number;
+
+  @IsObject()
+  @IsOptional()
+  sortFieldMap?: Record<string, 'ASC' | 'DESC'>;
+
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => SearchFilterDto)
@@ -37,23 +47,13 @@ export class SearchAgentsDto {
 
   @IsObject()
   @IsOptional()
-  search?: Record<string, string>;
+  searchFieldMap?: Record<string, string>;
 
-  @IsString()
+  @IsObject()
   @IsOptional()
-  sort?: string;
+  dateFilters?: Record<string, unknown>;
 
-  @IsIn(['ASC', 'DESC'])
+  @IsObject()
   @IsOptional()
-  order?: 'ASC' | 'DESC';
-
-  @IsNumber()
-  @Min(1)
-  @IsOptional()
-  limit?: number;
-
-  @IsNumber()
-  @Min(0)
-  @IsOptional()
-  offset?: number;
+  groupByMap?: Record<string, unknown>;
 }

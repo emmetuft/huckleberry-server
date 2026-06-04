@@ -40,10 +40,3 @@ export interface McpToolResult {
   data?: unknown;
   error?: string;
 }
-
-export type CreateMcpServerInput = Pick<
-  McpServerConfig,
-  'name' | 'url' | 'authType' | 'bearerToken' | 'oauth2Config'
->;
-
-export type UpdateMcpServerInput = Partial<CreateMcpServerInput>;

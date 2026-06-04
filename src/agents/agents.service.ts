@@ -2,18 +2,15 @@ import { Injectable, Logger } from '@nestjs/common';
 import { DomoProxyService } from '../domo-proxy/domo-proxy.service.js';
 import {
   CustomAgent,
-  CreateCustomAgentRequest,
-  UpdateCustomAgentRequest,
-  AgentContextUpdateRequest,
-  SearchAgentsRequest,
   SearchAgentsResponse,
 } from '../common/types/domo-agent.types.js';
-import {
-  AssistantExecutionRequest,
-  AgentResumeRequest,
-} from '../common/types/domo-session.types.js';
 import { AgentInclude } from '../common/types/domo-common.types.js';
+import { CreateAgentDto } from './dto/create-agent.dto.js';
+import { UpdateAgentDto } from './dto/update-agent.dto.js';
+import { AgentContextUpdateDto } from './dto/agent-context-update.dto.js';
 import { SearchAgentsDto } from './dto/search-agents.dto.js';
+import { ExecuteAgentDto } from './dto/execute-agent.dto.js';
+import { ResumeAgentDto } from './dto/resume-agent.dto.js';
 
 const AGENTS_BASE = '/api/ai/v1/agents';
 
@@ -59,7 +56,7 @@ export class AgentsService {
     return this.agentCache.has(agentId);
   }
 
-  async create(dto: CreateCustomAgentRequest): Promise<CustomAgent> {
+  async create(dto: CreateAgentDto): Promise<CustomAgent> {
     return this.domo.post<CustomAgent>(AGENTS_BASE, dto);
   }
 
@@ -70,7 +67,7 @@ export class AgentsService {
 
   async update(
     agentId: string,
-    dto: UpdateCustomAgentRequest,
+    dto: UpdateAgentDto,
   ): Promise<CustomAgent> {
     return this.domo.put<CustomAgent>(`${AGENTS_BASE}/${agentId}`, dto);
   }
@@ -80,44 +77,22 @@ export class AgentsService {
   }
 
   async search(dto: SearchAgentsDto): Promise<SearchAgentsResponse> {
-    const payload = this.buildSearchPayload(dto);
     return this.domo.post<SearchAgentsResponse>(
       `${AGENTS_BASE}/search`,
-      payload,
+      dto,
     );
-  }
-
-  private buildSearchPayload(dto: SearchAgentsDto): SearchAgentsRequest {
-    const payload: SearchAgentsRequest = {};
-
-    if (dto.limit != null) payload.limit = dto.limit;
-    if (dto.offset != null) payload.offset = dto.offset;
-
-    if (dto.sort) {
-      payload.sortFieldMap = { [dto.sort]: dto.order ?? 'ASC' };
-    }
-
-    if (dto.filters?.length) {
-      payload.filters = dto.filters;
-    }
-
-    if (dto.search && Object.keys(dto.search).length > 0) {
-      payload.searchFieldMap = dto.search;
-    }
-
-    return payload;
   }
 
   async updateContext(
     agentId: string,
-    dto: AgentContextUpdateRequest,
+    dto: AgentContextUpdateDto,
   ): Promise<CustomAgent> {
     return this.domo.put<CustomAgent>(`${AGENTS_BASE}/${agentId}/context`, dto);
   }
 
   async executeStream(
     agentId: string,
-    dto: AssistantExecutionRequest,
+    dto: ExecuteAgentDto,
   ): Promise<Response> {
     return this.domo.postStream(
       `${AGENTS_BASE}/${agentId}/execute/streaming`,
@@ -127,7 +102,7 @@ export class AgentsService {
 
   async resumeStream(
     agentId: string,
-    dto: AgentResumeRequest,
+    dto: ResumeAgentDto,
   ): Promise<Response> {
     return this.domo.postStream(
       `${AGENTS_BASE}/${agentId}/resume/streaming`,

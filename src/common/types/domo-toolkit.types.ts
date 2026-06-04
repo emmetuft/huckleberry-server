@@ -1,36 +1,24 @@
-/** Context entry types for toolkits */
-export enum ToolkitContextEntryType {
-  CARD = 'CARD',
-  DATASOURCE = 'DATASOURCE',
-  FILTER = 'FILTER',
-  PAGE = 'PAGE',
-  FILESET = 'FILESET',
-  DATE_RANGE_FILTER = 'DATE_RANGE_FILTER',
-}
-
-export interface ToolkitContextEntry {
-  type: ToolkitContextEntryType;
-  id: string;
-  name?: string;
-}
-
-export interface ToolkitContext {
-  entries: ToolkitContextEntry[];
-}
-
-export interface Tool {
-  id: string;
-  name: string;
-  description?: string;
-  type: string;
-}
-
 export interface Toolkit {
-  id: string;
+  toolkitId: string;
   name: string;
-  description?: string;
-  tools?: Tool[];
-  context?: ToolkitContext;
-  createdBy?: string;
-  createdDate?: string;
+  description: string;
+  tools: Tool[];
+  context: Record<string, any>;
+  createdAt: string;
+  createdBy: string;
+  updatedAt?: string;
+  updatedBy?: string;
+}
+
+interface Tool {
+  toolId: string;
+  domoToolId: string;
+  overrideToolName: string;
+  overrideToolDescription: string;
+  type: string;
+  customer: string;
+  createdAt: string;
+  createdBy: string;
+  updatedAt?: string;
+  updatedBy?: string;
 }

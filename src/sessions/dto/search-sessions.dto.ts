@@ -11,17 +11,19 @@ import {
 
 export class SearchFilterDto {
   @IsString()
-  type: string;
-
-  @IsBoolean()
-  not: boolean;
+  type!: string;
 
   @IsArray()
   @IsString({ each: true })
-  values: string[];
+  values!: string[];
 
   @IsString()
-  operator: string;
+  @IsOptional()
+  operator?: string;
+
+  @IsBoolean()
+  @IsOptional()
+  not?: boolean;
 }
 
 export class SearchSessionsDto {
@@ -32,10 +34,10 @@ export class SearchSessionsDto {
   filters?: SearchFilterDto[];
 
   @IsOptional()
-  sortFieldMap?: unknown;
+  sortFieldMap?: Record<string, 'ASC' | 'DESC'>;
 
   @IsOptional()
-  searchFieldMap?: unknown;
+  searchFieldMap?: Record<string, string>;
 
   @IsNumber()
   @Min(1)
