@@ -14,6 +14,10 @@ export class ResumeAgentDto {
 
   @IsString()
   @IsOptional()
+  batchConfirmationId?: string;
+
+  @IsString()
+  @IsOptional()
   sourceRequestId?: string;
 
   @IsString()
@@ -24,6 +28,10 @@ export class ResumeAgentDto {
   @Type(() => AgentContextDto)
   @IsOptional()
   aiAssistantContext?: AgentContextDto;
+
+  @IsString()
+  @IsOptional()
+  agentStrategy?: string;
 
   @ValidateNested()
   @Type(() => ElicitationResponseDto)
