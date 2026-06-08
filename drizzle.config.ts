@@ -2,26 +2,38 @@ import 'dotenv/config';
 import { defineConfig } from 'drizzle-kit';
 
 /**
- * drizzle-kit config — used by `pnpm db:generate` (diff TS schema against
- * the last migration) and `pnpm db:push` / `db:migrate` (apply migrations).
+ * drizzle-kit config — used by `pnpm db:generate` and `pnpm db:migrate`.
  *
- * Migration SQL files live in `./drizzle/`. They're committed to the repo
- * and run by the same migrator at BFF boot in dev (programmatic) and by the
- * deploy-time runner in prod (`GET_LOCK('hb_migrate', 30)` per
- * docs/diagrams/aurora-integration.md).
+ * Local dev: set DATABASE_URL (embedded credentials, no SSL).
+ * Aurora / remote: set DATABASE_HOST + DATABASE_USER + DATABASE_NAME and
+ * pre-generate DATABASE_PASSWORD via:
+ *   export DATABASE_PASSWORD=$(aws rds generate-db-auth-token \
+ *     --hostname $DATABASE_HOST --port 3306 \
+ *     --region us-east-1 --username $DATABASE_USER)
  */
+const url = process.env.DATABASE_URL;
+const host = process.env.DATABASE_HOST;
+
+if (!url && !host) {
+  throw new Error(
+    'Set DATABASE_URL (local) or DATABASE_HOST (Aurora) before running drizzle-kit',
+  );
+}
+
 export default defineConfig({
   dialect: 'mysql',
   schema: './src/common/db/schema.ts',
   out: './drizzle',
-  dbCredentials: {
-    url:
-      process.env.DATABASE_URL ??
-      'mysql://huckleberry:huckleberry@localhost:3306/huckleberry',
-  },
-  // Target is MySQL 8.4 LTS (our Aurora cluster runs 8.4). Stick to the
-  // 8.4 feature set — both the local container and Aurora enforce the
-  // same reserved-word and deprecated-feature rules.
+  dbCredentials: url
+    ? { url }
+    : {
+        host: host!,
+        port: parseInt(process.env.DATABASE_PORT || '3306', 10),
+        user: process.env.DATABASE_USER ?? 'huckleberry_app',
+        password: process.env.DATABASE_PASSWORD ?? '',
+        database: process.env.DATABASE_NAME ?? 'huckleberry',
+        ssl: { rejectUnauthorized: true },
+      },
   verbose: true,
   strict: true,
 });

@@ -1,6 +1,7 @@
 import { Global, Logger, Module } from '@nestjs/common';
 import type { OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { Signer } from '@aws-sdk/rds-signer';
 import { drizzle, MySql2Database } from 'drizzle-orm/mysql2';
 import { createPool, Pool } from 'mysql2/promise';
 import type { AppConfig } from '../config/configuration.js';
@@ -28,20 +29,44 @@ export type Db = MySql2Database;
       useFactory: async (config: ConfigService) => {
         const app = config.get<AppConfig>('app');
         const url = app?.databaseUrl;
-        if (!url) {
+        const host = app?.databaseHost;
+
+        if (!url && !host) {
           new Logger('DbModule').log(
-            'DATABASE_URL unset — staying on in-memory repositories',
+            'DATABASE_URL and DATABASE_HOST both unset — staying on in-memory repositories',
           );
           return null;
         }
-        const pool: Pool = createPool({
-          uri: url,
-          waitForConnections: true,
-          connectionLimit: 10,
-          // Aurora-friendly: keep idle conns short so RDS Proxy can multiplex
-          // efficiently. Local MySQL is unaffected.
-          idleTimeout: 60_000,
-        });
+
+        let pool: Pool;
+        if (url) {
+          pool = createPool({
+            uri: url,
+            waitForConnections: true,
+            connectionLimit: 10,
+            idleTimeout: 60_000,
+          });
+        } else {
+          const signer = new Signer({
+            region: process.env.AWS_REGION ?? 'us-east-1',
+            hostname: host!,
+            port: app!.databasePort,
+            username: app!.databaseUser,
+          });
+          pool = createPool({
+            host: host!,
+            port: app!.databasePort,
+            user: app!.databaseUser,
+            database: app!.databaseName,
+            // mysql2 TS types don't expose the password-as-function variant
+            // but the runtime supports it; the function is called per connection.
+            password: (() => signer.getAuthToken()) as unknown as string,
+            ssl: { rejectUnauthorized: true },
+            waitForConnections: true,
+            connectionLimit: 10,
+            idleTimeout: 60_000,
+          });
+        }
         const db = drizzle(pool);
         if (app?.databaseRunMigrations) {
           await runMigrations(db);

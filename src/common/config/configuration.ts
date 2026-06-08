@@ -22,12 +22,20 @@ export interface AppConfig {
   neo4jPassword: string;
   neo4jDatabase: string;
   /**
-   * MySQL connection string for the BFF's persistent state (users,
-   * magic_links, sessions, linked_domo_instances, domo_oauth_tokens).
-   * Mirrors the Aurora MySQL 8.4 target. When unset, repositories fall back to the
-   * in-memory MVP implementations.
+   * MySQL connection string — local dev only (docker-compose).
+   * When set, the pool connects with the embedded credentials.
+   * In production, leave unset and provide the individual DATABASE_* vars
+   * below; the pool uses an IAM-signed RDS auth token as the password.
    */
   databaseUrl: string | null;
+  /**
+   * Aurora / RDS connection params used when DATABASE_URL is absent.
+   * The BFF authenticates via IAM database auth — no password stored.
+   */
+  databaseHost: string | null;
+  databasePort: number;
+  databaseUser: string;
+  databaseName: string;
   /**
    * When true, apply pending Drizzle migrations at boot. Local dev only —
    * production runs the same SQL files via a deploy-time runner with
@@ -231,6 +239,10 @@ export default (): { app: AppConfig } => ({
     neo4jPassword: process.env.NEO4J_PASSWORD || '',
     neo4jDatabase: process.env.NEO4J_DATABASE || 'neo4j',
     databaseUrl: process.env.DATABASE_URL || null,
+    databaseHost: process.env.DATABASE_HOST || null,
+    databasePort: parseInt(process.env.DATABASE_PORT || '3306', 10),
+    databaseUser: process.env.DATABASE_USER || 'huckleberry_app',
+    databaseName: process.env.DATABASE_NAME || 'huckleberry',
     databaseRunMigrations: process.env.DATABASE_RUN_MIGRATIONS === 'true',
     smtpHost: process.env.SMTP_HOST || null,
     smtpPort: parseInt(process.env.SMTP_PORT || '1025', 10),
