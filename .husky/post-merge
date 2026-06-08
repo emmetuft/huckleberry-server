@@ -1,0 +1,2 @@
+#!/bin/sh
+git diff-index --name-only ORIG_HEAD -- | grep -q pnpm-lock.yaml && pnpm install
