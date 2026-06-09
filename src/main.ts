@@ -47,10 +47,7 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
   app.setGlobalPrefix('api', {
-    exclude: [
-      { path: 'health', method: RequestMethod.ALL },
-      { path: 'domo/*path', method: RequestMethod.ALL },
-    ],
+    exclude: [{ path: 'health', method: RequestMethod.ALL }],
   });
 
   app.useGlobalPipes(

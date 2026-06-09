@@ -1,0 +1,1071 @@
+{
+  "info": {
+    "name": "Huckleberry Server",
+    "description": "API collection for all Huckleberry Server endpoints.\n\nVariables:\n- `baseUrl`: e.g. http://localhost:3000\n- `devToken`: DEV_TOKEN value (DomoAuthGuard endpoints)\n- `hbSession`: hb_session cookie value (HuckleberryAuthGuard endpoints)\n- `csrfToken`: csrf_token cookie value\n- `adminApiKey`: ADMIN_API_KEY env value",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3000" },
+    { "key": "devToken", "value": "" },
+    { "key": "hbSession", "value": "" },
+    { "key": "csrfToken", "value": "" },
+    { "key": "adminApiKey", "value": "" },
+    { "key": "agentId", "value": "" },
+    { "key": "sessionId", "value": "" },
+    { "key": "mcpServerId", "value": "" },
+    { "key": "personaId", "value": "" },
+    { "key": "datasourceId", "value": "" },
+    { "key": "connectorDatabaseId", "value": "" },
+    { "key": "userId", "value": "" },
+    { "key": "groupId", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "GET /health",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/health" },
+            "description": "Health check — no auth required."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Auth",
+      "description": "HuckleberryAuthGuard. Public endpoints use no auth; protected endpoints require hb_session + csrf_token cookies.",
+      "item": [
+        {
+          "name": "POST /api/auth/signup",
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{baseUrl}}/api/auth/signup" },
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"user@example.com\"\n}"
+            },
+            "description": "Initiate signup flow. Returns 202 regardless of whether the email exists (existence-oracle protection)."
+          }
+        },
+        {
+          "name": "POST /api/auth/signin/request",
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{baseUrl}}/api/auth/signin/request" },
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"user@example.com\"\n}"
+            },
+            "description": "Request a magic link for sign-in. Returns 202."
+          }
+        },
+        {
+          "name": "GET /api/auth/signin",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/signin?token=MAGIC_LINK_TOKEN",
+              "query": [{ "key": "token", "value": "MAGIC_LINK_TOKEN" }]
+            },
+            "description": "Exchange magic-link token. Sets hb_session and csrf_token cookies."
+          }
+        },
+        {
+          "name": "POST /api/auth/logout",
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{baseUrl}}/api/auth/logout" },
+            "header": [
+              { "key": "Cookie", "value": "hb_session={{hbSession}}; csrf_token={{csrfToken}}" },
+              { "key": "x-csrf-token", "value": "{{csrfToken}}" }
+            ],
+            "description": "Logout — clears cookies. Returns 204."
+          }
+        },
+        {
+          "name": "GET /api/auth/me",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/auth/me" },
+            "header": [
+              { "key": "Cookie", "value": "hb_session={{hbSession}}; csrf_token={{csrfToken}}" },
+              { "key": "x-csrf-token", "value": "{{csrfToken}}" }
+            ],
+            "description": "Returns the current user profile."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin",
+      "description": "Requires x-admin-api-key header. Not under /api prefix.",
+      "item": [
+        {
+          "name": "POST /admin/users",
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{baseUrl}}/admin/users" },
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-admin-api-key", "value": "{{adminApiKey}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"newuser@example.com\",\n  \"displayName\": \"New User\"\n}"
+            },
+            "description": "Provision a new user and Domo instance."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Domo Linkage",
+      "description": "HuckleberryAuthGuard. Links a Domo instance to the current user.",
+      "item": [
+        {
+          "name": "POST /api/auth/domo/link/start",
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{baseUrl}}/api/auth/domo/link/start" },
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Cookie", "value": "hb_session={{hbSession}}; csrf_token={{csrfToken}}" },
+              { "key": "x-csrf-token", "value": "{{csrfToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"issuerUrl\": \"https://your-instance.domo.com\"\n}"
+            },
+            "description": "Start PKCE OAuth flow. Returns { authorizeUrl }."
+          }
+        },
+        {
+          "name": "GET /api/auth/domo/callback",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/domo/callback?code=AUTH_CODE&state=STATE",
+              "query": [
+                { "key": "code", "value": "AUTH_CODE" },
+                { "key": "state", "value": "STATE" }
+              ]
+            },
+            "header": [
+              { "key": "Cookie", "value": "hb_session={{hbSession}}; csrf_token={{csrfToken}}" }
+            ],
+            "description": "OAuth callback — exchanges code for tokens and redirects."
+          }
+        },
+        {
+          "name": "GET /api/auth/domo/links",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/auth/domo/links" },
+            "header": [
+              { "key": "Cookie", "value": "hb_session={{hbSession}}; csrf_token={{csrfToken}}" }
+            ],
+            "description": "Returns active Domo link for the current user."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Agents",
+      "description": "DomoAuthGuard — pass x-domo-developer-token or x-domo-embedded-security header.",
+      "item": [
+        {
+          "name": "GET /api/agents",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/agents" },
+            "header": [{ "key": "x-domo-developer-token", "value": "{{devToken}}" }],
+            "description": "List all available agents."
+          }
+        },
+        {
+          "name": "POST /api/agents",
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{baseUrl}}/api/agents" },
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-domo-developer-token", "value": "{{devToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"My Agent\",\n  \"description\": \"A test agent\",\n  \"prompt\": \"You are a helpful assistant.\",\n  \"systemMessage\": null,\n  \"model\": null,\n  \"toolkitIds\": []\n}"
+            },
+            "description": "Create a new agent."
+          }
+        },
+        {
+          "name": "POST /api/agents/refresh",
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{baseUrl}}/api/agents/refresh" },
+            "header": [{ "key": "x-domo-developer-token", "value": "{{devToken}}" }],
+            "description": "Refresh the agents list. Returns { count }."
+          }
+        },
+        {
+          "name": "POST /api/agents/search",
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{baseUrl}}/api/agents/search" },
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-domo-developer-token", "value": "{{devToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"limit\": 20,\n  \"offset\": 0,\n  \"filters\": [],\n  \"sortFieldMap\": {},\n  \"searchFieldMap\": {}\n}"
+            },
+            "description": "Search agents with optional filters and pagination."
+          }
+        },
+        {
+          "name": "GET /api/agents/:agentId",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/agents/{{agentId}}",
+              "variable": [{ "key": "agentId", "value": "{{agentId}}" }]
+            },
+            "header": [{ "key": "x-domo-developer-token", "value": "{{devToken}}" }],
+            "description": "Get a specific agent by ID."
+          }
+        },
+        {
+          "name": "PUT /api/agents/:agentId",
+          "request": {
+            "method": "PUT",
+            "url": {
+              "raw": "{{baseUrl}}/api/agents/{{agentId}}",
+              "variable": [{ "key": "agentId", "value": "{{agentId}}" }]
+            },
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-domo-developer-token", "value": "{{devToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Updated Agent Name\",\n  \"prompt\": \"Updated prompt.\"\n}"
+            },
+            "description": "Update an agent."
+          }
+        },
+        {
+          "name": "DELETE /api/agents/:agentId",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/api/agents/{{agentId}}",
+              "variable": [{ "key": "agentId", "value": "{{agentId}}" }]
+            },
+            "header": [{ "key": "x-domo-developer-token", "value": "{{devToken}}" }],
+            "description": "Delete an agent. Returns 204."
+          }
+        },
+        {
+          "name": "PATCH /api/agents/:agentId/context",
+          "request": {
+            "method": "PATCH",
+            "url": {
+              "raw": "{{baseUrl}}/api/agents/{{agentId}}/context",
+              "variable": [{ "key": "agentId", "value": "{{agentId}}" }]
+            },
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-domo-developer-token", "value": "{{devToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"add\": {\n    \"dataSourceIds\": [\"datasource-id-here\"],\n    \"cardIds\": [],\n    \"pageIds\": []\n  },\n  \"remove\": {\n    \"dataSourceIds\": [],\n    \"cardIds\": [],\n    \"pageIds\": []\n  }\n}"
+            },
+            "description": "Add or remove context items on an agent."
+          }
+        },
+        {
+          "name": "POST /api/agents/:agentId/execute/streaming",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/agents/{{agentId}}/execute/streaming",
+              "variable": [{ "key": "agentId", "value": "{{agentId}}" }]
+            },
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-domo-developer-token", "value": "{{devToken}}" },
+              { "key": "Accept", "value": "text/event-stream" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"input\": \"What can you help me with?\",\n  \"sessionId\": null\n}"
+            },
+            "description": "Execute an agent and stream the response (SSE)."
+          }
+        },
+        {
+          "name": "POST /api/agents/:agentId/resume/streaming",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/agents/{{agentId}}/resume/streaming",
+              "variable": [{ "key": "agentId", "value": "{{agentId}}" }]
+            },
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-domo-developer-token", "value": "{{devToken}}" },
+              { "key": "Accept", "value": "text/event-stream" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sessionId\": \"{{sessionId}}\",\n  \"batchId\": null,\n  \"input\": \"yes\"\n}"
+            },
+            "description": "Resume a paused agent execution (user-in-the-loop). Streams response."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Huckleberry",
+      "description": "Direct huckleberry execution endpoints — DomoAuthGuard.",
+      "item": [
+        {
+          "name": "POST /api/huckleberry/execute/streaming",
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{baseUrl}}/api/huckleberry/execute/streaming" },
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-domo-developer-token", "value": "{{devToken}}" },
+              { "key": "Accept", "value": "text/event-stream" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"input\": \"Summarize my data.\",\n  \"sessionId\": null\n}"
+            },
+            "description": "Execute the huckleberry agent with streaming."
+          }
+        },
+        {
+          "name": "POST /api/huckleberry/resume/streaming",
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{baseUrl}}/api/huckleberry/resume/streaming" },
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-domo-developer-token", "value": "{{devToken}}" },
+              { "key": "Accept", "value": "text/event-stream" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sessionId\": \"{{sessionId}}\",\n  \"input\": \"yes\"\n}"
+            },
+            "description": "Resume a paused huckleberry execution."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Sessions",
+      "description": "DomoAuthGuard.",
+      "item": [
+        {
+          "name": "POST /api/sessions (search)",
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{baseUrl}}/api/sessions" },
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-domo-developer-token", "value": "{{devToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"limit\": 20,\n  \"offset\": 0,\n  \"filters\": [],\n  \"sortFieldMap\": {}\n}"
+            },
+            "description": "Search sessions with optional filters."
+          }
+        },
+        {
+          "name": "GET /api/sessions/:sessionId",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/sessions/{{sessionId}}",
+              "variable": [{ "key": "sessionId", "value": "{{sessionId}}" }]
+            },
+            "header": [{ "key": "x-domo-developer-token", "value": "{{devToken}}" }],
+            "description": "Get a specific session."
+          }
+        },
+        {
+          "name": "GET /api/sessions/:sessionId/events",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/sessions/{{sessionId}}/events",
+              "variable": [{ "key": "sessionId", "value": "{{sessionId}}" }]
+            },
+            "header": [{ "key": "x-domo-developer-token", "value": "{{devToken}}" }],
+            "description": "Get all events for a session."
+          }
+        },
+        {
+          "name": "DELETE /api/sessions/:sessionId",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/api/sessions/{{sessionId}}",
+              "variable": [{ "key": "sessionId", "value": "{{sessionId}}" }]
+            },
+            "header": [{ "key": "x-domo-developer-token", "value": "{{devToken}}" }],
+            "description": "Delete a session."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Datasources",
+      "description": "DomoAuthGuard. Routes are outside /api prefix.",
+      "item": [
+        {
+          "name": "GET /datasources",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/datasources?offset=0&limit=20",
+              "query": [
+                { "key": "offset", "value": "0" },
+                { "key": "limit", "value": "20" },
+                { "key": "nameLike", "value": "", "disabled": true }
+              ]
+            },
+            "header": [{ "key": "x-domo-developer-token", "value": "{{devToken}}" }],
+            "description": "List datasources with optional pagination and name filter."
+          }
+        },
+        {
+          "name": "GET /datasources/:id/schema",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/datasources/{{datasourceId}}/schema",
+              "variable": [{ "key": "datasourceId", "value": "{{datasourceId}}" }]
+            },
+            "header": [{ "key": "x-domo-developer-token", "value": "{{devToken}}" }],
+            "description": "Get the schema for a datasource."
+          }
+        },
+        {
+          "name": "POST /datasources/:id/data",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/datasources/{{datasourceId}}/data?page=0&size=100",
+              "variable": [{ "key": "datasourceId", "value": "{{datasourceId}}" }],
+              "query": [
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "100" }
+              ]
+            },
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-domo-developer-token", "value": "{{devToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"columns\": [\"*\"],\n  \"filters\": []\n}"
+            },
+            "description": "Query rows from a datasource."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Connectors",
+      "description": "DomoAuthGuard.",
+      "item": [
+        {
+          "name": "POST /api/connectors (search)",
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{baseUrl}}/api/connectors" },
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-domo-developer-token", "value": "{{devToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"filters\": [],\n  \"count\": 20,\n  \"offset\": 0\n}"
+            },
+            "description": "Search connectors."
+          }
+        },
+        {
+          "name": "GET /api/connectors/:databaseId/image",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/connectors/{{connectorDatabaseId}}/image",
+              "variable": [{ "key": "connectorDatabaseId", "value": "{{connectorDatabaseId}}" }]
+            },
+            "header": [{ "key": "x-domo-developer-token", "value": "{{devToken}}" }],
+            "description": "Get connector icon image (image/png)."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Workflows",
+      "description": "DomoAuthGuard.",
+      "item": [
+        {
+          "name": "POST /api/workflows (search)",
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{baseUrl}}/api/workflows" },
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-domo-developer-token", "value": "{{devToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"filters\": [],\n  \"count\": 20,\n  \"offset\": 0\n}"
+            },
+            "description": "Search workflows."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Identity",
+      "description": "DomoAuthGuard.",
+      "item": [
+        {
+          "name": "GET /api/identity",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/identity" },
+            "header": [{ "key": "x-domo-developer-token", "value": "{{devToken}}" }],
+            "description": "Get identity for the current session."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Graph",
+      "description": "DomoAuthGuard.",
+      "item": [
+        {
+          "name": "POST /api/graph/nodes",
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{baseUrl}}/api/graph/nodes" },
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-domo-developer-token", "value": "{{devToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"filter\": {\n    \"nodeLabels\": [\"Agent\"],\n    \"labelMode\": \"ANY\",\n    \"propertyFilters\": []\n  },\n  \"limit\": 50\n}"
+            },
+            "description": "Fetch graph nodes matching the given filter."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Toolkits",
+      "description": "DomoAuthGuard.",
+      "item": [
+        {
+          "name": "GET /api/toolkits",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/toolkits" },
+            "header": [{ "key": "x-domo-developer-token", "value": "{{devToken}}" }],
+            "description": "List all available toolkits."
+          }
+        }
+      ]
+    },
+    {
+      "name": "MCP Servers",
+      "description": "DomoAuthGuard.",
+      "item": [
+        {
+          "name": "GET /api/mcp/servers",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/mcp/servers",
+              "query": [{ "key": "enabled", "value": "true", "disabled": true }]
+            },
+            "header": [{ "key": "x-domo-developer-token", "value": "{{devToken}}" }],
+            "description": "List MCP servers. Optional ?enabled=true|false filter."
+          }
+        },
+        {
+          "name": "POST /api/mcp/servers",
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{baseUrl}}/api/mcp/servers" },
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-domo-developer-token", "value": "{{devToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"My MCP Server\",\n  \"url\": \"https://mcp.example.com\",\n  \"authType\": \"BEARER\",\n  \"bearerToken\": \"my-token\"\n}"
+            },
+            "description": "Register a new MCP server."
+          }
+        },
+        {
+          "name": "GET /api/mcp/servers/:id",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/mcp/servers/{{mcpServerId}}",
+              "variable": [{ "key": "mcpServerId", "value": "{{mcpServerId}}" }]
+            },
+            "header": [{ "key": "x-domo-developer-token", "value": "{{devToken}}" }],
+            "description": "Get a specific MCP server."
+          }
+        },
+        {
+          "name": "PUT /api/mcp/servers/:id",
+          "request": {
+            "method": "PUT",
+            "url": {
+              "raw": "{{baseUrl}}/api/mcp/servers/{{mcpServerId}}",
+              "variable": [{ "key": "mcpServerId", "value": "{{mcpServerId}}" }]
+            },
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-domo-developer-token", "value": "{{devToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Updated Name\",\n  \"url\": \"https://mcp.example.com/v2\"\n}"
+            },
+            "description": "Update an MCP server."
+          }
+        },
+        {
+          "name": "DELETE /api/mcp/servers/:id",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/api/mcp/servers/{{mcpServerId}}",
+              "variable": [{ "key": "mcpServerId", "value": "{{mcpServerId}}" }]
+            },
+            "header": [{ "key": "x-domo-developer-token", "value": "{{devToken}}" }],
+            "description": "Delete an MCP server. Returns 204."
+          }
+        },
+        {
+          "name": "POST /api/mcp/servers/:id/test",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/mcp/servers/{{mcpServerId}}/test",
+              "variable": [{ "key": "mcpServerId", "value": "{{mcpServerId}}" }]
+            },
+            "header": [{ "key": "x-domo-developer-token", "value": "{{devToken}}" }],
+            "description": "Test connectivity to an MCP server."
+          }
+        },
+        {
+          "name": "POST /api/mcp/servers/:id/sync",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/mcp/servers/{{mcpServerId}}/sync",
+              "variable": [{ "key": "mcpServerId", "value": "{{mcpServerId}}" }]
+            },
+            "header": [{ "key": "x-domo-developer-token", "value": "{{devToken}}" }],
+            "description": "Sync tools from an MCP server."
+          }
+        },
+        {
+          "name": "PATCH /api/mcp/servers/:id/toggle",
+          "request": {
+            "method": "PATCH",
+            "url": {
+              "raw": "{{baseUrl}}/api/mcp/servers/{{mcpServerId}}/toggle",
+              "variable": [{ "key": "mcpServerId", "value": "{{mcpServerId}}" }]
+            },
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-domo-developer-token", "value": "{{devToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"enabled\": true\n}"
+            },
+            "description": "Enable or disable an MCP server."
+          }
+        }
+      ]
+    },
+    {
+      "name": "MCP Tools",
+      "description": "DomoAuthGuard.",
+      "item": [
+        {
+          "name": "GET /api/mcp/tools",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/mcp/tools" },
+            "header": [{ "key": "x-domo-developer-token", "value": "{{devToken}}" }],
+            "description": "List all MCP tools across all enabled servers."
+          }
+        },
+        {
+          "name": "POST /api/mcp/tools/execute",
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{baseUrl}}/api/mcp/tools/execute" },
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-domo-developer-token", "value": "{{devToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"serverId\": \"{{mcpServerId}}\",\n  \"toolName\": \"my-tool\",\n  \"params\": {\n    \"key\": \"value\"\n  }\n}"
+            },
+            "description": "Execute a specific MCP tool."
+          }
+        }
+      ]
+    },
+    {
+      "name": "MCP OAuth2",
+      "description": "DomoAuthGuard.",
+      "item": [
+        {
+          "name": "GET /api/mcp/oauth2/authorize/:serverId",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/mcp/oauth2/authorize/{{mcpServerId}}",
+              "variable": [{ "key": "mcpServerId", "value": "{{mcpServerId}}" }]
+            },
+            "header": [{ "key": "x-domo-developer-token", "value": "{{devToken}}" }],
+            "description": "Get OAuth2 authorization URL for an MCP server."
+          }
+        },
+        {
+          "name": "GET /api/mcp/oauth2/status/:serverId",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/mcp/oauth2/status/{{mcpServerId}}",
+              "variable": [{ "key": "mcpServerId", "value": "{{mcpServerId}}" }]
+            },
+            "header": [{ "key": "x-domo-developer-token", "value": "{{devToken}}" }],
+            "description": "Get OAuth2 status for an MCP server."
+          }
+        },
+        {
+          "name": "POST /api/mcp/oauth2/discover/:serverId",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/mcp/oauth2/discover/{{mcpServerId}}",
+              "variable": [{ "key": "mcpServerId", "value": "{{mcpServerId}}" }]
+            },
+            "header": [{ "key": "x-domo-developer-token", "value": "{{devToken}}" }],
+            "description": "Discover OAuth2 configuration for an MCP server."
+          }
+        },
+        {
+          "name": "POST /api/mcp/oauth2/revoke/:serverId",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/mcp/oauth2/revoke/{{mcpServerId}}",
+              "variable": [{ "key": "mcpServerId", "value": "{{mcpServerId}}" }]
+            },
+            "header": [{ "key": "x-domo-developer-token", "value": "{{devToken}}" }],
+            "description": "Revoke OAuth2 tokens for an MCP server."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Personas",
+      "description": "DomoAuthGuard.",
+      "item": [
+        {
+          "name": "GET /api/personas",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/personas" },
+            "header": [{ "key": "x-domo-developer-token", "value": "{{devToken}}" }],
+            "description": "List all personas."
+          }
+        },
+        {
+          "name": "POST /api/personas",
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{baseUrl}}/api/personas" },
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-domo-developer-token", "value": "{{devToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Data Analyst\",\n  \"role\": \"Analyst\",\n  \"level\": \"MID\",\n  \"department\": \"Finance\",\n  \"focusAreas\": [\"revenue\", \"churn\"],\n  \"strengths\": [\"SQL\", \"visualization\"],\n  \"weaknesses\": [\"ML\"],\n  \"goals\": \"Improve monthly reporting accuracy.\"\n}"
+            },
+            "description": "Create a new persona."
+          }
+        },
+        {
+          "name": "GET /api/personas/default",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/personas/default" },
+            "header": [{ "key": "x-domo-developer-token", "value": "{{devToken}}" }],
+            "description": "Get the default persona (or null)."
+          }
+        },
+        {
+          "name": "GET /api/personas/:id",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/personas/{{personaId}}",
+              "variable": [{ "key": "personaId", "value": "{{personaId}}" }]
+            },
+            "header": [{ "key": "x-domo-developer-token", "value": "{{devToken}}" }],
+            "description": "Get a specific persona."
+          }
+        },
+        {
+          "name": "PUT /api/personas/:id",
+          "request": {
+            "method": "PUT",
+            "url": {
+              "raw": "{{baseUrl}}/api/personas/{{personaId}}",
+              "variable": [{ "key": "personaId", "value": "{{personaId}}" }]
+            },
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-domo-developer-token", "value": "{{devToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Senior Analyst\",\n  \"level\": \"SENIOR\"\n}"
+            },
+            "description": "Update a persona."
+          }
+        },
+        {
+          "name": "DELETE /api/personas/:id",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/api/personas/{{personaId}}",
+              "variable": [{ "key": "personaId", "value": "{{personaId}}" }]
+            },
+            "header": [{ "key": "x-domo-developer-token", "value": "{{devToken}}" }],
+            "description": "Delete a persona. Returns 204."
+          }
+        },
+        {
+          "name": "PATCH /api/personas/:id/default",
+          "request": {
+            "method": "PATCH",
+            "url": {
+              "raw": "{{baseUrl}}/api/personas/{{personaId}}/default",
+              "variable": [{ "key": "personaId", "value": "{{personaId}}" }]
+            },
+            "header": [{ "key": "x-domo-developer-token", "value": "{{devToken}}" }],
+            "description": "Set a persona as the default."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Personas (legacy compat)",
+      "description": "DomoAuthGuard. Backward-compatible /api/persona/:userId routes.",
+      "item": [
+        {
+          "name": "GET /api/persona/:userId",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/persona/{{userId}}",
+              "variable": [{ "key": "userId", "value": "{{userId}}" }]
+            },
+            "header": [{ "key": "x-domo-developer-token", "value": "{{devToken}}" }],
+            "description": "Get persona for a user (backward compat)."
+          }
+        },
+        {
+          "name": "POST /api/persona/:userId",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/persona/{{userId}}",
+              "variable": [{ "key": "userId", "value": "{{userId}}" }]
+            },
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-domo-developer-token", "value": "{{devToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "description": "Save/upsert persona for a user (backward compat)."
+          }
+        }
+      ]
+    },
+    {
+      "name": "People",
+      "description": "DomoAuthGuard.",
+      "item": [
+        {
+          "name": "GET /api/users",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/users",
+              "query": [{ "key": "ids", "value": "id1,id2", "disabled": true }]
+            },
+            "header": [{ "key": "x-domo-developer-token", "value": "{{devToken}}" }],
+            "description": "List users. Optionally bulk-fetch by ?ids=id1,id2."
+          }
+        },
+        {
+          "name": "GET /api/users/:id",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/users/{{userId}}",
+              "variable": [{ "key": "userId", "value": "{{userId}}" }]
+            },
+            "header": [{ "key": "x-domo-developer-token", "value": "{{devToken}}" }],
+            "description": "Get a specific user."
+          }
+        },
+        {
+          "name": "GET /api/groups",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/groups?limit=20&offset=0",
+              "query": [
+                { "key": "limit", "value": "20" },
+                { "key": "offset", "value": "0" }
+              ]
+            },
+            "header": [{ "key": "x-domo-developer-token", "value": "{{devToken}}" }],
+            "description": "List groups with pagination."
+          }
+        },
+        {
+          "name": "GET /api/groups/:id",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/groups/{{groupId}}",
+              "variable": [{ "key": "groupId", "value": "{{groupId}}" }]
+            },
+            "header": [{ "key": "x-domo-developer-token", "value": "{{devToken}}" }],
+            "description": "Get a specific group."
+          }
+        }
+      ]
+    },
+    {
+      "name": "AI Services",
+      "description": "DomoAuthGuard.",
+      "item": [
+        {
+          "name": "GET /api/ai/models",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/ai/models" },
+            "header": [{ "key": "x-domo-developer-token", "value": "{{devToken}}" }],
+            "description": "List available AI models."
+          }
+        },
+        {
+          "name": "POST /api/ai/text/generation",
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{baseUrl}}/api/ai/text/generation" },
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-domo-developer-token", "value": "{{devToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"input\": \"Write a short poem about data.\",\n  \"model\": null,\n  \"temperature\": 0.7,\n  \"maxTokens\": 512\n}"
+            },
+            "description": "Generate text using an AI model."
+          }
+        },
+        {
+          "name": "POST /api/ai/text/summarize",
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{baseUrl}}/api/ai/text/summarize" },
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-domo-developer-token", "value": "{{devToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"input\": \"Long text to summarize...\",\n  \"model\": null\n}"
+            },
+            "description": "Summarize text."
+          }
+        },
+        {
+          "name": "POST /api/ai/text/sql",
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{baseUrl}}/api/ai/text/sql" },
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-domo-developer-token", "value": "{{devToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"input\": \"Show total revenue by region for last quarter\",\n  \"dataSourceSchemas\": []\n}"
+            },
+            "description": "Convert natural language to SQL."
+          }
+        },
+        {
+          "name": "POST /api/ai/image/text",
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{baseUrl}}/api/ai/image/text" },
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-domo-developer-token", "value": "{{devToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"input\": \"What text is in this image?\",\n  \"image\": {\n    \"type\": \"base64\",\n    \"mediaType\": \"image/png\",\n    \"data\": \"BASE64_ENCODED_IMAGE_DATA\"\n  }\n}"
+            },
+            "description": "Extract text from an image (OCR/vision)."
+          }
+        }
+      ]
+    }
+  ]
+}
