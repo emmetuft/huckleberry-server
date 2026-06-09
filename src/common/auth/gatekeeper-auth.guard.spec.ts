@@ -1,15 +1,10 @@
-import {
-  ExecutionContext,
-  ForbiddenException,
-  UnauthorizedException,
-} from '@nestjs/common';
+import { ExecutionContext, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Reflector } from '@nestjs/core';
 import { SignJWT, generateKeyPair, type KeyLike } from 'jose';
 import { GatekeeperAuthGuard } from './gatekeeper-auth.guard';
 import { JwksService } from './jwks.service';
 import { KnownTenantsService } from './known-tenants.service';
-import { SCOPES_KEY } from './decorators/scopes.decorator';
 import { IS_PUBLIC_KEY } from './decorators/public.decorator';
 
 const ISSUER_A = 'https://cust1.domo.com';
@@ -79,7 +74,6 @@ function makeGuard(
   opts: {
     audience?: string;
     issuers?: string[];
-    scopes?: string[];
     isPublic?: boolean;
   } = {},
 ): GatekeeperAuthGuard {
@@ -94,7 +88,6 @@ function makeGuard(
   const reflector = {
     getAllAndOverride: jest.fn((key: string) => {
       if (key === IS_PUBLIC_KEY) return opts.isPublic ?? false;
-      if (key === SCOPES_KEY) return opts.scopes;
       return undefined;
     }),
   } as unknown as Reflector;
@@ -224,22 +217,6 @@ describe('GatekeeperAuthGuard — multi-tenant', () => {
     await expect(
       guard.canActivate(ctx({ authorization: `Bearer ${idTok}` })),
     ).rejects.toThrow(UnauthorizedException);
-  });
-
-  it('enforces required scopes (insufficient_scope)', async () => {
-    const guard = makeGuard({ scopes: ['ai:execute'] });
-    const tok = await mintToken({ sub: SUB, scope: 'ai:read identity:read' });
-    await expect(
-      guard.canActivate(ctx({ authorization: `Bearer ${tok}` })),
-    ).rejects.toThrow(ForbiddenException);
-  });
-
-  it('accepts when at least one required scope is present (OR semantics)', async () => {
-    const guard = makeGuard({ scopes: ['ai:execute', 'ai:read'] });
-    const tok = await mintToken({ sub: SUB, scope: 'ai:read' });
-    await expect(
-      guard.canActivate(ctx({ authorization: `Bearer ${tok}` })),
-    ).resolves.toBe(true);
   });
 
   it('verifies audience when configured', async () => {

@@ -1,5 +1,3 @@
-export type AuthProvider = 'dev' | 'gatekeeper';
-
 export interface AppConfig {
   /**
    * Domo tenant hostname used in single-tenant *dev* mode. In multi-tenant
@@ -12,7 +10,6 @@ export interface AppConfig {
    *  - Local containers and remote dev instances pointed at by a single env.
    */
   domoInstanceUrl: string;
-  devToken: string;
   nodeEnv: string;
   port: number;
   verboseLogging: boolean;
@@ -53,14 +50,6 @@ export interface AppConfig {
   smtpUser: string;
   smtpPass: string;
   smtpFrom: string;
-  /**
-   * Which guard runs on Category-A controllers.
-   * - `dev` (default): the legacy `DomoAuthGuard` that accepts `DEV_TOKEN` /
-   *   header passthrough.
-   * - `gatekeeper`: the multi-tenant `GatekeeperAuthGuard` that verifies
-   *   inbound OAuth 2.1 JWTs against the issuer's JWKS.
-   */
-  authProvider: AuthProvider;
   /**
    * Allowlist of issuer URLs we accept tokens from. Order doesn't matter.
    * Each entry must match the literal `iss` claim Gatekeeper writes into
@@ -157,15 +146,6 @@ export interface AppConfig {
   devInstanceScopes: string;
 }
 
-const ALLOWED_AUTH_PROVIDERS: readonly AuthProvider[] = ['dev', 'gatekeeper'];
-
-function parseAuthProvider(raw: string | undefined): AuthProvider {
-  const v = (raw || 'dev').toLowerCase();
-  return (ALLOWED_AUTH_PROVIDERS as readonly string[]).includes(v)
-    ? (v as AuthProvider)
-    : 'dev';
-}
-
 function stripTrailingSlash(s: string): string {
   return s.replace(/\/+$/, '');
 }
@@ -229,7 +209,6 @@ function parseTransportOverrides(
 export default (): { app: AppConfig } => ({
   app: {
     domoInstanceUrl: process.env.DOMO_INSTANCE_URL || '',
-    devToken: process.env.DEV_TOKEN || '',
     nodeEnv: process.env.NODE_ENV || 'development',
     port: parseInt(process.env.PORT || '3000', 10),
     verboseLogging: process.env.VERBOSE_LOGGING === 'true',
@@ -250,7 +229,6 @@ export default (): { app: AppConfig } => ({
     smtpUser: process.env.SMTP_USER || '',
     smtpPass: process.env.SMTP_PASS || '',
     smtpFrom: process.env.SMTP_FROM || 'huckleberry@localhost',
-    authProvider: parseAuthProvider(process.env.AUTH_PROVIDER),
     gatekeeperIssuers: parseIssuers(process.env),
     gatekeeperJwksUriOverrides: parseJwksOverrides(process.env),
     gatekeeperTransportOverrides: parseTransportOverrides(process.env),

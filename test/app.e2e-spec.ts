@@ -5,10 +5,6 @@ import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
 import { DomoProxyService } from './../src/domo-proxy/domo-proxy.service';
 
-// Ensure auth guard passes in test
-process.env.DEV_TOKEN = 'test-token';
-process.env.NODE_ENV = 'development';
-
 describe('Health (e2e)', () => {
   let app: INestApplication<App>;
 

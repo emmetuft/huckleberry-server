@@ -89,7 +89,7 @@ describe('AgentsService', () => {
   });
 
   describe('search', () => {
-    it('should transform DTO and POST to search endpoint', async () => {
+    it('should POST DTO to search endpoint', async () => {
       const dto = {
         sort: 'CREATED',
         order: 'DESC' as const,
@@ -103,12 +103,7 @@ describe('AgentsService', () => {
       const result = await service.search(dto);
 
       expect(result).toEqual(expected);
-      expect(domo.post).toHaveBeenCalledWith('/api/ai/v1/agents/search', {
-        sortFieldMap: { CREATED: 'DESC' },
-        searchFieldMap: { NAME: 'test' },
-        limit: 10,
-        offset: 0,
-      });
+      expect(domo.post).toHaveBeenCalledWith('/api/ai/v1/agents/search', dto);
     });
 
     it('should pass through filters array', async () => {

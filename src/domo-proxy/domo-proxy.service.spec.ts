@@ -9,8 +9,6 @@ describe('DomoProxyService', () => {
   const mockConfig = {
     get: jest.fn().mockReturnValue({
       domoInstanceUrl: 'https://test.domo.com',
-      devToken: 'test-token',
-      nodeEnv: 'development',
       port: 3000,
     }),
   };
@@ -49,9 +47,6 @@ describe('DomoProxyService', () => {
       'https://test.domo.com/api/ai/v1/agents/123',
       expect.objectContaining({
         method: 'GET',
-        headers: expect.objectContaining({
-          'x-domo-developer-token': 'test-token',
-        }),
       }),
     );
   });
