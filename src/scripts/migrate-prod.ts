@@ -14,7 +14,10 @@
  * already held by another process.
  */
 
-import 'dotenv/config';
+// Only load .env when present — local dev convenience, not needed in the container
+if (process.env.NODE_ENV !== 'production') {
+  await import('dotenv/config');
+}
 import { Signer } from '@aws-sdk/rds-signer';
 import { drizzle } from 'drizzle-orm/mysql2';
 import { migrate } from 'drizzle-orm/mysql2/migrator';
