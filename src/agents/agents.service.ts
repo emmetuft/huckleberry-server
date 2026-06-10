@@ -65,10 +65,7 @@ export class AgentsService {
     return this.domo.get<CustomAgent>(`${AGENTS_BASE}/${agentId}`, { query });
   }
 
-  async update(
-    agentId: string,
-    dto: UpdateAgentDto,
-  ): Promise<CustomAgent> {
+  async update(agentId: string, dto: UpdateAgentDto): Promise<CustomAgent> {
     return this.domo.put<CustomAgent>(`${AGENTS_BASE}/${agentId}`, dto);
   }
 
@@ -77,10 +74,7 @@ export class AgentsService {
   }
 
   async search(dto: SearchAgentsDto): Promise<SearchAgentsResponse> {
-    return this.domo.post<SearchAgentsResponse>(
-      `${AGENTS_BASE}/search`,
-      dto,
-    );
+    return this.domo.post<SearchAgentsResponse>(`${AGENTS_BASE}/search`, dto);
   }
 
   async updateContext(
@@ -100,10 +94,7 @@ export class AgentsService {
     );
   }
 
-  async resumeStream(
-    agentId: string,
-    dto: ResumeAgentDto,
-  ): Promise<Response> {
+  async resumeStream(agentId: string, dto: ResumeAgentDto): Promise<Response> {
     return this.domo.postStream(
       `${AGENTS_BASE}/${agentId}/resume/streaming`,
       dto,

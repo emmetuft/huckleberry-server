@@ -54,7 +54,7 @@ export class AgentContextDto {
 
   @IsArray()
   @IsOptional()
-  filters?: Object[];
+  filters?: object[];
 
   @ValidateNested()
   @Type(() => DateRangeFilterDto)

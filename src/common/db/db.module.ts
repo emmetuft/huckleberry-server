@@ -49,15 +49,15 @@ export type Db = MySql2Database;
         } else {
           const signer = new Signer({
             region: process.env.AWS_REGION ?? 'us-east-1',
-            hostname: host!,
-            port: app!.databasePort,
-            username: app!.databaseUser,
+            hostname: host,
+            port: app.databasePort,
+            username: app.databaseUser,
           });
           pool = createPool({
-            host: host!,
-            port: app!.databasePort,
-            user: app!.databaseUser,
-            database: app!.databaseName,
+            host: host,
+            port: app.databasePort,
+            user: app.databaseUser,
+            database: app.databaseName,
             // mysql2 TS types don't expose the password-as-function variant
             // but the runtime supports it; the function is called per connection.
             password: (() => signer.getAuthToken()) as unknown as string,

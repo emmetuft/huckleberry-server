@@ -44,12 +44,12 @@ async function main() {
   } else {
     const signer = new Signer({
       region: process.env.AWS_REGION ?? 'us-east-1',
-      hostname: host!,
+      hostname: host,
       port,
       username: user,
     });
     pool = createPool({
-      host: host!,
+      host: host,
       port,
       user,
       database,
