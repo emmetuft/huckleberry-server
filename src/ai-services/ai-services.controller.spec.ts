@@ -30,7 +30,6 @@ describe('AiServicesController', () => {
           useValue: {
             get: jest.fn().mockReturnValue({
               nodeEnv: 'development',
-              devToken: 'test-token',
             }),
           },
         },

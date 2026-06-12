@@ -29,7 +29,7 @@ export interface AgentContext {
   cardIds?: string[];
   pageIds?: number[];
   ignorableDataSourceIds?: string[];
-  filters?: Object[];
+  filters?: object[];
   dateRangeFilter?: DateRangeFilter;
   fileSets?: FileSet[];
   descriptions?: Record<string, string>;

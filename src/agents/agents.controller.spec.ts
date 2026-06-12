@@ -41,12 +41,10 @@ describe('AgentsController', () => {
           useValue: {
             get: jest.fn().mockReturnValue({
               nodeEnv: 'development',
-              devToken: 'test-token',
               huckleberryAgentId: 'test-huckleberry-id',
             }),
             getOrThrow: jest.fn().mockReturnValue({
               nodeEnv: 'development',
-              devToken: 'test-token',
               huckleberryAgentId: 'test-huckleberry-id',
             }),
           },
@@ -192,7 +190,11 @@ describe('AgentsController', () => {
       const fromWebSpy = jest
         .spyOn(Readable, 'fromWeb')
         .mockReturnValue(mockReadable);
-      mockReadable.pipe = jest.fn().mockReturnValue(mockReadable);
+      mockReadable.pipe = jest.fn().mockReturnValue({
+        on: jest.fn().mockImplementation((event: string, cb: () => void) => {
+          if (event === 'finish') cb();
+        }),
+      });
 
       await controller.executeStream('agent-1', dto, res);
 
@@ -299,7 +301,11 @@ describe('AgentsController', () => {
       const fromWebSpy = jest
         .spyOn(Readable, 'fromWeb')
         .mockReturnValue(mockReadable);
-      mockReadable.pipe = jest.fn().mockReturnValue(mockReadable);
+      mockReadable.pipe = jest.fn().mockReturnValue({
+        on: jest.fn().mockImplementation((event: string, cb: () => void) => {
+          if (event === 'finish') cb();
+        }),
+      });
 
       await controller.resumeStream('agent-1', dto, res);
 

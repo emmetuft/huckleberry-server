@@ -3,6 +3,9 @@ name: Build Huckleberry BFF Image
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
   workflow_dispatch:
 
 env:
@@ -16,9 +19,9 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Set short SHA
-        id: sha
-        run: echo "short=${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
+      - name: Set image tag
+        id: tag
+        run: echo "value=$(date +%Y-%m-%d)-b${{ github.run_number }}" >> $GITHUB_OUTPUT
 
       - name: Login to Amazon ECR
         run: aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin $ECR_REGISTRY
@@ -45,5 +48,5 @@ jobs:
           push: true
           provenance: false
           tags: |
-            ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:${{ steps.sha.outputs.short }}
+            ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:${{ steps.tag.outputs.value }}
             ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:latest

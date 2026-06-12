@@ -1,7 +1,6 @@
 import {
   CanActivate,
   ExecutionContext,
-  ForbiddenException,
   Injectable,
   Logger,
   UnauthorizedException,
@@ -12,7 +11,6 @@ import { decodeJwt, jwtVerify, type JWTPayload } from 'jose';
 import type { Request } from 'express';
 import type { AppConfig } from '../config/configuration.js';
 import { IS_PUBLIC_KEY } from './decorators/public.decorator.js';
-import { SCOPES_KEY } from './decorators/scopes.decorator.js';
 import { JwksService } from './jwks.service.js';
 import { KnownTenantsService } from './known-tenants.service.js';
 import type { RequestPrincipal } from './request-principal.js';
@@ -31,8 +29,7 @@ const BEARER_PREFIX = 'Bearer ';
  *      `typ=at+jwt`, `iss` equality, and `aud` when configured.
  *   4. Derives `customer_id` from the `cid` claim (Gatekeeper's canonical
  *      customer slug). Falls back to subdomain parse only when absent.
- *   5. Enforces route `@Scopes(...)` against the `scope` claim.
- *   6. Attaches `RequestPrincipal` to `request.user`.
+ *   5. Attaches `RequestPrincipal` to `request.user`.
  *
  * Correctness rules — see `docs/diagrams/auth-providers.md` § Correctness
  * rules. Notably: never trust `decodeJwt` output for anything beyond issuer
@@ -99,16 +96,12 @@ export class GatekeeperAuthGuard implements CanActivate {
     const cid = typeof payload.cid === 'string' ? payload.cid : undefined;
     const customerId = cid ?? this.tenants.parseCustomerId(issuer);
 
-    // Step 5: scope check.
-    const scopes = this.extractScopes(payload);
-    this.enforceScopes(ctx, scopes);
-
+    // Step 5: attach principal. Services pull req.user.issuer to target
+    // the correct Domo instance for downstream proxy calls.
     if (!payload.sub) {
       throw new UnauthorizedException('missing sub claim');
     }
-
-    // Step 6: attach principal. Services pull req.user.issuer to target
-    // the correct Domo instance for downstream proxy calls.
+    const scopes = this.extractScopes(payload);
     const principal: RequestPrincipal = {
       customerId,
       sub: payload.sub,
@@ -153,22 +146,5 @@ export class GatekeeperAuthGuard implements CanActivate {
     if (typeof raw === 'string') return raw.split(' ').filter(Boolean);
     if (Array.isArray(raw)) return raw.map(String);
     return [];
-  }
-
-  private enforceScopes(ctx: ExecutionContext, scopes: string[]): void {
-    const required = this.reflector.getAllAndOverride<string[]>(SCOPES_KEY, [
-      ctx.getHandler(),
-      ctx.getClass(),
-    ]);
-    if (!required?.length) return;
-
-    const hasAny = required.some((s) => scopes.includes(s));
-    if (!hasAny) {
-      throw new ForbiddenException({
-        error: 'insufficient_scope',
-        error_description: `requires one of: ${required.join(', ')}`,
-        scope: required.join(' '),
-      });
-    }
   }
 }

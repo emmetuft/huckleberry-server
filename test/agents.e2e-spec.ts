@@ -5,10 +5,7 @@ import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
 import { DomoProxyService } from './../src/domo-proxy/domo-proxy.service';
 import { DomoExceptionFilter } from './../src/common/filters/domo-exception.filter';
-
-// Ensure auth guard passes in test
-process.env.DEV_TOKEN = 'test-token';
-process.env.NODE_ENV = 'development';
+import { DomoAuthGuard } from './../src/common/guards/domo-auth.guard';
 
 describe('Agents (e2e)', () => {
   let app: INestApplication<App>;
@@ -41,6 +38,8 @@ describe('Agents (e2e)', () => {
     })
       .overrideProvider(DomoProxyService)
       .useValue(mockDomo)
+      .overrideGuard(DomoAuthGuard)
+      .useValue({ canActivate: () => true })
       .compile();
 
     app = moduleFixture.createNestApplication();

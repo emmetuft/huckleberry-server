@@ -6,9 +6,7 @@ import {
   Logger,
   UnauthorizedException,
 } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import type { Request } from 'express';
-import { AppConfig } from '../config/configuration.js';
 import { SessionService } from '../../auth/session.service.js';
 import {
   USER_REPOSITORY,
@@ -25,26 +23,18 @@ const SESSION_COOKIE = 'hb_session';
  * cookie (`hb_session`). The guard verifies it, attaches a
  * `HuckleberryPrincipal` to `request.user`, and `DomoContextInterceptor`
  * downstream resolves the user's linked Domo bearer via `DomoAuthBroker`.
- *
- * In `development` mode, when `DEV_TOKEN` is configured server-side, a
- * request with no session cookie is allowed through — the proxy attaches
- * the dev token outbound. This is a local-only convenience and is
- * unreachable in production. No request value gates this path: it's
- * controlled entirely by server configuration.
  */
 @Injectable()
 export class DomoAuthGuard implements CanActivate {
   private readonly logger = new Logger(DomoAuthGuard.name);
 
   constructor(
-    private readonly config: ConfigService,
     private readonly sessions: SessionService,
     @Inject(USER_REPOSITORY) private readonly users: UserRepository,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<Request>();
-    const appConfig = this.config.get<AppConfig>('app');
 
     const cookie = readCookie(request, SESSION_COOKIE);
     if (cookie) {
@@ -66,11 +56,6 @@ export class DomoAuthGuard implements CanActivate {
       } catch {
         this.logger.debug('hb_session cookie present but invalid');
       }
-    }
-
-    // Dev-only convenience — server config gates it; no user input involved.
-    if (appConfig?.nodeEnv === 'development' && appConfig.devToken) {
-      return true;
     }
 
     throw new UnauthorizedException('Missing authentication token');

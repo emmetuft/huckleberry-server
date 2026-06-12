@@ -1,11 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AppConfig } from '../common/config/configuration.js';
-import {
-  ContentType,
-  DomoHeader,
-  HttpHeader,
-} from '../common/constants/http.constants.js';
+import { ContentType, HttpHeader } from '../common/constants/http.constants.js';
 import { DomoApiError } from '../common/filters/domo-exception.filter.js';
 import { domoRequestContext } from '../common/auth/domo-request-context.js';
 
@@ -21,7 +17,6 @@ export interface DomoRequestOptions {
   /**
    * Per-request bearer token. Callers pass `req.user.rawToken` so the user's
    * own Gatekeeper JWT flows downstream and Domo enforces fine-grained access.
-   * When omitted in dev, the legacy `x-domo-developer-token` header is sent.
    */
   bearer?: string;
 }
@@ -30,21 +25,15 @@ export interface DomoRequestOptions {
 export class DomoProxyService {
   private readonly logger = new Logger(DomoProxyService.name);
   private readonly baseUrl: string;
-  private readonly devToken: string;
-  private readonly isDev: boolean;
   private readonly verbose: boolean;
   private readonly transportOverrides: Record<string, string>;
 
   constructor(private readonly config: ConfigService) {
     const appConfig = this.config.get<AppConfig>('app');
     this.baseUrl = appConfig.domoInstanceUrl;
-    this.devToken = appConfig.devToken;
-    this.isDev = appConfig.nodeEnv === 'development';
     this.verbose = appConfig.verboseLogging ?? false;
     this.transportOverrides = appConfig.gatekeeperTransportOverrides ?? {};
-    this.logger.log(
-      `isDev=${this.isDev}, nodeEnv=${appConfig.nodeEnv}, hasToken=${!!this.devToken}, baseUrl=${this.baseUrl}`,
-    );
+    this.logger.log(`baseUrl=${this.baseUrl}`);
   }
 
   async get<T>(path: string, options?: DomoRequestOptions): Promise<T> {
@@ -78,7 +67,7 @@ export class DomoProxyService {
     const url = this.buildUrl(path, options?.query, options?.targetHost);
     const headers = this.buildHeaders(options?.headers, options?.bearer);
 
-    if (this.isDev) {
+    if (this.verbose) {
       this.logger.log(`→ STREAM GET ${url}`);
     }
 
@@ -111,9 +100,9 @@ export class DomoProxyService {
     headers[HttpHeader.Accept] =
       'text/event-stream, application/x-ndjson, application/json, */*';
 
-    if (this.isDev) {
+    if (this.verbose) {
       this.logger.log(`→ STREAM POST ${url}`);
-      if (this.verbose && body !== undefined) {
+      if (body !== undefined) {
         this.logger.log(`  body: ${JSON.stringify(body)}`);
       }
     }
@@ -147,19 +136,17 @@ export class DomoProxyService {
     const url = this.buildUrl(path, options?.query, options?.targetHost);
     const headers = this.buildHeaders(options?.headers, options?.bearer);
 
-    if (this.isDev) {
+    if (this.verbose) {
       this.logger.log(`→ ${method} ${url}`);
-      if (this.verbose) {
-        const safeHeaders = { ...headers };
-        for (const key of Object.keys(safeHeaders)) {
-          if (/token|authorization|secret/i.test(key)) {
-            safeHeaders[key] = '[REDACTED]';
-          }
+      const safeHeaders = { ...headers };
+      for (const key of Object.keys(safeHeaders)) {
+        if (/token|authorization|secret/i.test(key)) {
+          safeHeaders[key] = '[REDACTED]';
         }
-        this.logger.log(`  headers: ${JSON.stringify(safeHeaders)}`);
-        if (body !== undefined) {
-          this.logger.log(`  body:    ${JSON.stringify(body)}`);
-        }
+      }
+      this.logger.log(`  headers: ${JSON.stringify(safeHeaders)}`);
+      if (body !== undefined) {
+        this.logger.log(`  body:    ${JSON.stringify(body)}`);
       }
     }
 
@@ -245,15 +232,11 @@ export class DomoProxyService {
     };
 
     // Resolution order: explicit caller arg → per-request context (set by
-    // DomoContextInterceptor from the active link's bearer) → dev-token
-    // fallback for unauthenticated/legacy paths.
+    // DomoContextInterceptor from the active link's bearer).
     const ctxBearer = domoRequestContext.getStore()?.bearer;
     const effectiveBearer = bearer ?? ctxBearer;
     if (effectiveBearer) {
       headers[HttpHeader.Authorization] = `Bearer ${effectiveBearer}`;
-    } else if (this.isDev && this.devToken) {
-      // Dev fallback: x-domo-developer-token works against a single instance.
-      headers[DomoHeader.DeveloperToken] = this.devToken;
     }
 
     if (extra) {

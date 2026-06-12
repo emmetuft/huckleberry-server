@@ -10,9 +10,10 @@ export class PeopleController {
   constructor(private readonly peopleService: PeopleService) {}
 
   @Get('users')
-  getUsers(@Query('ids') ids?: string) {
+  async getUsers(@Query('ids') ids?: string) {
     if (ids && ids.length > 0) {
-      return this.peopleService.getUsersByIdBulk(ids);
+      const users = await this.peopleService.getUsersByIds(ids);
+      return { users };
     }
     return this.peopleService.getUsers();
   }

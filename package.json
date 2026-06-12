@@ -24,7 +24,9 @@
     "infra:reset": "podman compose down -v && podman compose up -d",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
-    "db:studio": "drizzle-kit studio"
+    "db:migrate:prod": "tsx src/scripts/migrate-prod.ts",
+    "db:studio": "drizzle-kit studio",
+    "prepare": "husky || true"
   },
   "engines": {
     "node": ">=20.0.0",
@@ -50,7 +52,6 @@
     "mysql2": "^3.22.3",
     "neo4j-driver": "^6.0.1",
     "nodemailer": "^8.0.7",
-    "pnpm": "^11.4.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
     "uuid": "^13.0.0"
@@ -75,6 +76,7 @@
     "eslint-config-prettier": "^10.0.1",
     "eslint-plugin-prettier": "^5.2.3",
     "globals": "^15.14.0",
+    "husky": "^9.1.7",
     "jest": "^29.7.0",
     "prettier": "^3.4.2",
     "source-map-support": "^0.5.21",

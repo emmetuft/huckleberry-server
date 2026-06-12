@@ -9,7 +9,7 @@ describe('AiServicesService', () => {
   beforeEach(async () => {
     const mockDomo = {
       post: jest.fn(),
-      postStream: jest.fn(),
+      get: jest.fn(),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -40,35 +40,6 @@ describe('AiServicesService', () => {
     });
   });
 
-  describe('chat', () => {
-    it('should POST to chat endpoint', async () => {
-      const dto = { input: 'hello' };
-      const expected = { id: '1', choices: [] };
-      domo.post.mockResolvedValue(expected);
-
-      const result = await service.chat(dto);
-
-      expect(result).toEqual(expected);
-      expect(domo.post).toHaveBeenCalledWith('/api/ai/v1/text/chat', dto);
-    });
-  });
-
-  describe('chatStream', () => {
-    it('should call postStream for streaming chat', async () => {
-      const dto = { input: 'hello' };
-      const mockResponse = { body: 'stream' } as unknown as Response;
-      domo.postStream.mockResolvedValue(mockResponse);
-
-      const result = await service.chatStream(dto);
-
-      expect(result).toBe(mockResponse);
-      expect(domo.postStream).toHaveBeenCalledWith(
-        '/api/ai/v1/text/chat/streaming',
-        dto,
-      );
-    });
-  });
-
   describe('summarize', () => {
     it('should POST to summarize endpoint', async () => {
       const dto = { input: 'long text' };
@@ -95,16 +66,30 @@ describe('AiServicesService', () => {
     });
   });
 
-  describe('textToBeastMode', () => {
-    it('should POST to beastmode endpoint', async () => {
-      const dto = { input: 'calculate revenue' };
+  describe('imageToText', () => {
+    it('should POST to image text endpoint', async () => {
+      const dto = { image: 'base64data' };
       const expected = { id: '1', choices: [] };
       domo.post.mockResolvedValue(expected);
 
-      const result = await service.textToBeastMode(dto);
+      const result = await service.imageToText(dto);
 
       expect(result).toEqual(expected);
-      expect(domo.post).toHaveBeenCalledWith('/api/ai/v1/text/beastmode', dto);
+      expect(domo.post).toHaveBeenCalledWith('/api/ai/v1/image/text', dto);
+    });
+  });
+
+  describe('getModels', () => {
+    it('should GET models endpoint', async () => {
+      const expected = { models: [] };
+      domo.get.mockResolvedValue(expected);
+
+      const result = await service.getModels();
+
+      expect(result).toEqual(expected);
+      expect(domo.get).toHaveBeenCalledWith(
+        '/api/ai/v1/settings/services/messages/models',
+      );
     });
   });
 });

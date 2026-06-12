@@ -49,10 +49,7 @@ async function bootstrap() {
   app.use(json({ limit: '10mb' }));
 
   app.setGlobalPrefix('api', {
-    exclude: [
-      { path: 'health', method: RequestMethod.ALL },
-      { path: 'domo/*path', method: RequestMethod.ALL },
-    ],
+    exclude: [{ path: 'health', method: RequestMethod.ALL }],
   });
 
   app.useGlobalPipes(
