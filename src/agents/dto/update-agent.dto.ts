@@ -9,6 +9,10 @@ export class UpdateAgentDto {
 
   @IsString()
   @IsOptional()
+  description?: string;
+
+  @IsString()
+  @IsOptional()
   prompt?: string;
 
   @IsString()

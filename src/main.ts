@@ -3,6 +3,7 @@ import { Logger, RequestMethod, ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { execSync } from 'node:child_process';
+import { json } from 'express';
 import { AppModule } from './app.module.js';
 import { DomoExceptionFilter } from './common/filters/domo-exception.filter.js';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor.js';
@@ -44,7 +45,8 @@ async function bootstrap() {
     process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
   }
 
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, { bodyParser: false });
+  app.use(json({ limit: '10mb' }));
 
   app.setGlobalPrefix('api', {
     exclude: [
