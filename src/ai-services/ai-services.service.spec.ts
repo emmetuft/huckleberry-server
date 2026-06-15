@@ -1,3 +1,4 @@
+import { jest } from '@jest/globals';
 import { Test, TestingModule } from '@nestjs/testing';
 import { AiServicesService } from './ai-services.service';
 import { DomoProxyService } from '../domo-proxy/domo-proxy.service';

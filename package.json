@@ -12,12 +12,12 @@
     "start:debug": "nest start --debug --watch",
     "start:prod": "node dist/src/main",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" \"scripts/**/*.{ts,mts}\" --fix",
-    "test": "jest",
-    "test:watch": "jest --watch",
-    "test:cov": "jest --coverage",
-    "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/jest/bin/jest --runInBand",
-    "test:e2e": "jest --config ./test/jest-e2e.json",
-    "test:auth": "jest --config ./test/jest-e2e.json --testPathPattern=auth-flow",
+    "test": "NODE_OPTIONS='--experimental-vm-modules' jest",
+    "test:watch": "NODE_OPTIONS='--experimental-vm-modules' jest --watch",
+    "test:cov": "NODE_OPTIONS='--experimental-vm-modules' jest --coverage",
+    "test:debug": "NODE_OPTIONS='--experimental-vm-modules --inspect-brk' jest --runInBand",
+    "test:e2e": "NODE_OPTIONS='--experimental-vm-modules' jest --config ./test/jest-e2e.json",
+    "test:auth": "NODE_OPTIONS='--experimental-vm-modules' jest --config ./test/jest-e2e.json --testPathPatterns=auth-flow",
     "demo:auth": "./scripts/demo-auth.sh",
     "infra:up": "podman compose up -d",
     "infra:down": "podman compose down",
@@ -78,6 +78,7 @@
     "globals": "^17.6.0",
     "husky": "^9.1.7",
     "jest": "^30.4.2",
+    "jest-environment-node": "30",
     "prettier": "^3.8.4",
     "source-map-support": "^0.5.21",
     "supertest": "^7.0.0",
@@ -90,6 +91,7 @@
     "typescript-eslint": "^8.61.0"
   },
   "jest": {
+    "extensionsToTreatAsEsm": [".ts"],
     "moduleFileExtensions": [
       "js",
       "json",
@@ -98,7 +100,7 @@
     "rootDir": "src",
     "testRegex": ".*\\.spec\\.ts$",
     "transform": {
-      "^.+\\.(t|j)s$": "ts-jest"
+      "^.+\\.ts$": ["ts-jest", { "useESM": true, "tsconfig": { "rootDir": "./src", "module": "ESNext" } }]
     },
     "moduleNameMapper": {
       "^(\\.{1,2}/.*)\\.js$": "$1"

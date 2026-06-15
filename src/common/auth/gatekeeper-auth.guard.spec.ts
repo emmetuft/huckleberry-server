@@ -1,3 +1,4 @@
+import { jest } from '@jest/globals';
 import { ExecutionContext, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Reflector } from '@nestjs/core';

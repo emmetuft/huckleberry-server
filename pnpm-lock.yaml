@@ -135,6 +135,9 @@ importers:
       jest:
         specifier: ^30.4.2
         version: 30.4.2(@types/node@25.9.3)(ts-node@10.9.2(@swc/core@1.15.41)(@types/node@25.9.3)(typescript@6.0.3))
+      jest-environment-node:
+        specifier: '30'
+        version: 30.4.1
       prettier:
         specifier: ^3.8.4
         version: 3.8.4
