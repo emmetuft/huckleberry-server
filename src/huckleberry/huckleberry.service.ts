@@ -9,6 +9,8 @@ import { HttpHeader } from '../common/constants/http.constants.js';
 import { DomoApiError } from '../common/filters/domo-exception.filter.js';
 import type { ExecuteAgentDto } from '../agents/dto/execute-agent.dto.js';
 import type { ResumeAgentDto } from '../agents/dto/resume-agent.dto.js';
+import { SessionsService } from '../sessions/sessions.service.js';
+import type { SearchSessionsDto } from '../sessions/dto/search-sessions.dto.js';
 
 /** Headers managed by Node/Express that must not be copied from upstream. */
 const HOP_BY_HOP_HEADERS = new Set([
@@ -31,9 +33,21 @@ export class HuckleberryService {
   constructor(
     private readonly config: ConfigService,
     private readonly agents: AgentsService,
+    private readonly sessions: SessionsService,
   ) {
     this.huckleberryAgentId =
       this.config.get<AppConfig>('app')?.huckleberryAgentId ?? 'huckleberry';
+  }
+
+  async getSessions(dto: SearchSessionsDto) {
+    return this.sessions.getSessions({
+      ...dto,
+      filters: [
+        ...(dto.filters || []),
+        { type: 'GROUP', not: false, values: ['ASSISTANT'] },
+        { type: 'GROUP_ENTITY_ID', not: false, values: ['huckleberry'] },
+      ],
+    });
   }
 
   async executeStream(

@@ -7,6 +7,7 @@ import {
   HttpStatus,
   Param,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
@@ -22,7 +23,16 @@ export class SessionsController {
 
   @Post()
   @HttpCode(HttpStatus.OK)
-  getSessions(@Body() dto: SearchSessionsDto) {
+  getSessions(@Body() dto: SearchSessionsDto, @Query('agentId') agentId?: string) {
+    if (agentId) {
+      dto = {
+        ...dto,
+        filters: [
+          ...(dto.filters || []),
+          { type: 'GROUP_ENTITY_ID', not: false, values: [agentId] },
+        ],
+      };
+    }
     return this.sessionsService.getSessions(dto);
   }
 
