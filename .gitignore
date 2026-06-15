@@ -402,8 +402,7 @@ dist
 .webpack
 .serverless/**/*.zip
 
-# TypeScript build artifacts
-*.tsbuildinfo
+# TypeScript compiled output outside dist/ (scripts/ and root-level TS files)
 drizzle.config.js
 drizzle.config.js.map
 drizzle.config.d.ts
@@ -413,6 +412,7 @@ scripts/**/*.d.ts
 scripts/**/*.mjs
 scripts/**/*.mjs.map
 scripts/**/*.d.mts
+tsconfig.build.tsbuildinfo
 
 # pnpm is the package manager. Don't track competing lockfiles.
 package-lock.json

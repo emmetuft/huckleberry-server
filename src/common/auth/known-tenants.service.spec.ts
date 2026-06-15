@@ -1,3 +1,4 @@
+import { jest } from '@jest/globals';
 import { UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { KnownTenantsService } from './known-tenants.service';

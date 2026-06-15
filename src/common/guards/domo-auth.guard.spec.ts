@@ -1,3 +1,4 @@
+import { jest } from '@jest/globals';
 import { ExecutionContext, UnauthorizedException } from '@nestjs/common';
 import { DomoAuthGuard } from './domo-auth.guard';
 import { SessionService } from '../../auth/session.service';
