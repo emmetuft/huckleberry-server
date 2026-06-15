@@ -48,6 +48,7 @@
     "class-transformer": "^0.5.1",
     "class-validator": "^0.15.1",
     "drizzle-orm": "^0.45.2",
+    "express": "^5.2.1",
     "jose": "^6.2.3",
     "mysql2": "^3.22.5",
     "neo4j-driver": "^6.1.0",
@@ -91,7 +92,9 @@
     "typescript-eslint": "^8.61.0"
   },
   "jest": {
-    "extensionsToTreatAsEsm": [".ts"],
+    "extensionsToTreatAsEsm": [
+      ".ts"
+    ],
     "moduleFileExtensions": [
       "js",
       "json",
@@ -100,7 +103,16 @@
     "rootDir": "src",
     "testRegex": ".*\\.spec\\.ts$",
     "transform": {
-      "^.+\\.ts$": ["ts-jest", { "useESM": true, "tsconfig": { "rootDir": "./src", "module": "ESNext" } }]
+      "^.+\\.ts$": [
+        "ts-jest",
+        {
+          "useESM": true,
+          "tsconfig": {
+            "rootDir": "./src",
+            "module": "ESNext"
+          }
+        }
+      ]
     },
     "moduleNameMapper": {
       "^(\\.{1,2}/.*)\\.js$": "$1"
