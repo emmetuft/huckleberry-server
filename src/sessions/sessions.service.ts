@@ -13,8 +13,19 @@ export class SessionsService {
   async getSessions(dto: SearchSessionsDto) {
     const payload = {
       ...dto,
-      group: GROUP,
-      groupEntityId: GROUP_ENTITY_ID,
+      filters: [
+        ...(dto.filters || []),
+        {
+          type: 'GROUP',
+          not: false,
+          values: [GROUP],
+        },
+        {
+          type: 'GROUP_ENTITY_ID',
+          not: false,
+          values: [GROUP_ENTITY_ID],
+        },
+      ],
     };
     return this.domo.post('/api/ai/v1/search/sessions', payload);
   }
