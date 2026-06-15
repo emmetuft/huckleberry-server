@@ -17,8 +17,7 @@ import { ApiTags } from '@nestjs/swagger';
 import type { Response as ExpressResponse } from 'express';
 import { Readable } from 'node:stream';
 import { AgentsService } from './agents.service.js';
-import { CreateAgentDto } from './dto/create-agent.dto.js';
-import { UpdateAgentDto } from './dto/update-agent.dto.js';
+import { AgentDto } from './dto/agent.dto.js';
 import { SearchAgentsDto } from './dto/search-agents.dto.js';
 import { AgentContextUpdateDto } from './dto/agent-context-update.dto.js';
 import { ExecuteAgentDto } from './dto/execute-agent.dto.js';
@@ -40,7 +39,7 @@ export class AgentsController {
   }
 
   @Post()
-  create(@Body() dto: CreateAgentDto) {
+  create(@Body() dto: AgentDto) {
     return this.agentsService.create(dto);
   }
 
@@ -68,7 +67,7 @@ export class AgentsController {
   }
 
   @Put(':agentId')
-  update(@Param('agentId') agentId: string, @Body() dto: UpdateAgentDto) {
+  update(@Param('agentId') agentId: string, @Body() dto: AgentDto) {
     return this.agentsService.update(agentId, dto);
   }
 

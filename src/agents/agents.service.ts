@@ -5,8 +5,7 @@ import {
   SearchAgentsResponse,
 } from '../common/types/domo-agent.types.js';
 import { AgentInclude } from '../common/types/domo-common.types.js';
-import { CreateAgentDto } from './dto/create-agent.dto.js';
-import { UpdateAgentDto } from './dto/update-agent.dto.js';
+import { AgentDto } from './dto/agent.dto.js';
 import { AgentContextUpdateDto } from './dto/agent-context-update.dto.js';
 import { SearchAgentsDto } from './dto/search-agents.dto.js';
 import { ExecuteAgentDto } from './dto/execute-agent.dto.js';
@@ -56,7 +55,7 @@ export class AgentsService {
     return this.agentCache.has(agentId);
   }
 
-  async create(dto: CreateAgentDto): Promise<CustomAgent> {
+  async create(dto: AgentDto): Promise<CustomAgent> {
     return this.domo.post<CustomAgent>(AGENTS_BASE, dto);
   }
 
@@ -65,7 +64,7 @@ export class AgentsService {
     return this.domo.get<CustomAgent>(`${AGENTS_BASE}/${agentId}`, { query });
   }
 
-  async update(agentId: string, dto: UpdateAgentDto): Promise<CustomAgent> {
+  async update(agentId: string, dto: AgentDto): Promise<CustomAgent> {
     return this.domo.put<CustomAgent>(`${AGENTS_BASE}/${agentId}`, dto);
   }
 
