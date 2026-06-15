@@ -402,6 +402,18 @@ dist
 .webpack
 .serverless/**/*.zip
 
+# TypeScript build artifacts
+*.tsbuildinfo
+drizzle.config.js
+drizzle.config.js.map
+drizzle.config.d.ts
+scripts/**/*.js
+scripts/**/*.js.map
+scripts/**/*.d.ts
+scripts/**/*.mjs
+scripts/**/*.mjs.map
+scripts/**/*.d.mts
+
 # pnpm is the package manager. Don't track competing lockfiles.
 package-lock.json
 yarn.lock
