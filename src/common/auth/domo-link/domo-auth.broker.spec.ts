@@ -1,3 +1,4 @@
+import { jest } from '@jest/globals';
 import { UnauthorizedException, NotFoundException } from '@nestjs/common';
 import { DomoAuthBroker } from './domo-auth.broker';
 import { InMemoryLinkRepository } from './link.repository';

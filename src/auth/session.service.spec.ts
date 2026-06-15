@@ -1,3 +1,4 @@
+import { jest } from '@jest/globals';
 import { ConfigService } from '@nestjs/config';
 import { UnauthorizedException } from '@nestjs/common';
 import { randomBytes } from 'node:crypto';
