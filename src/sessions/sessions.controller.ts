@@ -23,7 +23,10 @@ export class SessionsController {
 
   @Post()
   @HttpCode(HttpStatus.OK)
-  getSessions(@Body() dto: SearchSessionsDto, @Query('agentId') agentId?: string) {
+  getSessions(
+    @Body() dto: SearchSessionsDto,
+    @Query('agentId') agentId?: string,
+  ) {
     if (agentId) {
       dto = {
         ...dto,
@@ -52,5 +55,11 @@ export class SessionsController {
   @HttpCode(HttpStatus.OK)
   deleteSession(@Param('sessionId') sessionId: string) {
     return this.sessionsService.deleteSession(sessionId);
+  }
+
+  @Post('search/all-sessions')
+  @HttpCode(HttpStatus.OK)
+  getAllSessions(@Body() dto: SearchSessionsDto) {
+    return this.sessionsService.getAllSessions(dto);
   }
 }

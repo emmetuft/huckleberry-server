@@ -27,8 +27,12 @@ describe('AuthController', () => {
   } as unknown as Response;
 
   beforeEach(async () => {
-    link = { unlink: jest.fn<() => Promise<void>>().mockResolvedValue(undefined) };
-    sessions = { revoke: jest.fn<() => Promise<void>>().mockResolvedValue(undefined) };
+    link = {
+      unlink: jest.fn<() => Promise<void>>().mockResolvedValue(undefined),
+    };
+    sessions = {
+      revoke: jest.fn<() => Promise<void>>().mockResolvedValue(undefined),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [AuthController],
@@ -49,7 +53,9 @@ describe('AuthController', () => {
 
   describe('logout', () => {
     it('calls unlink and revokes the session when user is present', async () => {
-      const req = { user: mockUser } as Request & { user: HuckleberryPrincipal };
+      const req = { user: mockUser } as Request & {
+        user: HuckleberryPrincipal;
+      };
       await controller.logout(req, mockRes);
       expect(link.unlink).toHaveBeenCalledWith(mockUser.userId);
       expect(sessions.revoke).toHaveBeenCalledWith(mockUser.sessionId);
@@ -65,8 +71,12 @@ describe('AuthController', () => {
     it('clears session and csrf cookies regardless of auth state', async () => {
       const req = {} as Request & { user?: HuckleberryPrincipal };
       await controller.logout(req, mockRes);
-      expect(mockRes.clearCookie).toHaveBeenCalledWith('hb_session', { path: '/' });
-      expect(mockRes.clearCookie).toHaveBeenCalledWith('csrf_token', { path: '/' });
+      expect(mockRes.clearCookie).toHaveBeenCalledWith('hb_session', {
+        path: '/',
+      });
+      expect(mockRes.clearCookie).toHaveBeenCalledWith('csrf_token', {
+        path: '/',
+      });
     });
   });
 });

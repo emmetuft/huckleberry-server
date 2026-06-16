@@ -12,6 +12,10 @@ export class SessionsService {
     return this.domo.post('/api/ai/v1/search/sessions', dto);
   }
 
+  async getAllSessions(dto: SearchSessionsDto) {
+    return this.domo.post('/api/ai/v1/search/all-sessions', dto);
+  }
+
   async getSession(sessionId: string) {
     return this.domo.get(`${SESSION_BASE}/${sessionId}`);
   }
