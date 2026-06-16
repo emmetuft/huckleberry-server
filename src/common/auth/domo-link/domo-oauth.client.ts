@@ -1,5 +1,6 @@
 import {
   BadGatewayException,
+  Inject,
   Injectable,
   Logger,
   UnauthorizedException,
@@ -7,6 +8,10 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { createHash, randomBytes } from 'node:crypto';
 import type { AppConfig } from '../../config/configuration.js';
+import {
+  CLIENT_CREDENTIAL_STORE,
+  type ClientCredentialStore,
+} from './client-credential.store.js';
 
 export interface AuthorizeUrlParams {
   issuerUrl: string;
@@ -24,15 +29,17 @@ export interface TokenResponse {
   tokenType: string;
 }
 
+export interface DcrResponse {
+  clientId: string;
+  registrationAccessToken: string | null;
+  scope: string;
+}
+
 /**
  * OAuth 2.1 client that runs the authorization-code + PKCE flow against a
- * Gatekeeper instance. The BFF holds `client_id` (and optionally a secret
- * for confidential clients); for the labs DCR client we registered earlier
- * the client is public (`token_endpoint_auth_method: "none"`) so PKCE is
- * the only credential.
- *
- * One client today, scoped to a single issuer. Multi-customer prod will
- * extend this with a per-issuer credential lookup.
+ * Gatekeeper instance. Resolves per-instance credentials from the
+ * ClientCredentialStore (populated by DCR at provision time), with env-var
+ * fallback for local dev.
  */
 @Injectable()
 export class DomoOAuthClient {
@@ -43,13 +50,31 @@ export class DomoOAuthClient {
   private readonly scopes: string;
   private readonly transportOverrides: Record<string, string>;
 
-  constructor(private readonly config: ConfigService) {
+  constructor(
+    private readonly config: ConfigService,
+    @Inject(CLIENT_CREDENTIAL_STORE)
+    private readonly credentials: ClientCredentialStore,
+  ) {
     const app = this.config.get<AppConfig>('app');
     this.clientId = app?.domoOAuthClientId ?? '';
     this.clientSecret = app?.domoOAuthClientSecret ?? '';
     this.redirectUri = app?.domoOAuthRedirectUri ?? '';
     this.scopes = app?.domoOAuthScopes ?? '';
     this.transportOverrides = app?.gatekeeperTransportOverrides ?? {};
+  }
+
+  /**
+   * Resolves the client_id for a given issuerUrl. Checks the credential
+   * store first (DCR-registered or dev-fallback), falls back to the
+   * global env-var `DOMO_OAUTH_CLIENT_ID` for backwards compatibility.
+   */
+  private async resolveClientId(issuerUrl: string): Promise<string> {
+    const cred = await this.credentials.get(issuerUrl);
+    if (cred) return cred.clientId;
+    if (this.clientId) return this.clientId;
+    throw new Error(
+      `No OAuth client registered for issuer ${issuerUrl} and DOMO_OAUTH_CLIENT_ID is not set`,
+    );
   }
 
   /**
@@ -75,19 +100,21 @@ export class DomoOAuthClient {
     return { codeVerifier, codeChallenge };
   }
 
+  getRedirectUri(): string {
+    return this.redirectUri;
+  }
+
   /**
    * Composes the authorize URL the browser is redirected to. Caller supplies
    * `state` + `codeChallenge`; the matching `codeVerifier` must be stored
    * server-side for the callback exchange.
    */
-  buildAuthorizeUrl(params: {
+  async buildAuthorizeUrl(params: {
     issuerUrl: string;
     state: string;
     codeChallenge: string;
-  }): string {
-    if (!this.clientId) {
-      throw new Error('DOMO_OAUTH_CLIENT_ID not configured');
-    }
+  }): Promise<string> {
+    const clientId = await this.resolveClientId(params.issuerUrl);
     if (!this.redirectUri) {
       throw new Error('DOMO_OAUTH_REDIRECT_URI not configured');
     }
@@ -96,7 +123,7 @@ export class DomoOAuthClient {
       this.transportFor(params.issuerUrl),
     );
     url.searchParams.set('response_type', 'code');
-    url.searchParams.set('client_id', this.clientId);
+    url.searchParams.set('client_id', clientId);
     url.searchParams.set('redirect_uri', this.redirectUri);
     url.searchParams.set('scope', this.scopes);
     url.searchParams.set('state', params.state);
@@ -111,11 +138,12 @@ export class DomoOAuthClient {
     code: string;
     codeVerifier: string;
   }): Promise<TokenResponse> {
+    const clientId = await this.resolveClientId(params.issuerUrl);
     const body = new URLSearchParams({
       grant_type: 'authorization_code',
       code: params.code,
       redirect_uri: this.redirectUri,
-      client_id: this.clientId,
+      client_id: clientId,
       code_verifier: params.codeVerifier,
     });
     return this.postToken(params.issuerUrl, body);
@@ -126,10 +154,11 @@ export class DomoOAuthClient {
     issuerUrl: string;
     refreshToken: string;
   }): Promise<TokenResponse> {
+    const clientId = await this.resolveClientId(params.issuerUrl);
     const body = new URLSearchParams({
       grant_type: 'refresh_token',
       refresh_token: params.refreshToken,
-      client_id: this.clientId,
+      client_id: clientId,
     });
     return this.postToken(params.issuerUrl, body);
   }
@@ -140,13 +169,20 @@ export class DomoOAuthClient {
     token: string;
     tokenTypeHint?: 'access_token' | 'refresh_token';
   }): Promise<void> {
+    let clientId: string;
+    try {
+      clientId = await this.resolveClientId(params.issuerUrl);
+    } catch {
+      this.logger.debug('revoke skipped — no client_id resolvable');
+      return;
+    }
     const url = new URL(
       '/oauth2/revoke',
       this.transportFor(params.issuerUrl),
     ).toString();
     const body = new URLSearchParams({
       token: params.token,
-      client_id: this.clientId,
+      client_id: clientId,
       ...(params.tokenTypeHint
         ? { token_type_hint: params.tokenTypeHint }
         : {}),
@@ -160,6 +196,86 @@ export class DomoOAuthClient {
     } catch (_err) {
       this.logger.debug(`revoke failed (ignored): ${String(_err)}`);
     }
+  }
+
+  /**
+   * Register huckleberry as a public PKCE OAuth client on a Gatekeeper
+   * instance via RFC 7591 Dynamic Client Registration.
+   *
+   * Returns the `client_id` and `registration_access_token` (for future
+   * RFC 7592 self-management). The registration_access_token is displayed
+   * exactly once — Gatekeeper stores a BCrypt hash.
+   */
+  async registerClient(issuerUrl: string): Promise<DcrResponse> {
+    if (!this.redirectUri) {
+      throw new Error('DOMO_OAUTH_REDIRECT_URI not configured');
+    }
+    const url = new URL(
+      '/oauth2/register',
+      this.transportFor(issuerUrl),
+    ).toString();
+
+    const body = {
+      client_name: 'huckleberry',
+      redirect_uris: [this.redirectUri],
+      grant_types: ['authorization_code'],
+      response_types: ['code'],
+      token_endpoint_auth_method: 'none',
+      scope: this.scopes,
+    };
+
+    let resp: Response;
+    try {
+      resp = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify(body),
+      });
+    } catch (err) {
+      throw new BadGatewayException(
+        `Gatekeeper DCR endpoint unreachable: ${String(err)}`,
+      );
+    }
+
+    const text = await resp.text();
+    if (!resp.ok) {
+      this.logger.warn(`DCR ${resp.status}: ${text}`);
+      throw new BadGatewayException(
+        `DCR failed (${resp.status}): ${text.slice(0, 200)}`,
+      );
+    }
+
+    interface DcrJson {
+      client_id: string;
+      registration_access_token?: string;
+      client_id_issued_at?: number;
+      scope?: string;
+    }
+    let parsed: DcrJson;
+    try {
+      parsed = JSON.parse(text) as DcrJson;
+    } catch {
+      throw new BadGatewayException(
+        `Malformed DCR response from Gatekeeper: ${text.slice(0, 120)}`,
+      );
+    }
+
+    if (!parsed.client_id) {
+      throw new BadGatewayException('DCR response missing client_id');
+    }
+
+    this.logger.log(
+      `DCR registered client ${parsed.client_id} on ${issuerUrl}`,
+    );
+
+    return {
+      clientId: parsed.client_id,
+      registrationAccessToken: parsed.registration_access_token ?? null,
+      scope: parsed.scope ?? this.scopes,
+    };
   }
 
   private postToken(

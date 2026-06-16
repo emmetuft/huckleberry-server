@@ -14,9 +14,14 @@ import {
   INSTANCE_PROVISIONER,
   DevStubInstanceProvisioner,
 } from './instance-provisioner.service.js';
+import {
+  CLIENT_CREDENTIAL_STORE,
+  InMemoryClientCredentialStore,
+} from './client-credential.store.js';
 import { DbModule, DRIZZLE, type Db } from '../../db/db.module.js';
 import { MysqlLinkRepository } from '../../db/repositories/mysql-link.repository.js';
 import { MysqlDomoTokenStore } from '../../db/repositories/mysql-domo-token.store.js';
+import { MysqlClientCredentialStore } from '../../db/repositories/mysql-client-credential.store.js';
 import type { AppConfig } from '../../config/configuration.js';
 
 /**
@@ -53,6 +58,14 @@ import type { AppConfig } from '../../config/configuration.js';
     },
     { provide: OAUTH_STATE_STORE, useClass: InMemoryOAuthStateStore },
     { provide: INSTANCE_PROVISIONER, useClass: DevStubInstanceProvisioner },
+    {
+      provide: CLIENT_CREDENTIAL_STORE,
+      inject: [ConfigService, DRIZZLE],
+      useFactory: (config: ConfigService, db: Db | null) =>
+        useMysql(config) && db
+          ? new MysqlClientCredentialStore(db)
+          : new InMemoryClientCredentialStore(config),
+    },
   ],
   exports: [
     DomoLinkService,
@@ -62,6 +75,7 @@ import type { AppConfig } from '../../config/configuration.js';
     DOMO_TOKEN_STORE,
     OAUTH_STATE_STORE,
     INSTANCE_PROVISIONER,
+    CLIENT_CREDENTIAL_STORE,
   ],
 })
 export class DomoLinkModule {}

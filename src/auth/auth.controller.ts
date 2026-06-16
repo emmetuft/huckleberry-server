@@ -16,6 +16,7 @@ import type { Request, Response } from 'express';
 import { ApiTags } from '@nestjs/swagger';
 import { AuthService } from './auth.service.js';
 import { RequestSigninDto } from './dto/request-signin.dto.js';
+import { SignupDto } from './dto/signup.dto.js';
 import { SessionService } from './session.service.js';
 import { SignupService } from './signup.service.js';
 import { USER_REPOSITORY, type UserRepository } from './user.repository.js';
@@ -52,11 +53,14 @@ export class AuthController {
   @Post('signup')
   @HttpCode(HttpStatus.ACCEPTED)
   async signupRequest(
-    @Body() dto: RequestSigninDto,
+    @Body() dto: SignupDto,
     @Req() req: Request,
   ): Promise<{ status: 'accepted' }> {
     const ip = readClientIp(req);
-    await this.signup.ensureUser(dto.email);
+    await this.signup.ensureUser(dto.email, {
+      path: dto.path,
+      instanceUrl: dto.instanceUrl,
+    });
     await this.auth.requestMagicLink(dto.email, ip);
     return { status: 'accepted' };
   }
