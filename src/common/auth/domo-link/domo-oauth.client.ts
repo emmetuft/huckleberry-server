@@ -206,10 +206,15 @@ export class DomoOAuthClient {
    * Gatekeeper.
    */
   async validateInstance(issuerUrl: string): Promise<void> {
+    const transport = this.transportFor(issuerUrl);
     const url = new URL(
       '/.well-known/oauth-authorization-server',
-      this.transportFor(issuerUrl),
+      transport,
     ).toString();
+
+    this.logger.log(
+      `validateInstance: probing ${url} (issuer=${issuerUrl}, transport=${transport})`,
+    );
 
     let resp: Response;
     try {
@@ -217,15 +222,19 @@ export class DomoOAuthClient {
         headers: { Accept: 'application/json' },
         signal: AbortSignal.timeout(5000),
       });
-    } catch {
+    } catch (err) {
+      this.logger.warn(
+        `validateInstance: fetch failed for ${url}: ${String(err)}`,
+      );
       throw new BadRequestException(
         'Could not reach the Domo instance. Check the URL and try again.',
       );
     }
 
     if (!resp.ok) {
+      this.logger.warn(`validateInstance: ${url} returned ${resp.status}`);
       throw new BadRequestException(
-        'The URL does not appear to be a valid Domo instance.',
+        `Instance validation failed (HTTP ${resp.status}). Check the URL and try again.`,
       );
     }
 
@@ -265,7 +274,7 @@ export class DomoOAuthClient {
     const body = {
       client_name: 'huckleberry',
       redirect_uris: [this.redirectUri],
-      grant_types: ['authorization_code'],
+      grant_types: ['authorization_code', 'refresh_token'],
       response_types: ['code'],
       token_endpoint_auth_method: 'none',
       scope: this.scopes,

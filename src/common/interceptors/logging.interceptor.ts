@@ -1,13 +1,14 @@
 import {
   CallHandler,
   ExecutionContext,
+  HttpException,
   Injectable,
   Logger,
   NestInterceptor,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Observable, tap } from 'rxjs';
-import { Request } from 'express';
+import { Request, Response } from 'express';
 import { AppConfig } from '../config/configuration.js';
 
 @Injectable()
@@ -41,9 +42,18 @@ export class LoggingInterceptor implements NestInterceptor {
     }
 
     return next.handle().pipe(
-      tap(() => {
-        const ms = Date.now() - start;
-        this.logger.log(`${method} ${url} — ${ms}ms`);
+      tap({
+        next: () => {
+          const ms = Date.now() - start;
+          const res = context.switchToHttp().getResponse<Response>();
+          this.logger.log(`${method} ${url} — ${res.statusCode} ${ms}ms`);
+        },
+        error: (err: unknown) => {
+          const ms = Date.now() - start;
+          const status = err instanceof HttpException ? err.getStatus() : 500;
+          const msg = err instanceof Error ? err.message : 'unknown error';
+          this.logger.warn(`${method} ${url} — ${status} ${ms}ms — ${msg}`);
+        },
       }),
     );
   }

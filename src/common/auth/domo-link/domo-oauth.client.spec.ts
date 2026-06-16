@@ -81,7 +81,7 @@ describe('DomoOAuthClient.registerClient', () => {
     expect(body.redirect_uris).toEqual([
       'http://localhost:3000/api/auth/domo/callback',
     ]);
-    expect(body.grant_types).toEqual(['authorization_code']);
+    expect(body.grant_types).toEqual(['authorization_code', 'refresh_token']);
     expect(body.client_name).toBe('huckleberry');
   });
 

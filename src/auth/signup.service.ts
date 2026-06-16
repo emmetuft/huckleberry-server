@@ -111,6 +111,8 @@ export class SignupService {
       );
     }
 
+    await this.link.validateInstance(opts.instanceUrl);
+
     const user = await this.createUser(email, 'pending_link', opts.displayName);
 
     await this.link.bootstrapLink({

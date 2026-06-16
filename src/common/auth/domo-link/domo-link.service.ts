@@ -77,10 +77,16 @@ export class DomoLinkService {
     userId: string,
     issuerUrl?: string,
   ): Promise<StartLinkResult> {
-    const resolved = trimTrailingSlashes(issuerUrl ?? this.defaultIssuer);
+    let resolved = issuerUrl ? trimTrailingSlashes(issuerUrl) : '';
+    if (!resolved) {
+      const existingLink = await this.links.findActiveForUser(userId);
+      resolved = existingLink
+        ? trimTrailingSlashes(existingLink.issuerUrl)
+        : trimTrailingSlashes(this.defaultIssuer);
+    }
     if (!resolved) {
       throw new BadRequestException(
-        'No issuer URL provided and GATEKEEPER_ISSUERS is not configured',
+        'No issuer URL provided and no existing link or GATEKEEPER_ISSUERS configured',
       );
     }
     await this.ensureClientRegistered(resolved);
@@ -252,6 +258,11 @@ export class DomoLinkService {
   /** Returns the user's active link (or null). */
   activeLinkFor(userId: string): Promise<LinkedDomoInstance | null> {
     return this.links.findActiveForUser(userId);
+  }
+
+  /** Validates that an issuerUrl points to a real Gatekeeper instance. */
+  validateInstance(issuerUrl: string): Promise<void> {
+    return this.client.validateInstance(issuerUrl);
   }
 
   /**
