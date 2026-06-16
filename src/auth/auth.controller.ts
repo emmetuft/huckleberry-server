@@ -22,6 +22,7 @@ import { USER_REPOSITORY, type UserRepository } from './user.repository.js';
 import type { HuckleberryPrincipal } from './types.js';
 import { HuckleberryAuthGuard } from '../common/auth/huckleberry-auth.guard.js';
 import { Public } from '../common/auth/decorators/public.decorator.js';
+import { DomoLinkService } from '../common/auth/domo-link/domo-link.service.js';
 
 const SESSION_COOKIE = 'hb_session';
 const CSRF_COOKIE = 'csrf_token';
@@ -34,6 +35,7 @@ export class AuthController {
     private readonly auth: AuthService,
     private readonly signup: SignupService,
     private readonly sessions: SessionService,
+    private readonly link: DomoLinkService,
     @Inject(USER_REPOSITORY) private readonly users: UserRepository,
   ) {}
 
@@ -115,6 +117,7 @@ export class AuthController {
     @Res({ passthrough: true }) res: Response,
   ): Promise<void> {
     if (req.user) {
+      await this.link.unlink(req.user.userId);
       await this.sessions.revoke(req.user.sessionId);
     }
     res.clearCookie(SESSION_COOKIE, { path: '/' });

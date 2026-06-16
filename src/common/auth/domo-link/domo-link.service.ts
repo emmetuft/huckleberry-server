@@ -214,6 +214,29 @@ export class DomoLinkService {
     return { link, status: 'active' };
   }
 
+  /**
+   * Revokes the user's Domo refresh token and resets them to `pending_link`.
+   * The link row is retained so the next login re-uses the same instance.
+   * Best-effort — Gatekeeper revoke failures are swallowed.
+   */
+  async unlink(userId: string): Promise<void> {
+    const link = await this.links.findActiveForUser(userId);
+    if (!link) return;
+
+    const stored = await this.tokens.get(link.id);
+    if (stored) {
+      await this.client.revoke({
+        issuerUrl: link.issuerUrl,
+        token: stored.refreshToken,
+        tokenTypeHint: 'refresh_token',
+      });
+      await this.tokens.delete(link.id);
+    }
+
+    this.broker.invalidate(link.id);
+    await this.users.updateStatus(userId, 'pending_link');
+  }
+
   /** Returns the user's active link (or null). */
   activeLinkFor(userId: string): Promise<LinkedDomoInstance | null> {
     return this.links.findActiveForUser(userId);
