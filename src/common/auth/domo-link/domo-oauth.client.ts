@@ -1,5 +1,6 @@
 import {
   BadGatewayException,
+  BadRequestException,
   Inject,
   Injectable,
   Logger,
@@ -195,6 +196,52 @@ export class DomoOAuthClient {
       });
     } catch (_err) {
       this.logger.debug(`revoke failed (ignored): ${String(_err)}`);
+    }
+  }
+
+  /**
+   * Validates that issuerUrl points to a real Gatekeeper instance by
+   * fetching its RFC 8414 metadata. Throws BadRequestException with a
+   * user-facing message if the instance is unreachable or not a
+   * Gatekeeper.
+   */
+  async validateInstance(issuerUrl: string): Promise<void> {
+    const url = new URL(
+      '/.well-known/oauth-authorization-server',
+      this.transportFor(issuerUrl),
+    ).toString();
+
+    let resp: Response;
+    try {
+      resp = await fetch(url, {
+        headers: { Accept: 'application/json' },
+        signal: AbortSignal.timeout(5000),
+      });
+    } catch {
+      throw new BadRequestException(
+        'Could not reach the Domo instance. Check the URL and try again.',
+      );
+    }
+
+    if (!resp.ok) {
+      throw new BadRequestException(
+        'The URL does not appear to be a valid Domo instance.',
+      );
+    }
+
+    let meta: { issuer?: string; registration_endpoint?: string };
+    try {
+      meta = (await resp.json()) as typeof meta;
+    } catch {
+      throw new BadRequestException(
+        'The URL does not appear to be a valid Domo instance.',
+      );
+    }
+
+    if (!meta.issuer || !meta.registration_endpoint) {
+      throw new BadRequestException(
+        'The URL does not appear to be a valid Domo instance (missing OAuth metadata).',
+      );
     }
   }
 

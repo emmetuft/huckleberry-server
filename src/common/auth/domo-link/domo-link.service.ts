@@ -83,8 +83,8 @@ export class DomoLinkService {
         'No issuer URL provided and GATEKEEPER_ISSUERS is not configured',
       );
     }
-    this.tenants.assertAllowed(resolved);
     await this.ensureClientRegistered(resolved);
+    this.tenants.register(resolved);
 
     const { codeVerifier, codeChallenge } = DomoOAuthClient.generatePkce();
     const state = randomBytes(32).toString('base64url');
@@ -289,6 +289,7 @@ export class DomoLinkService {
     const existing = await this.clientCreds.get(issuerUrl);
     if (existing) return;
 
+    await this.client.validateInstance(issuerUrl);
     this.logger.log(`No client registered for ${issuerUrl} — attempting DCR`);
     const dcr: DcrResponse = await this.client.registerClient(issuerUrl);
     await this.clientCreds.upsert({
