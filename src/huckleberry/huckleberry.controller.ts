@@ -28,15 +28,12 @@ export class HuckleberryController {
   }
 
   @Post('execute/streaming')
-  async executeStream(
-    @Body() dto: ExecuteAgentDto,
-    @Res() res: ExpressResponse,
-  ) {
+  executeStream(@Body() dto: ExecuteAgentDto, @Res() res: ExpressResponse) {
     return this.huckleberryService.executeStream(dto, res);
   }
 
   @Post('resume/streaming')
-  async resumeStream(@Body() dto: ResumeAgentDto, @Res() res: ExpressResponse) {
+  resumeStream(@Body() dto: ResumeAgentDto, @Res() res: ExpressResponse) {
     return this.huckleberryService.resumeStream(dto, res);
   }
 }
