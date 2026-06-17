@@ -15,7 +15,6 @@ import {
 import type { HuckleberryPrincipal } from '../../auth/types.js';
 
 const SESSION_COOKIE = 'hb_session';
-const DEV_TOKEN = process.env.DEV_TOKEN;
 
 /**
  * Inbound auth for Category A controllers (Domo-proxied endpoints).
@@ -42,10 +41,12 @@ export class DomoAuthGuard implements CanActivate {
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<Request>();
 
+    // Read at request time (not module load time) so dotenv has already run.
+    const devToken = process.env.DEV_TOKEN;
     if (
       process.env.NODE_ENV !== 'production' &&
-      DEV_TOKEN &&
-      request.headers['x-domo-developer-token'] === DEV_TOKEN
+      devToken &&
+      request.headers['x-domo-developer-token'] === devToken
     ) {
       this.logger.debug('dev-token bypass active');
       return true;
