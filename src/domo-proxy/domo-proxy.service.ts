@@ -231,12 +231,18 @@ export class DomoProxyService {
       [HttpHeader.ContentType]: ContentType.JSON,
     };
 
-    // Resolution order: explicit caller arg → per-request context (set by
-    // DomoContextInterceptor from the active link's bearer).
-    const ctxBearer = domoRequestContext.getStore()?.bearer;
+    const ctx = domoRequestContext.getStore();
+    const ctxBearer = ctx?.bearer;
     const effectiveBearer = bearer ?? ctxBearer;
+
     if (effectiveBearer) {
-      headers[HttpHeader.Authorization] = `Bearer ${effectiveBearer}`;
+      if (ctx?.customer) {
+        // Dev-token bypass: send DDCI token directly, bypassing Gatekeeper scope checks.
+        headers['X-DOMO-Authentication'] = effectiveBearer;
+        headers['X-DOMO-Customer'] = ctx.customer;
+      } else {
+        headers[HttpHeader.Authorization] = `Bearer ${effectiveBearer}`;
+      }
     }
 
     if (extra) {

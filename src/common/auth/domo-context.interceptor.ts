@@ -9,7 +9,6 @@ import type { Request } from 'express';
 import { Observable, from, switchMap } from 'rxjs';
 import { DomoAuthBroker } from './domo-link/domo-auth.broker.js';
 import { DomoLinkService } from './domo-link/domo-link.service.js';
-import { DomoOAuthClient } from './domo-link/domo-oauth.client.js';
 import { domoRequestContext } from './domo-request-context.js';
 import type { HuckleberryPrincipal } from '../../auth/types.js';
 
@@ -28,14 +27,10 @@ import type { HuckleberryPrincipal } from '../../auth/types.js';
 @Injectable()
 export class DomoContextInterceptor implements NestInterceptor {
   private readonly logger = new Logger(DomoContextInterceptor.name);
-  // TTL cache for the dev client_credentials bearer so we don't hit the
-  // token endpoint on every request.
-  private devBearerCache: { token: string; expiresAt: number } | null = null;
 
   constructor(
     private readonly links: DomoLinkService,
     private readonly broker: DomoAuthBroker,
-    private readonly oauthClient: DomoOAuthClient,
   ) {}
 
   intercept(ctx: ExecutionContext, next: CallHandler): Observable<unknown> {
@@ -43,27 +38,32 @@ export class DomoContextInterceptor implements NestInterceptor {
       .switchToHttp()
       .getRequest<Request & { user?: HuckleberryPrincipal }>();
 
+    // Dev bypass: use X-DOMO-Authentication with the DDCI token + customer,
+    // skirting Gatekeeper's OAuth scope checks entirely. Only active when
+    // NODE_ENV !== production and DEV_TOKEN is configured.
     const devToken = process.env.DEV_TOKEN;
     if (
       process.env.NODE_ENV !== 'production' &&
       devToken &&
       req.headers['x-domo-developer-token'] === devToken
     ) {
-      const issuerUrl = process.env.DOMO_INSTANCE_URL ?? '';
-      return from(this.getDevBearer(issuerUrl, devToken)).pipe(
-        switchMap(
-          (bearer) =>
-            new Observable((subscriber) => {
-              domoRequestContext.run({ bearer, targetHost: issuerUrl }, () => {
-                next.handle().subscribe({
-                  next: (v) => subscriber.next(v),
-                  error: (e) => subscriber.error(e),
-                  complete: () => subscriber.complete(),
-                });
-              });
-            }),
-        ),
+      const targetHost = process.env.DOMO_INSTANCE_URL ?? '';
+      const customer = process.env.DEV_INSTANCE_CUSTOMER_ID ?? '';
+      this.logger.debug(
+        `dev-token bypass: X-DOMO-Authentication as customer "${customer}"`,
       );
+      return new Observable((subscriber) => {
+        domoRequestContext.run(
+          { bearer: devToken, targetHost, customer },
+          () => {
+            next.handle().subscribe({
+              next: (v) => subscriber.next(v),
+              error: (e) => subscriber.error(e),
+              complete: () => subscriber.complete(),
+            });
+          },
+        );
+      });
     }
 
     const principal = req.user;
@@ -85,40 +85,6 @@ export class DomoContextInterceptor implements NestInterceptor {
         });
       }),
     );
-  }
-
-  /**
-   * Exchanges the DDCI developer token for a real OAuth JWT via
-   * client_credentials, caching the result until 60s before expiry.
-   * Falls back to the raw devToken if the exchange fails (e.g. Gatekeeper
-   * not reachable locally) so existing callers aren't hard-blocked.
-   */
-  private async getDevBearer(issuerUrl: string, devToken: string): Promise<string> {
-    const now = Date.now();
-    if (this.devBearerCache && this.devBearerCache.expiresAt > now) {
-      return this.devBearerCache.token;
-    }
-    const clientId = process.env.DOMO_OAUTH_CLIENT_ID ?? '';
-    const scope = process.env.DOMO_OAUTH_SCOPES ?? '';
-    try {
-      const { accessToken, expiresIn } = await this.oauthClient.clientCredentials({
-        issuerUrl,
-        clientId,
-        clientSecret: devToken,
-        scope,
-      });
-      this.devBearerCache = {
-        token: accessToken,
-        expiresAt: now + Math.max(0, expiresIn - 60) * 1000,
-      };
-      this.logger.debug('dev bearer refreshed via client_credentials');
-      return accessToken;
-    } catch (err) {
-      this.logger.warn(
-        `Dev client_credentials exchange failed, falling back to raw token: ${String(err)}`,
-      );
-      return devToken;
-    }
   }
 
   private async resolve(
