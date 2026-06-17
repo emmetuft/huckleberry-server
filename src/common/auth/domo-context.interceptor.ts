@@ -37,6 +37,27 @@ export class DomoContextInterceptor implements NestInterceptor {
     const req = ctx
       .switchToHttp()
       .getRequest<Request & { user?: HuckleberryPrincipal }>();
+
+    const devToken = process.env.DEV_TOKEN;
+    if (
+      process.env.NODE_ENV !== 'production' &&
+      devToken &&
+      req.headers['x-domo-developer-token'] === devToken
+    ) {
+      return new Observable((subscriber) => {
+        domoRequestContext.run(
+          { bearer: devToken, targetHost: process.env.DOMO_INSTANCE_URL ?? '' },
+          () => {
+            next.handle().subscribe({
+              next: (v) => subscriber.next(v),
+              error: (e) => subscriber.error(e),
+              complete: () => subscriber.complete(),
+            });
+          },
+        );
+      });
+    }
+
     const principal = req.user;
     if (!principal) {
       return next.handle();

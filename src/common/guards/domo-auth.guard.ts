@@ -15,6 +15,7 @@ import {
 import type { HuckleberryPrincipal } from '../../auth/types.js';
 
 const SESSION_COOKIE = 'hb_session';
+const DEV_TOKEN = process.env.DEV_TOKEN;
 
 /**
  * Inbound auth for Category A controllers (Domo-proxied endpoints).
@@ -23,6 +24,11 @@ const SESSION_COOKIE = 'hb_session';
  * cookie (`hb_session`). The guard verifies it, attaches a
  * `HuckleberryPrincipal` to `request.user`, and `DomoContextInterceptor`
  * downstream resolves the user's linked Domo bearer via `DomoAuthBroker`.
+ *
+ * Dev bypass: if DEV_TOKEN is set and the request carries a matching
+ * `x-domo-developer-token` header, the session check is skipped entirely.
+ * `DomoContextInterceptor` detects the same header and seeds the Domo
+ * bearer context directly. Never active in production (NODE_ENV=production).
  */
 @Injectable()
 export class DomoAuthGuard implements CanActivate {
@@ -35,6 +41,15 @@ export class DomoAuthGuard implements CanActivate {
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<Request>();
+
+    if (
+      process.env.NODE_ENV !== 'production' &&
+      DEV_TOKEN &&
+      request.headers['x-domo-developer-token'] === DEV_TOKEN
+    ) {
+      this.logger.debug('dev-token bypass active');
+      return true;
+    }
 
     const cookie = readCookie(request, SESSION_COOKIE);
     if (cookie) {
