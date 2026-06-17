@@ -4,9 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import { AgentsController } from './agents.controller';
 import { AgentsService } from './agents.service';
 import { DomoAuthGuard } from '../common/guards/domo-auth.guard';
-import { DomoApiError } from '../common/filters/domo-exception.filter';
 import { Response as ExpressResponse } from 'express';
-import { Readable } from 'node:stream';
 import {
   CustomAgent,
   SearchAgentsResponse,
@@ -164,222 +162,38 @@ describe('AgentsController', () => {
   });
 
   describe('executeStream', () => {
-    it('should stream with correct headers and piping on success', async () => {
+    it('should delegate to service with agentId, dto, and res', async () => {
       const dto = { input: 'hello', sessionId: 'sess-1' } as ExecuteAgentDto;
-      const mockReadable = new Readable({ read() {} });
-      const mockBody = {
-        getReader: jest.fn(),
-        [Symbol.asyncIterator]: jest.fn(),
-      };
-      const mockHeaders = new Headers({
-        'content-type': 'text/event-stream',
-        'cache-control': 'no-cache',
-      });
-      const mockResponse = {
-        ok: true,
-        body: mockBody,
-        status: 200,
-        headers: mockHeaders,
-      } as unknown as Response;
-      service.executeStream.mockResolvedValue(mockResponse);
+      service.executeStream.mockResolvedValue(undefined);
 
       const res = {
         status: jest.fn().mockReturnThis(),
         setHeader: jest.fn(),
       } as unknown as ExpressResponse;
-
-      const fromWebSpy = jest
-        .spyOn(Readable, 'fromWeb')
-        .mockReturnValue(mockReadable);
-      mockReadable.pipe = jest.fn().mockReturnValue({
-        on: jest.fn().mockImplementation((event: string, cb: () => void) => {
-          if (event === 'finish') cb();
-        }),
-      });
 
       await controller.executeStream('agent-1', dto, res);
 
-      expect(service.executeStream).toHaveBeenCalledWith('agent-1', dto);
-      expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.setHeader).toHaveBeenCalledWith(
-        'content-type',
-        'text/event-stream',
-      );
-      expect(fromWebSpy).toHaveBeenCalledWith(mockBody);
-      expect(mockReadable.pipe).toHaveBeenCalledWith(res);
-
-      fromWebSpy.mockRestore();
-    });
-
-    it('should throw DomoApiError when response body is null', async () => {
-      const dto = { input: 'hello', sessionId: 'sess-1' } as ExecuteAgentDto;
-      const mockResponse = {
-        ok: true,
-        body: null,
-        status: 200,
-        headers: new Headers(),
-      } as unknown as Response;
-      service.executeStream.mockResolvedValue(mockResponse);
-
-      const res = {
-        status: jest.fn().mockReturnThis(),
-        setHeader: jest.fn(),
-      } as unknown as ExpressResponse;
-
-      await expect(
-        controller.executeStream('agent-1', dto, res),
-      ).rejects.toThrow(DomoApiError);
-      await expect(
-        controller.executeStream('agent-1', dto, res),
-      ).rejects.toMatchObject({
-        statusCode: 502,
-        message: 'Upstream returned no response body',
-      });
-    });
-
-    it('should throw DomoApiError on non-2xx response', async () => {
-      const dto = {
-        input: 'hello',
-        sessionId: 'sess-1',
-      } as ExecuteAgentDto;
-      const mockHeaders = new Headers({
-        'content-type': 'application/json',
-      });
-      const mockResponse = {
-        ok: false,
-        status: 500,
-        statusText: 'Internal Server Error',
-        headers: mockHeaders,
-        text: jest.fn().mockResolvedValue('agent execution failed'),
-      } as unknown as Response;
-      service.executeStream.mockResolvedValue(mockResponse);
-
-      const res = {
-        status: jest.fn().mockReturnThis(),
-        setHeader: jest.fn(),
-      } as unknown as ExpressResponse;
-
-      await expect(
-        controller.executeStream('agent-1', dto, res),
-      ).rejects.toThrow(DomoApiError);
-      await expect(
-        controller.executeStream('agent-1', dto, res),
-      ).rejects.toMatchObject({
-        statusCode: 500,
-        message: 'agent execution failed',
-      });
+      expect(service.executeStream).toHaveBeenCalledWith('agent-1', dto, res);
     });
   });
 
   describe('resumeStream', () => {
-    it('should stream with correct headers and piping on success', async () => {
+    it('should delegate to service with agentId, dto, and res', async () => {
       const dto = {
         sessionId: 'sess-1',
         sourceRequestId: 'req-1',
         response: 'continue',
       } as ResumeAgentDto;
-      const mockReadable = new Readable({ read() {} });
-      const mockBody = {
-        getReader: jest.fn(),
-        [Symbol.asyncIterator]: jest.fn(),
-      };
-      const mockHeaders = new Headers({
-        'content-type': 'text/event-stream',
-      });
-      const mockResponse = {
-        ok: true,
-        body: mockBody,
-        status: 200,
-        headers: mockHeaders,
-      } as unknown as Response;
-      service.resumeStream.mockResolvedValue(mockResponse);
+      service.resumeStream.mockResolvedValue(undefined);
 
       const res = {
         status: jest.fn().mockReturnThis(),
         setHeader: jest.fn(),
       } as unknown as ExpressResponse;
-
-      const fromWebSpy = jest
-        .spyOn(Readable, 'fromWeb')
-        .mockReturnValue(mockReadable);
-      mockReadable.pipe = jest.fn().mockReturnValue({
-        on: jest.fn().mockImplementation((event: string, cb: () => void) => {
-          if (event === 'finish') cb();
-        }),
-      });
 
       await controller.resumeStream('agent-1', dto, res);
 
-      expect(service.resumeStream).toHaveBeenCalledWith('agent-1', dto);
-      expect(res.status).toHaveBeenCalledWith(200);
-      expect(fromWebSpy).toHaveBeenCalledWith(mockBody);
-      expect(mockReadable.pipe).toHaveBeenCalledWith(res);
-
-      fromWebSpy.mockRestore();
-    });
-
-    it('should throw DomoApiError when response body is null', async () => {
-      const dto = {
-        sessionId: 'sess-1',
-        sourceRequestId: 'req-1',
-        response: 'continue',
-      } as ResumeAgentDto;
-      const mockResponse = {
-        ok: true,
-        body: null,
-        status: 200,
-        headers: new Headers(),
-      } as unknown as Response;
-      service.resumeStream.mockResolvedValue(mockResponse);
-
-      const res = {
-        status: jest.fn().mockReturnThis(),
-        setHeader: jest.fn(),
-      } as unknown as ExpressResponse;
-
-      await expect(
-        controller.resumeStream('agent-1', dto, res),
-      ).rejects.toThrow(DomoApiError);
-      await expect(
-        controller.resumeStream('agent-1', dto, res),
-      ).rejects.toMatchObject({
-        statusCode: 502,
-        message: 'Upstream returned no response body',
-      });
-    });
-
-    it('should throw DomoApiError on non-2xx response', async () => {
-      const dto = {
-        sessionId: 'sess-1',
-        sourceRequestId: 'req-1',
-        response: 'continue',
-      } as ResumeAgentDto;
-      const mockHeaders = new Headers({
-        'content-type': 'text/plain',
-      });
-      const mockResponse = {
-        ok: false,
-        status: 503,
-        statusText: 'Service Unavailable',
-        headers: mockHeaders,
-        text: jest.fn().mockResolvedValue('service down'),
-      } as unknown as Response;
-      service.resumeStream.mockResolvedValue(mockResponse);
-
-      const res = {
-        status: jest.fn().mockReturnThis(),
-        setHeader: jest.fn(),
-      } as unknown as ExpressResponse;
-
-      await expect(
-        controller.resumeStream('agent-1', dto, res),
-      ).rejects.toThrow(DomoApiError);
-      await expect(
-        controller.resumeStream('agent-1', dto, res),
-      ).rejects.toMatchObject({
-        statusCode: 503,
-        message: 'service down',
-      });
+      expect(service.resumeStream).toHaveBeenCalledWith('agent-1', dto, res);
     });
   });
 });

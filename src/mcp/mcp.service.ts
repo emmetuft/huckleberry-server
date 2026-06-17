@@ -146,6 +146,7 @@ export class McpService {
     } catch (error) {
       throw new Error(
         `Sync failed for ${server.name}: ${error instanceof Error ? error.message : String(error)}`,
+        { cause: error },
       );
     }
   }

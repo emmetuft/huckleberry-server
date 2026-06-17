@@ -17,7 +17,7 @@
 import { Signer } from '@aws-sdk/rds-signer';
 import { drizzle } from 'drizzle-orm/mysql2';
 import { migrate } from 'drizzle-orm/mysql2/migrator';
-import { createPool } from 'mysql2/promise';
+import { createPool, type Pool } from 'mysql2/promise';
 import type { RowDataPacket } from 'mysql2';
 
 interface LockRow extends RowDataPacket {
@@ -41,7 +41,7 @@ async function main() {
   const user = process.env.DATABASE_USER ?? 'huckleberry_migrate';
   const database = process.env.DATABASE_NAME ?? 'huckleberry';
 
-  let pool;
+  let pool: Pool;
   if (url) {
     pool = createPool({ uri: url, connectionLimit: 1 });
   } else {

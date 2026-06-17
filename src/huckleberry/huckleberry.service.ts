@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { Response as ExpressResponse } from 'express';
 import { AgentsService } from '../agents/agents.service.js';

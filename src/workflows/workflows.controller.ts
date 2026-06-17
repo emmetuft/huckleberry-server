@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Post, UseGuards } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { WorkflowsService } from './workflows.service.js';
 import { DomoAuthGuard } from '../common/guards/domo-auth.guard.js';
