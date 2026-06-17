@@ -172,20 +172,28 @@ export class DomoOAuthClient {
     }
     const text = await resp.text();
     if (!resp.ok) {
-      this.logger.warn(`/oauth2/token (client_credentials) ${resp.status}: ${text}`);
+      this.logger.warn(
+        `/oauth2/token (client_credentials) ${resp.status}: ${text}`,
+      );
       throw new UnauthorizedException({
         error: 'client_credentials_failed',
         status: resp.status,
       });
     }
-    interface AccessJson { access_token: string; expires_in?: number }
+    interface AccessJson {
+      access_token: string;
+      expires_in?: number;
+    }
     const parsed = JSON.parse(text) as AccessJson;
     if (!parsed.access_token) {
       throw new BadGatewayException(
         `Malformed client_credentials response: ${text.slice(0, 120)}`,
       );
     }
-    return { accessToken: parsed.access_token, expiresIn: parsed.expires_in ?? 3600 };
+    return {
+      accessToken: parsed.access_token,
+      expiresIn: parsed.expires_in ?? 3600,
+    };
   }
 
   /** Best-effort revoke. Gatekeeper's `/oauth2/revoke` accepts either token. */

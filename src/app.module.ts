@@ -29,10 +29,7 @@ import { WorkflowsModule } from './workflows/workflows.module.js';
     ConfigModule.forRoot({
       isGlobal: true,
       load: [configuration],
-      envFilePath: [
-        `.env.${process.env.DOMO_TARGET || 'dev'}`,
-        '.env',
-      ],
+      envFilePath: [`.env.${process.env.DOMO_TARGET || 'dev'}`, '.env'],
     }),
     ServeStaticModule.forRoot({
       rootPath: join(__dirname, '..', 'public'),

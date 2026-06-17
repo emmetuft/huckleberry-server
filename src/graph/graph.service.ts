@@ -27,7 +27,8 @@ export class GraphService {
       ? `${GRAPH_BASE}/${graphId}/schema/properties`
       : `${GRAPH_BASE}/${graphId}/schema`;
     return this.domo.get(endpoint, {
-      query: opts.sampleSize != null ? { sampleSize: String(opts.sampleSize) } : {},
+      query:
+        opts.sampleSize != null ? { sampleSize: String(opts.sampleSize) } : {},
     });
   }
 
