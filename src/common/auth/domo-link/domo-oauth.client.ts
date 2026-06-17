@@ -134,6 +134,60 @@ export class DomoOAuthClient {
     return this.postToken(params.issuerUrl, body);
   }
 
+  /**
+   * Dev-only: exchange a DDCI developer token for a short-lived OAuth JWT via
+   * the `client_credentials` grant. The DDCI token acts as the client secret.
+   * Caller is responsible for caching — this always hits the token endpoint.
+   */
+  async clientCredentials(params: {
+    issuerUrl: string;
+    clientId: string;
+    clientSecret: string;
+    scope: string;
+  }): Promise<{ accessToken: string; expiresIn: number }> {
+    const body = new URLSearchParams({
+      grant_type: 'client_credentials',
+      scope: params.scope,
+    });
+    const basic = Buffer.from(
+      `${params.clientId}:${params.clientSecret}`,
+    ).toString('base64');
+    const url = new URL(
+      '/oauth2/token',
+      this.transportFor(params.issuerUrl),
+    ).toString();
+    let resp: Response;
+    try {
+      resp = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Accept: 'application/json',
+          Authorization: `Basic ${basic}`,
+        },
+        body,
+      });
+    } catch (err) {
+      throw new BadGatewayException(`Gatekeeper unreachable: ${String(err)}`);
+    }
+    const text = await resp.text();
+    if (!resp.ok) {
+      this.logger.warn(`/oauth2/token (client_credentials) ${resp.status}: ${text}`);
+      throw new UnauthorizedException({
+        error: 'client_credentials_failed',
+        status: resp.status,
+      });
+    }
+    interface AccessJson { access_token: string; expires_in?: number }
+    const parsed = JSON.parse(text) as AccessJson;
+    if (!parsed.access_token) {
+      throw new BadGatewayException(
+        `Malformed client_credentials response: ${text.slice(0, 120)}`,
+      );
+    }
+    return { accessToken: parsed.access_token, expiresIn: parsed.expires_in ?? 3600 };
+  }
+
   /** Best-effort revoke. Gatekeeper's `/oauth2/revoke` accepts either token. */
   async revoke(params: {
     issuerUrl: string;
