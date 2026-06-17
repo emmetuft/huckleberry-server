@@ -6,9 +6,9 @@ import type { ShortestPathDto } from './dto/shortest-path.dto.js';
 
 const GRAPH_BASE = '/api/recall/v1';
 
-// graphId is empty string for the default graph — placeholder until the
-// correct customer-scoped ID is wired through configuration or the request.
-const graphId = '';
+// Default graph ID per Mako's SessionGraphProperties. Override via
+// assistant.session-graph.graphId config if the environment uses a different ID.
+const graphId = 'ai-sessions';
 
 @Injectable()
 export class GraphService {
