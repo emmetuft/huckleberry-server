@@ -131,6 +131,14 @@ export class AuthController {
     status: string;
     displayName: string | null;
   }> {
+    if (req.user.userId === 'dev-token-user') {
+      return {
+        id: 'dev-token-user',
+        email: 'dev@localhost',
+        status: 'active',
+        displayName: 'Dev Token User',
+      };
+    }
     const user = await this.users.findById(req.user.userId);
     if (!user) throw new Error('user disappeared mid-session');
     return {

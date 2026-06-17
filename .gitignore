@@ -397,7 +397,7 @@ Temporary Items
 =======
 # Local
 .claude/settings.local.json
-.env
+.env.*
 dist
 .webpack
 .serverless/**/*.zip

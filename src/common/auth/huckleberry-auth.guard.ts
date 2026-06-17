@@ -40,6 +40,22 @@ export class HuckleberryAuthGuard implements CanActivate {
     if (this.isPublic(ctx)) return true;
 
     const req = ctx.switchToHttp().getRequest<Request>();
+
+    const devToken = process.env.DEV_TOKEN;
+    if (
+      process.env.NODE_ENV !== 'production' &&
+      devToken &&
+      req.headers['x-domo-developer-token'] === devToken
+    ) {
+      (req as Request & { user: HuckleberryPrincipal }).user = {
+        userId: 'dev-token-user',
+        sessionId: 'dev-token-session',
+        email: 'dev@localhost',
+        status: 'active',
+      };
+      return true;
+    }
+
     const cookie = readCookie(req, COOKIE_NAME);
     if (!cookie) throw new UnauthorizedException('no session');
 

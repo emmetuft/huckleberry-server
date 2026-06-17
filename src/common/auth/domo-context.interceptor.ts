@@ -38,9 +38,9 @@ export class DomoContextInterceptor implements NestInterceptor {
       .switchToHttp()
       .getRequest<Request & { user?: HuckleberryPrincipal }>();
 
-    // Dev bypass: use X-DOMO-Authentication with the DDCI token + customer,
-    // skirting Gatekeeper's OAuth scope checks entirely. Only active when
-    // NODE_ENV !== production and DEV_TOKEN is configured.
+    // Dev bypass: forward DOMO_DEVELOPER_TOKEN (the real DDCI token for Mako)
+    // via X-DOMO-Developer-Token. DEV_TOKEN is just the guard password between
+    // the frontend and BFF — it doesn't need to be the Mako credential.
     const devToken = process.env.DEV_TOKEN;
     if (
       process.env.NODE_ENV !== 'production' &&
@@ -49,12 +49,13 @@ export class DomoContextInterceptor implements NestInterceptor {
     ) {
       const targetHost = process.env.DOMO_INSTANCE_URL ?? '';
       const customer = process.env.DEV_INSTANCE_CUSTOMER_ID ?? '';
+      const domoToken = process.env.DOMO_DEVELOPER_TOKEN ?? devToken;
       this.logger.debug(
-        `dev-token bypass: X-DOMO-Authentication as customer "${customer}"`,
+        `dev-token bypass: X-DOMO-Developer-Token as customer "${customer}"`,
       );
       return new Observable((subscriber) => {
         domoRequestContext.run(
-          { bearer: devToken, targetHost, customer },
+          { bearer: domoToken, targetHost, customer },
           () => {
             next.handle().subscribe({
               next: (v) => subscriber.next(v),

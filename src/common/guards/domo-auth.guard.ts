@@ -49,6 +49,12 @@ export class DomoAuthGuard implements CanActivate {
       request.headers['x-domo-developer-token'] === devToken
     ) {
       this.logger.debug('dev-token bypass active');
+      (request as Request & { user: HuckleberryPrincipal }).user = {
+        userId: 'dev-token-user',
+        sessionId: 'dev-token-session',
+        email: 'dev@localhost',
+        status: 'active',
+      };
       return true;
     }
 

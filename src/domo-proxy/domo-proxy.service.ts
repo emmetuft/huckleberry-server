@@ -237,9 +237,9 @@ export class DomoProxyService {
 
     if (effectiveBearer) {
       if (ctx?.customer) {
-        // Dev-token bypass: send DDCI token directly, bypassing Gatekeeper scope checks.
-        headers['X-DOMO-Authentication'] = effectiveBearer;
-        headers['X-DOMO-Customer'] = ctx.customer;
+        // Dev-token bypass: forward DDCI token via X-DOMO-Developer-Token,
+        // which Gatekeeper/Mako accepts without OAuth scope validation.
+        headers['X-DOMO-Developer-Token'] = effectiveBearer;
       } else {
         headers[HttpHeader.Authorization] = `Bearer ${effectiveBearer}`;
       }
