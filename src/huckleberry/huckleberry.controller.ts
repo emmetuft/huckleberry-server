@@ -1,4 +1,12 @@
-import { Body, Controller, HttpCode, HttpStatus, Post, Res, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  HttpCode,
+  HttpStatus,
+  Post,
+  Res,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import type { Response as ExpressResponse } from 'express';
 import { HuckleberryService } from './huckleberry.service.js';
@@ -20,15 +28,12 @@ export class HuckleberryController {
   }
 
   @Post('execute/streaming')
-  async executeStream(
-    @Body() dto: ExecuteAgentDto,
-    @Res() res: ExpressResponse,
-  ) {
+  executeStream(@Body() dto: ExecuteAgentDto, @Res() res: ExpressResponse) {
     return this.huckleberryService.executeStream(dto, res);
   }
 
   @Post('resume/streaming')
-  async resumeStream(@Body() dto: ResumeAgentDto, @Res() res: ExpressResponse) {
+  resumeStream(@Body() dto: ResumeAgentDto, @Res() res: ExpressResponse) {
     return this.huckleberryService.resumeStream(dto, res);
   }
 }

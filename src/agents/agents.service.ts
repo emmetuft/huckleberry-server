@@ -1,4 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { Readable } from 'node:stream';
+import type { Response as ExpressResponse } from 'express';
 import { DomoProxyService } from '../domo-proxy/domo-proxy.service.js';
 import {
   CustomAgent,
@@ -10,6 +12,20 @@ import { AgentContextUpdateDto } from './dto/agent-context-update.dto.js';
 import { SearchAgentsDto } from './dto/search-agents.dto.js';
 import { ExecuteAgentDto } from './dto/execute-agent.dto.js';
 import { ResumeAgentDto } from './dto/resume-agent.dto.js';
+import { HttpHeader } from '../common/constants/http.constants.js';
+import { DomoApiError } from '../common/filters/domo-exception.filter.js';
+
+const HOP_BY_HOP_HEADERS = new Set([
+  'connection',
+  'keep-alive',
+  'transfer-encoding',
+  'content-length',
+  'content-encoding',
+  'host',
+  'te',
+  'trailer',
+  'upgrade',
+]);
 
 const AGENTS_BASE = '/api/ai/v1/agents';
 
@@ -86,17 +102,72 @@ export class AgentsService {
   async executeStream(
     agentId: string,
     dto: ExecuteAgentDto,
-  ): Promise<Response> {
-    return this.domo.postStream(
+    res: ExpressResponse,
+  ): Promise<void> {
+    const domoResponse = await this.domo.postStream(
       `${AGENTS_BASE}/${agentId}/execute/streaming`,
       dto,
     );
+    return this.pipeStreamResponse(domoResponse, res);
   }
 
-  async resumeStream(agentId: string, dto: ResumeAgentDto): Promise<Response> {
-    return this.domo.postStream(
+  async resumeStream(
+    agentId: string,
+    dto: ResumeAgentDto,
+    res: ExpressResponse,
+  ): Promise<void> {
+    const domoResponse = await this.domo.postStream(
       `${AGENTS_BASE}/${agentId}/resume/streaming`,
       dto,
     );
+    return this.pipeStreamResponse(domoResponse, res);
+  }
+
+  private async pipeStreamResponse(
+    domoResponse: Response,
+    res: ExpressResponse,
+  ): Promise<void> {
+    if (!domoResponse.ok) {
+      const text = await domoResponse.text().catch(() => '');
+      throw new DomoApiError(
+        domoResponse.status,
+        text || domoResponse.statusText,
+        domoResponse.headers.get(HttpHeader.ContentType),
+      );
+    }
+
+    if (!domoResponse.body) {
+      throw new DomoApiError(502, 'Upstream returned no response body');
+    }
+
+    res.status(domoResponse.status);
+    domoResponse.headers.forEach((value, key) => {
+      if (!HOP_BY_HOP_HEADERS.has(key.toLowerCase())) {
+        res.setHeader(key, value);
+      }
+    });
+
+    const readable = Readable.fromWeb(
+      domoResponse.body as import('node:stream/web').ReadableStream,
+    );
+
+    const decoder = new TextDecoder();
+    readable.on('data', (chunk: Buffer) => {
+      this.logger.debug(decoder.decode(chunk, { stream: true }));
+    });
+
+    await new Promise<void>((resolve, reject) => {
+      readable.on('error', (err) => {
+        if (!res.headersSent) {
+          reject(
+            new DomoApiError(502, `Upstream stream error: ${String(err)}`),
+          );
+        } else {
+          res.end();
+          resolve();
+        }
+      });
+      readable.pipe(res).on('finish', resolve);
+    });
   }
 }
