@@ -1,6 +1,7 @@
-import { Controller, Get, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { ToolkitsService } from './toolkits.service.js';
+import { SearchToolkitsDto } from './dto/search-toolkits.dto.js';
 import { DomoAuthGuard } from '../common/guards/domo-auth.guard.js';
 
 @ApiTags('Toolkits')
@@ -13,4 +14,10 @@ export class ToolkitsController {
   getToolkits() {
     return this.toolkitsService.getToolkits();
   }
+
+  @Post('search')
+  searchToolkits(@Body() dto: SearchToolkitsDto) {
+    return this.toolkitsService.searchToolkits(dto);
+  }
 }
+

@@ -22,3 +22,21 @@ interface Tool {
   updatedAt?: string;
   updatedBy?: string;
 }
+
+export interface ToolkitSearchResult {
+  toolkitId: string;
+  name: string;
+  description: string;
+  type: 'CUSTOM' | 'DOMO_PROVIDED';
+  status?: string;
+  createdBy?: string;
+  createdAt?: string;
+  updatedBy?: string;
+  updatedAt?: string;
+}
+
+export interface ToolkitSearchPage {
+  toolkits: ToolkitSearchResult[];
+  pageContext?: Record<string, unknown>;
+}
+
