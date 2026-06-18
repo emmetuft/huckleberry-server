@@ -56,3 +56,17 @@ export interface SearchAgentsResponse {
   customAgents: CustomAgent[];
   pageContext: PageContext;
 }
+
+export interface ToolDescriptor {
+  name: string;
+  displayName?: string;
+  description?: string;
+  displayDescription?: string;
+  inputSchema?: Record<string, unknown>;
+}
+
+export interface AgentToolsPage {
+  tools: ToolDescriptor[];
+  pageContext?: PageContext;
+}
+

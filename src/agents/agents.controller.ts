@@ -74,6 +74,14 @@ export class AgentsController {
     return this.agentsService.remove(agentId);
   }
 
+  @Get(':agentId/tools')
+  getTools(
+    @Param('agentId') agentId: string,
+    @Query('sessionId') sessionId?: string,
+  ) {
+    return this.agentsService.getTools(agentId, sessionId);
+  }
+
   @Patch(':agentId/context')
   updateContext(
     @Param('agentId') agentId: string,

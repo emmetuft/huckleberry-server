@@ -5,6 +5,7 @@ import { DomoProxyService } from '../domo-proxy/domo-proxy.service.js';
 import {
   CustomAgent,
   SearchAgentsResponse,
+  AgentToolsPage,
 } from '../common/types/domo-agent.types.js';
 import { AgentInclude, AgentType } from '../common/types/domo-common.types.js';
 import { AgentDto } from './dto/agent.dto.js';
@@ -97,6 +98,14 @@ export class AgentsService {
     dto: AgentContextUpdateDto,
   ): Promise<CustomAgent> {
     return this.domo.put<CustomAgent>(`${AGENTS_BASE}/${agentId}/context`, dto);
+  }
+
+  async getTools(agentId: string, sessionId?: string): Promise<AgentToolsPage> {
+    const query = sessionId ? { sessionId } : undefined;
+    return this.domo.get<AgentToolsPage>(
+      `/api/ai/v1/assistant/agents/${agentId}/tools`,
+      { query },
+    );
   }
 
   async executeStream(

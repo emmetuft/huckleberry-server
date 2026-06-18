@@ -20,4 +20,3 @@ export class ToolkitsService {
     return this.domo.post<ToolkitSearchPage>(`${TOOLKITS_BASE}/search`, dto);
   }
 }
-
