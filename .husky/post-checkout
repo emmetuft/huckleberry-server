@@ -1,3 +1,4 @@
 #!/bin/sh
 # $3 = 1 means branch checkout (not file checkout)
 [ "$3" = "1" ] && git diff-index --name-only "$1" -- | grep -q pnpm-lock.yaml && pnpm install
+exit 0
