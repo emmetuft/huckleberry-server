@@ -6,7 +6,7 @@ import {
   CustomAgent,
   SearchAgentsResponse,
 } from '../common/types/domo-agent.types.js';
-import { AgentInclude } from '../common/types/domo-common.types.js';
+import { AgentInclude, AgentType } from '../common/types/domo-common.types.js';
 import { AgentDto } from './dto/agent.dto.js';
 import { AgentContextUpdateDto } from './dto/agent-context-update.dto.js';
 import { SearchAgentsDto } from './dto/search-agents.dto.js';
@@ -104,9 +104,10 @@ export class AgentsService {
     dto: ExecuteAgentDto,
     res: ExpressResponse,
   ): Promise<void> {
+    const body = { ...dto, agentType: dto.agentType ?? AgentType.TOOL_CALLING };
     const domoResponse = await this.domo.postStream(
       `${AGENTS_BASE}/${agentId}/execute/streaming`,
-      dto,
+      body,
     );
     return this.pipeStreamResponse(domoResponse, res);
   }
