@@ -9,11 +9,11 @@ export class PeopleService {
   async getUsers(): Promise<DomoUser[]> {
     // TODO: /api/identity/v1/users returns 403 insufficient_scope with embedded tokens.
     // Requires identity-domain scopes — same issue as groups below. Need correct path or scope grant.
-    return this.domo.get<DomoUser[]>('/api/identity/v1/users');
+    return this.domo.get<DomoUser[]>('/api/content/v3/users');
   }
 
-  async getUserById(id: string): Promise<DomoUser> {
-    return this.domo.get<DomoUser>('/api/content/v3/users', { query: { id } });
+  async getUserById(id: string): Promise<DomoUser[]> {
+    return this.domo.get<DomoUser[]>('/api/content/v3/users', { query: { id } });
   }
 
   async getUsersByIds(ids: string): Promise<DomoUser[]> {
@@ -21,7 +21,7 @@ export class PeopleService {
       .split(',')
       .map((s) => s.trim())
       .filter(Boolean);
-    return Promise.all(idList.map((id) => this.getUserById(id)));
+    return (await Promise.all(idList.map((id) => this.getUserById(id)))).flat();
   }
 
   async getGroups(limit = 100, offset?: number): Promise<DomoGroup[]> {

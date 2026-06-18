@@ -13,7 +13,7 @@ export class PeopleController {
   async getUsers(@Query('ids') ids?: string) {
     if (ids && ids.length > 0) {
       const users = await this.peopleService.getUsersByIds(ids);
-      return { users };
+      return users;
     }
     return this.peopleService.getUsers();
   }
