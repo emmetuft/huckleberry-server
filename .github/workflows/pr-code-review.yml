@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   build:
-    uses: domo-development/domo-actions/.github/workflows/pr-code-review.yml@v2.9
+    uses: domo-development/domo-actions/.github/workflows/pr-code-review.yml@v2.10
     with:
       repository: ${{ github.repository }}
       pr_number: ${{ github.event.pull_request.number }}
