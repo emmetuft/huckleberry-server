@@ -1,9 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { DomoProxyService } from '../domo-proxy/domo-proxy.service.js';
-import {
-  Toolkit,
-  ToolkitSearchPage,
-} from '../common/types/domo-toolkit.types.js';
+import { ToolkitSearchPage } from '../common/types/domo-toolkit.types.js';
 import { SearchToolkitsDto } from './dto/search-toolkits.dto.js';
 
 const TOOLKITS_BASE = '/api/ai/v1/toolkits';
