@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, HttpCode, Post, UseGuards } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { ToolkitsService } from './toolkits.service.js';
 import { SearchToolkitsDto } from './dto/search-toolkits.dto.js';
@@ -10,15 +10,9 @@ import { DomoAuthGuard } from '../common/guards/domo-auth.guard.js';
 export class ToolkitsController {
   constructor(private readonly toolkitsService: ToolkitsService) {}
 
-  @Get()
-  getToolkits() {
-    return this.toolkitsService.getToolkits();
-  }
-
-  @Post('search')
+  @Post()
   @HttpCode(200)
-  searchToolkits(@Body() dto: SearchToolkitsDto) {
-    return this.toolkitsService.searchToolkits(dto);
+  getToolkits(@Body() dto: SearchToolkitsDto) {
+    return this.toolkitsService.getToolkits(dto);
   }
 }
-
