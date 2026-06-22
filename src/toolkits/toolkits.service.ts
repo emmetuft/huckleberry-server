@@ -12,8 +12,10 @@ const TOOLKITS_BASE = '/api/ai/v1/toolkits';
 export class ToolkitsService {
   constructor(private readonly domo: DomoProxyService) {}
 
-  async getToolkits(): Promise<Toolkit[]> {
-    return this.domo.get<Toolkit[]>(TOOLKITS_BASE);
+  async getToolkits(): Promise<ToolkitSearchPage> {
+    return this.domo.post<ToolkitSearchPage>(`${TOOLKITS_BASE}/search`, {
+      limit: 50,
+    });
   }
 
   async searchToolkits(dto: SearchToolkitsDto): Promise<ToolkitSearchPage> {

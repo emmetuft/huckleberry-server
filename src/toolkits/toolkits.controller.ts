@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Post, UseGuards } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { ToolkitsService } from './toolkits.service.js';
 import { SearchToolkitsDto } from './dto/search-toolkits.dto.js';
@@ -16,6 +16,7 @@ export class ToolkitsController {
   }
 
   @Post('search')
+  @HttpCode(200)
   searchToolkits(@Body() dto: SearchToolkitsDto) {
     return this.toolkitsService.searchToolkits(dto);
   }
