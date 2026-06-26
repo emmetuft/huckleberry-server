@@ -17,6 +17,7 @@ import {
 import {
   EMAIL_SERVICE,
   ConsoleEmailService,
+  SesEmailService,
   SmtpEmailService,
 } from './email.service.js';
 import { HuckleberryAuthGuard } from '../common/auth/huckleberry-auth.guard.js';
@@ -69,10 +70,11 @@ import type { AppConfig } from '../common/config/configuration.js';
     {
       provide: EMAIL_SERVICE,
       inject: [ConfigService],
-      useFactory: (config: ConfigService) =>
-        useSmtp(config)
-          ? new SmtpEmailService(config)
-          : new ConsoleEmailService(),
+      useFactory: (config: ConfigService) => {
+        if (useSes(config)) return new SesEmailService(config);
+        if (useSmtp(config)) return new SmtpEmailService(config);
+        return new ConsoleEmailService();
+      },
     },
   ],
   exports: [
@@ -91,6 +93,11 @@ export class HuckleberryAuthModule {}
 function useMysql(config: ConfigService): boolean {
   const app = config.get<AppConfig>('app');
   return !!app?.databaseUrl;
+}
+
+function useSes(config: ConfigService): boolean {
+  const app = config.get<AppConfig>('app');
+  return !!app?.sesFrom;
 }
 
 function useSmtp(config: ConfigService): boolean {
