@@ -124,7 +124,7 @@ After `pnpm infra:up` + `pnpm start:dev` are running, plus the SPA dev server in
 
 1. Open `http://localhost:5173/login?mode=signup`. Enter your email (any address — Mailpit captures it; nothing escapes the container). Submit.
 2. Open Mailpit at `http://localhost:8025`. You'll see "Your huckleberry sign-in link" appear within a second. Click it.
-   - (If `SMTP_HOST` is unset the BFF falls back to `ConsoleEmailService` — paste the URL from the BFF console into the browser instead.)
+   - (If `SMTP_HOST` is unset the BFF falls back to `ConsoleEmailService` — paste the URL from the BFF console into the browser instead. In prod, `SES_FROM` activates `SesEmailService` instead of SMTP — see `docs/deployment-bff.md`.)
 3. AuthGuard sees `status=pending_link` and redirects to Gatekeeper's `/oauth2/authorize`.
 4. Sign in on Domo. Gatekeeper redirects back to `/api/auth/domo/callback`.
 5. BFF persists the refresh token, flips your user to `active`, lands you at `/workspace?linked=1`.

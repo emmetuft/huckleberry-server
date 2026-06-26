@@ -50,6 +50,9 @@ export interface AppConfig {
   smtpUser: string;
   smtpPass: string;
   smtpFrom: string;
+  /** SES v2 API — selected when `SES_FROM` is set. Uses the AWS credential chain. */
+  sesRegion: string | null;
+  sesFrom: string | null;
   /**
    * Allowlist of issuer URLs we accept tokens from. Order doesn't matter.
    * Each entry must match the literal `iss` claim Gatekeeper writes into
@@ -229,6 +232,8 @@ export default (): { app: AppConfig } => ({
     smtpUser: process.env.SMTP_USER || '',
     smtpPass: process.env.SMTP_PASS || '',
     smtpFrom: process.env.SMTP_FROM || 'huckleberry@localhost',
+    sesRegion: process.env.SES_REGION || process.env.AWS_REGION || null,
+    sesFrom: process.env.SES_FROM || null,
     gatekeeperIssuers: parseIssuers(process.env),
     gatekeeperJwksUriOverrides: parseJwksOverrides(process.env),
     gatekeeperTransportOverrides: parseTransportOverrides(process.env),

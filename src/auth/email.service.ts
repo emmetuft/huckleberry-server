@@ -1,5 +1,9 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import {
+  SESv2Client,
+  SendEmailCommand,
+} from '@aws-sdk/client-sesv2';
 import { createTransport, Transporter } from 'nodemailer';
 import type { AppConfig } from '../common/config/configuration.js';
 
@@ -79,6 +83,49 @@ export class SmtpEmailService implements EmailService {
       text: textBody(email.url, expiresMins),
       html: htmlBody(email.url, expiresMins),
     });
+    this.logger.log(
+      `[magic-link] sent to=${email.to} expires=${email.expiresAt.toISOString()}`,
+    );
+  }
+}
+
+/**
+ * SES v2 impl — sends via the SES API using the standard AWS credential chain
+ * (IRSA on EKS, AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY locally). Selected
+ * when `SES_FROM` is set. No SMTP credentials required.
+ */
+@Injectable()
+export class SesEmailService implements EmailService {
+  private readonly logger = new Logger(SesEmailService.name);
+  private readonly client: SESv2Client;
+  private readonly fromAddress: string;
+
+  constructor(@Inject(ConfigService) config: ConfigService) {
+    const app = config.get<AppConfig>('app');
+    this.fromAddress = app?.sesFrom ?? '';
+    this.client = new SESv2Client({ region: app?.sesRegion ?? undefined });
+    this.logger.log(`SES transport ready — from=${this.fromAddress}`);
+  }
+
+  async sendMagicLink(email: MagicLinkEmail): Promise<void> {
+    const expiresMins = Math.round(
+      (email.expiresAt.getTime() - Date.now()) / 60_000,
+    );
+    await this.client.send(
+      new SendEmailCommand({
+        FromEmailAddress: this.fromAddress,
+        Destination: { ToAddresses: [email.to] },
+        Content: {
+          Simple: {
+            Subject: { Data: 'Your huckleberry sign-in link' },
+            Body: {
+              Text: { Data: textBody(email.url, expiresMins) },
+              Html: { Data: htmlBody(email.url, expiresMins) },
+            },
+          },
+        },
+      }),
+    );
     this.logger.log(
       `[magic-link] sent to=${email.to} expires=${email.expiresAt.toISOString()}`,
     );
