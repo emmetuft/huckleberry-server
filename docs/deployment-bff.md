@@ -186,7 +186,7 @@ Permissions — Aurora IAM auth, Secrets Manager, SES:
     {
       "Sid": "SesSend",
       "Effect": "Allow",
-      "Action": ["ses:SendEmail", "ses:SendRawEmail"],
+      "Action": "ses:SendEmail",
       "Resource": "*"
     }
   ]
@@ -202,6 +202,24 @@ serviceAccount:
 ```
 
 > **Note:** `serviceAccount.iamRoleArn` is currently commented out in dev3 values — this needs to be filled in before Aurora IAM auth or SES will work from the pod.
+
+### Email — SES v2
+
+The BFF sends magic-link emails via the SES v2 API (`@aws-sdk/client-sesv2`), not SMTP. It authenticates using the pod's IRSA role — no SMTP credentials or separate SES IAM user required.
+
+Two env vars must be set in each environment's Helm values / ExternalSecret:
+
+| Variable | Example | Notes |
+|---|---|---|
+| `SES_FROM` | `no-reply@huckleberry.ai` | Must be a verified SES identity. Setting this activates `SesEmailService`. |
+| `SES_REGION` | `us-east-1` | Optional — falls back to `AWS_REGION` if unset. |
+
+The `ses:SendEmail` permission in the IAM policy above covers the SES v2 `SendEmail` action.
+
+Verify the sender identity is confirmed in SES before deploy:
+```bash
+aws ses get-identity-verification-attributes --identities no-reply@huckleberry.ai
+```
 
 ### 4. Secrets Manager
 
