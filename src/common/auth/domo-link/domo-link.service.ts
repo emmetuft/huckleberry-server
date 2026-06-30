@@ -12,13 +12,21 @@ import { JwksService } from '../jwks.service.js';
 import { KnownTenantsService } from '../known-tenants.service.js';
 import { jwtVerify } from 'jose';
 import { DomoAuthBroker } from './domo-auth.broker.js';
-import { DomoOAuthClient, type TokenResponse } from './domo-oauth.client.js';
+import {
+  DomoOAuthClient,
+  type DcrResponse,
+  type TokenResponse,
+} from './domo-oauth.client.js';
 import { LINK_REPOSITORY, type LinkRepository } from './link.repository.js';
 import {
   OAUTH_STATE_STORE,
   type OAuthStateStore,
 } from './oauth-state.store.js';
 import { DOMO_TOKEN_STORE, type DomoTokenStore } from './token.store.js';
+import {
+  CLIENT_CREDENTIAL_STORE,
+  type ClientCredentialStore,
+} from './client-credential.store.js';
 import {
   USER_REPOSITORY,
   type UserRepository,
@@ -53,6 +61,8 @@ export class DomoLinkService {
     @Inject(OAUTH_STATE_STORE) private readonly states: OAuthStateStore,
     @Inject(DOMO_TOKEN_STORE) private readonly tokens: DomoTokenStore,
     @Inject(USER_REPOSITORY) private readonly users: UserRepository,
+    @Inject(CLIENT_CREDENTIAL_STORE)
+    private readonly clientCreds: ClientCredentialStore,
   ) {
     const app = config.get<AppConfig>('app');
     this.defaultIssuer = app?.gatekeeperIssuers?.[0] ?? '';
@@ -61,18 +71,26 @@ export class DomoLinkService {
   /**
    * Begin a link. Generates PKCE + state, stores them keyed by `state`,
    * returns the authorize URL the browser should be redirected to.
+   * Registers the OAuth client via DCR if not already in the store.
    */
   async startLink(
     userId: string,
     issuerUrl?: string,
   ): Promise<StartLinkResult> {
-    const resolved = trimTrailingSlashes(issuerUrl ?? this.defaultIssuer);
+    let resolved = issuerUrl ? trimTrailingSlashes(issuerUrl) : '';
+    if (!resolved) {
+      const existingLink = await this.links.findActiveForUser(userId);
+      resolved = existingLink
+        ? trimTrailingSlashes(existingLink.issuerUrl)
+        : trimTrailingSlashes(this.defaultIssuer);
+    }
     if (!resolved) {
       throw new BadRequestException(
-        'No issuer URL provided and GATEKEEPER_ISSUERS is not configured',
+        'No issuer URL provided and no existing link or GATEKEEPER_ISSUERS configured',
       );
     }
-    this.tenants.assertAllowed(resolved);
+    await this.ensureClientRegistered(resolved);
+    this.tenants.register(resolved);
 
     const { codeVerifier, codeChallenge } = DomoOAuthClient.generatePkce();
     const state = randomBytes(32).toString('base64url');
@@ -87,7 +105,7 @@ export class DomoLinkService {
     };
     await this.states.insert(pending);
 
-    const authorizeUrl = this.client.buildAuthorizeUrl({
+    const authorizeUrl: string = await this.client.buildAuthorizeUrl({
       issuerUrl: resolved,
       state,
       codeChallenge,
@@ -242,6 +260,11 @@ export class DomoLinkService {
     return this.links.findActiveForUser(userId);
   }
 
+  /** Validates that an issuerUrl points to a real Gatekeeper instance. */
+  validateInstance(issuerUrl: string): Promise<void> {
+    return this.client.validateInstance(issuerUrl);
+  }
+
   /**
    * Pre-seeds a pending link row for a newly-provisioned user. The link
    * has no `domoSub` and no refresh token yet — both get filled in when
@@ -267,6 +290,28 @@ export class DomoLinkService {
     };
     await this.links.insert(link);
     return link;
+  }
+
+  /**
+   * Ensures an OAuth client is registered for the given issuerUrl.
+   * Checks the credential store — on miss, calls DCR and persists the result.
+   */
+  private async ensureClientRegistered(issuerUrl: string): Promise<void> {
+    const existing = await this.clientCreds.get(issuerUrl);
+    if (existing) return;
+
+    await this.client.validateInstance(issuerUrl);
+    this.logger.log(`No client registered for ${issuerUrl} — attempting DCR`);
+    const dcr: DcrResponse = await this.client.registerClient(issuerUrl);
+    await this.clientCreds.upsert({
+      issuerUrl,
+      clientId: dcr.clientId,
+      registrationAccessToken: dcr.registrationAccessToken,
+      redirectUri: this.client.getRedirectUri(),
+      scope: dcr.scope,
+      registeredAt: new Date(),
+      lastUsedAt: null,
+    });
   }
 }
 

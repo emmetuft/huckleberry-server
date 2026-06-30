@@ -1,4 +1,9 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import {
+  BadRequestException,
+  Inject,
+  Injectable,
+  Logger,
+} from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { DomoLinkService } from '../common/auth/domo-link/domo-link.service.js';
 import {
@@ -6,29 +11,26 @@ import {
   type InstanceProvisioner,
 } from '../common/auth/domo-link/instance-provisioner.service.js';
 import { USER_REPOSITORY, type UserRepository } from './user.repository.js';
-import type { User } from './types.js';
+import type { User, UserStatus } from './types.js';
+
+export type SignupPath = 'new' | 'existing';
 
 export interface SignupResult {
   user: User;
-  /** true if a new user was created in this call; false if the email already existed. */
   created: boolean;
-  /** The linked Domo instance — present whether the user was just created or already linked. */
-  instance: { issuerUrl: string; customerId: string };
+  instance: { issuerUrl: string; customerId: string } | null;
 }
 
 /**
- * Freemium self-service signup.
+ * Dual-path signup:
  *
- * - Find user by email → if exists, ensure a pending link row is present,
- *   return.
- * - If not, provision a Domo instance + user via the InstanceProvisioner,
- *   create the huckleberry user row in `pending_link` status, bootstrap a
- *   pending link row (no tokens yet), and return.
+ * - **"new"** — user doesn't have a Domo instance. Provision one via
+ *   InstanceProvisioner, create user as `pending_link` with a bootstrap
+ *   link row.
  *
- * The user activates their account on first sign-in by completing the
- * PKCE auth-code flow against Gatekeeper — only then do we hold a refresh
- * token and flip user.status to `active`. The BFF never holds a Domo
- * password and is not a confidential OAuth client.
+ * - **"existing"** — user has a Domo instance. Create user as `pending_link`
+ *   with a bootstrap link row using their provided instanceUrl. DCR happens
+ *   later when they click "Connect" (inside `link/start`).
  */
 @Injectable()
 export class SignupService {
@@ -41,59 +43,46 @@ export class SignupService {
     private readonly provisioner: InstanceProvisioner,
   ) {}
 
-  async ensureUser(email: string, displayName?: string): Promise<SignupResult> {
+  async ensureUser(
+    email: string,
+    opts?: { path?: SignupPath; instanceUrl?: string; displayName?: string },
+  ): Promise<SignupResult> {
     const normalized = email.toLowerCase().trim();
+    const path = opts?.path ?? 'new';
     const existing = await this.users.findByEmail(normalized);
 
     if (existing) {
       const link = await this.link.activeLinkFor(existing.id);
-      if (link) {
-        return {
-          user: existing,
-          created: false,
-          instance: {
-            issuerUrl: link.issuerUrl,
-            customerId: link.customerId,
-          },
-        };
-      }
-      // User exists but somehow has no link — provision one. Edge case
-      // mostly relevant to mid-migration data states.
-      const instance = await this.provisioner.provision(normalized);
-      await this.link.bootstrapLink({
-        userId: existing.id,
-        issuerUrl: instance.issuerUrl,
-        customerId: instance.customerId,
-        scope: instance.scope,
-      });
       return {
         user: existing,
         created: false,
-        instance: {
-          issuerUrl: instance.issuerUrl,
-          customerId: instance.customerId,
-        },
+        instance: link
+          ? { issuerUrl: link.issuerUrl, customerId: link.customerId }
+          : null,
       };
     }
 
-    // New user — provision instance first so we don't leave a userless row
-    // behind if provisioning fails.
-    const instance = await this.provisioner.provision(normalized);
+    if (path === 'existing') {
+      return this.signupExistingInstance(normalized, opts);
+    }
+
+    return this.signupNewInstance(normalized, opts);
+  }
+
+  private async signupNewInstance(
+    email: string,
+    opts?: { displayName?: string },
+  ): Promise<SignupResult> {
+    const instance = await this.provisioner.provision(email);
     this.logger.log(
-      `provisioned instance for ${normalized}: ${instance.issuerUrl} (cid=${instance.customerId})`,
+      `provisioned instance for ${email}: ${instance.issuerUrl} (cid=${instance.customerId})`,
     );
 
-    const now = new Date();
-    const user = await this.users.insert({
-      id: randomUUID(),
-      email: normalized,
-      emailVerified: false,
-      displayName: displayName ?? null,
-      status: 'pending_link',
-      createdAt: now,
-      updatedAt: now,
-      lastLoginAt: null,
-    } satisfies User);
+    const user = await this.createUser(
+      email,
+      'pending_link',
+      opts?.displayName,
+    );
 
     await this.link.bootstrapLink({
       userId: user.id,
@@ -110,5 +99,51 @@ export class SignupService {
         customerId: instance.customerId,
       },
     };
+  }
+
+  private async signupExistingInstance(
+    email: string,
+    opts?: { instanceUrl?: string; displayName?: string },
+  ): Promise<SignupResult> {
+    if (!opts?.instanceUrl) {
+      throw new BadRequestException(
+        'instanceUrl is required when path is "existing"',
+      );
+    }
+
+    await this.link.validateInstance(opts.instanceUrl);
+
+    const user = await this.createUser(email, 'pending_link', opts.displayName);
+
+    await this.link.bootstrapLink({
+      userId: user.id,
+      issuerUrl: opts.instanceUrl,
+      customerId: '',
+      scope: '',
+    });
+
+    return {
+      user,
+      created: true,
+      instance: { issuerUrl: opts.instanceUrl, customerId: '' },
+    };
+  }
+
+  private async createUser(
+    email: string,
+    status: UserStatus,
+    displayName?: string,
+  ): Promise<User> {
+    const now = new Date();
+    return this.users.insert({
+      id: randomUUID(),
+      email,
+      emailVerified: false,
+      displayName: displayName ?? null,
+      status,
+      createdAt: now,
+      updatedAt: now,
+      lastLoginAt: null,
+    } satisfies User);
   }
 }

@@ -6,7 +6,11 @@
  * completes. Suspended is the admin-disable state.
  */
 
-export type UserStatus = 'pending_link' | 'active' | 'suspended';
+export type UserStatus =
+  | 'pending_provision'
+  | 'pending_link'
+  | 'active'
+  | 'suspended';
 
 export interface User {
   /** UUID v4. We carry the canonical form as a string; persistence layer may store BINARY(16). */

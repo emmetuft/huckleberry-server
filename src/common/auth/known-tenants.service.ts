@@ -49,6 +49,16 @@ export class KnownTenantsService {
     }
   }
 
+  isAllowed(issuer: string): boolean {
+    return this.allowedIssuers.has(issuer);
+  }
+
+  register(issuer: string): void {
+    if (this.allowedIssuers.has(issuer)) return;
+    this.allowedIssuers.add(issuer);
+    this.logger.log(`Dynamically registered issuer: ${issuer}`);
+  }
+
   /**
    * Subdomain-based fallback for deriving a customer slug from an issuer
    * URL. Only used when the JWT has no `cid` claim (shouldn't happen against
