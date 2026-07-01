@@ -39,7 +39,7 @@ Serve a static JSON response at `GET /.well-known/oauth-client` from the BFF. Th
   "grant_types": ["authorization_code", "refresh_token"],
   "response_types": ["code"],
   "token_endpoint_auth_method": "none",
-  "scope": "ai:read ai:execute identity:read dataset:data:read"
+  "scope": "ai:execute ai:read ai:write content:data:read content:meta:read dataset:data:read dataset:meta:read identity:read identity:write search:read"
 }
 
 ```
