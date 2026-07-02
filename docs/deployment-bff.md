@@ -71,19 +71,29 @@ Reader:  dev3-huckleberry-1-cluster.cluster-ro-cjeyhncfcola.us-east-1.rds.amazon
 
 ```
   huckleberry-server  ──push──►  Jenkins  ──build+push──►  ECR
-                                     │
-                                     └──update image.tag──►  huckleberry-gitops
-                                                                     │
-                                                              Argo CD watches
-                                                                     │
-                                                                     ▼
-                                                            EKS cluster (auto-sync)
+                                                              │
+                                                         (manual step)
+                                                              │
+                                             update image.tag in huckleberry-gitops
+                                                              │
+                                                       Argo CD watches
+                                                              │
+                                                              ▼
+                                                    EKS cluster (auto-sync)
 ```
 
 1. Push to `main` in `huckleberry-server` triggers Jenkins via GitHub Actions webhook.
 2. Jenkins builds the Docker image, tags it `YYYY-MM-DD-b<N>`, pushes to:
    `972900829293.dkr.ecr.us-east-1.amazonaws.com/huckleberry/huckleberry-bff:<tag>`
-3. Jenkins updates `image.tag` in `huckleberry-gitops/instances/dev-ai/<env>/values.yaml` and commits.
+3. **Manual step — update gitops with the new image tag:**
+   ```bash
+   cd ~/dev/huckleberry-gitops
+   # Edit instances/dev-ai/<env>/values.yaml — set image.tag to the new tag from step 2
+   git add instances/dev-ai/<env>/values.yaml
+   git commit -m "deploy huckleberry-bff <tag> to <env>"
+   git push
+   ```
+   > Jenkins automation for this step is planned but not yet wired. Until then, every deploy requires this manual commit to huckleberry-gitops.
 4. Argo CD detects the change (auto-sync, self-heal enabled) and runs `helm upgrade`.
 5. The migration Job (`job-migrate.yaml`) runs as a Helm pre-upgrade hook before the Deployment rolls.
 
@@ -476,10 +486,13 @@ curl https://huckleberry-dev.domotech.io/health
 
 ## Jenkins CD pipeline
 
-The Jenkinsfile in `huckleberry-server` should:
+The Jenkinsfile in `huckleberry-server` currently:
 
-1. Build the Docker image, tag it `$(date +%Y-%m-%d)-b${BUILD_NUMBER}`.
-2. Push to `972900829293.dkr.ecr.us-east-1.amazonaws.com/huckleberry/huckleberry-bff:<tag>`.
+1. Builds the Docker image, tags it `$(date +%Y-%m-%d)-b${BUILD_NUMBER}`.
+2. Pushes to `972900829293.dkr.ecr.us-east-1.amazonaws.com/huckleberry/huckleberry-bff:<tag>`.
+
+**Not yet automated** (done manually today):
+
 3. Clone `huckleberry-gitops`, update `image.tag` in the target environment's `values.yaml`, commit and push.
 4. Argo CD picks up the commit automatically (auto-sync, self-heal).
 5. Surface the Argo CD sync status back to Jenkins (via Argo CD API or wait step) and fail the build if the sync fails.
