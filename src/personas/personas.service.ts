@@ -1,4 +1,10 @@
-import { Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Inject,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { RoleLevel, type Persona } from '../common/types/persona.types.js';
 import type { CreatePersonaDto } from './dto/create-persona.dto.js';
@@ -19,8 +25,7 @@ export class PersonasService {
 
   private tenant(): { customerId: string; userId: string } {
     const ctx = domoRequestContext.getStore();
-    if (!ctx)
-      throw new Error('No request context — is DomoContextInterceptor active?');
+    if (!ctx) throw new ForbiddenException('no_active_domo_link');
     return { customerId: ctx.customerId, userId: ctx.userId };
   }
 
@@ -55,12 +60,22 @@ export class PersonasService {
     const first = existing[0];
     const now = new Date().toISOString();
 
+    // Strip server-managed fields — clients must not overwrite these via the compat route.
+    const {
+      id: _id,
+      name: _name,
+      isDefault: _isDefault,
+      createdAt: _createdAt,
+      updatedAt: _updatedAt,
+      ...safe
+    } = data;
+
     if (first) {
       const updated = await this.repo.update(
         customerId,
         userId,
         first.id,
-        data,
+        safe,
       );
       if (!updated)
         throw new NotFoundException(`Persona ${first.id} not found`);
@@ -73,22 +88,22 @@ export class PersonasService {
       isDefault: false,
       createdAt: now,
       updatedAt: now,
-      role: data.role ?? '',
-      level: data.level ?? RoleLevel.NONE,
-      department: data.department ?? '',
-      team: data.team,
-      focusAreas: data.focusAreas ?? [],
-      strengths: data.strengths ?? [],
-      weaknesses: data.weaknesses ?? [],
-      goals: data.goals ?? '',
-      skills: data.skills ?? [],
-      tools: data.tools ?? [],
-      relationships: data.relationships ?? [],
-      communicationStyle: data.communicationStyle ?? null,
-      domainKnowledge: data.domainKnowledge ?? [],
-      usePersona: data.usePersona ?? true,
-      useActivity: data.useActivity ?? true,
-      useData: data.useData ?? true,
+      role: safe.role ?? '',
+      level: safe.level ?? RoleLevel.NONE,
+      department: safe.department ?? '',
+      team: safe.team,
+      focusAreas: safe.focusAreas ?? [],
+      strengths: safe.strengths ?? [],
+      weaknesses: safe.weaknesses ?? [],
+      goals: safe.goals ?? '',
+      skills: safe.skills ?? [],
+      tools: safe.tools ?? [],
+      relationships: safe.relationships ?? [],
+      communicationStyle: safe.communicationStyle ?? null,
+      domainKnowledge: safe.domainKnowledge ?? [],
+      usePersona: safe.usePersona ?? true,
+      useActivity: safe.useActivity ?? true,
+      useData: safe.useData ?? true,
     };
     await this.repo.create(customerId, userId, persona);
     this.logger.log(`Created persona ${persona.id} for user ${userId}`);

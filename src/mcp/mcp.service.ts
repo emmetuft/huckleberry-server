@@ -1,4 +1,10 @@
-import { Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Inject,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import type {
   McpServerConfig,
@@ -19,8 +25,7 @@ export class McpService {
 
   private tenant(): { customerId: string; userId: string } {
     const ctx = domoRequestContext.getStore();
-    if (!ctx)
-      throw new Error('No request context — is DomoContextInterceptor active?');
+    if (!ctx) throw new ForbiddenException('no_active_domo_link');
     return { customerId: ctx.customerId, userId: ctx.userId };
   }
 

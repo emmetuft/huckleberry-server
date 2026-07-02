@@ -60,7 +60,7 @@ export class DomoContextInterceptor implements NestInterceptor {
             targetHost,
             customer,
             customerId: customer,
-            userId: 'dev-token-user',
+            userId: '00000000-0000-0000-0000-000000000001',
           },
           () => {
             next.handle().subscribe({
