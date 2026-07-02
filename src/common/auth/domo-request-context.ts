@@ -19,6 +19,10 @@ export interface DomoRequestContext {
   targetHost: string;
   /** If set, use X-DOMO-Authentication scheme instead of Authorization: Bearer. */
   customer?: string;
+  /** Domo customer ID from the linked instance (tenant discriminator). */
+  customerId: string;
+  /** Huckleberry user ID (row-level ownership). */
+  userId: string;
 }
 
 export const domoRequestContext = new AsyncLocalStorage<DomoRequestContext>();

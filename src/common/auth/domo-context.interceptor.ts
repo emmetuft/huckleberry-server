@@ -55,7 +55,13 @@ export class DomoContextInterceptor implements NestInterceptor {
       );
       return new Observable((subscriber) => {
         domoRequestContext.run(
-          { bearer: domoToken, targetHost, customer },
+          {
+            bearer: domoToken,
+            targetHost,
+            customer,
+            customerId: customer,
+            userId: 'dev-token-user',
+          },
           () => {
             next.handle().subscribe({
               next: (v) => subscriber.next(v),
@@ -88,14 +94,22 @@ export class DomoContextInterceptor implements NestInterceptor {
     );
   }
 
-  private async resolve(
-    principal: HuckleberryPrincipal,
-  ): Promise<{ bearer: string; targetHost: string } | null> {
+  private async resolve(principal: HuckleberryPrincipal): Promise<{
+    bearer: string;
+    targetHost: string;
+    customerId: string;
+    userId: string;
+  } | null> {
     const link = await this.links.activeLinkFor(principal.userId);
     if (!link) return null;
     try {
       const bearer = await this.broker.tokenFor(link.id);
-      return { bearer, targetHost: link.issuerUrl };
+      return {
+        bearer,
+        targetHost: link.issuerUrl,
+        customerId: link.customerId,
+        userId: principal.userId,
+      };
     } catch (err) {
       this.logger.warn(
         `Failed to mint Domo bearer for user ${principal.userId}: ${String(err)}`,
