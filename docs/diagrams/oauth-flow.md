@@ -3,7 +3,9 @@
 Two distinct flows in one diagram set. They serve different purposes and must not be conflated:
 
 - **Layer A — Huckleberry identity.** Sign-up, sign-in, session. We own this end-to-end. No Domo involvement.
-- **Layer B — Domo OAuth linkage.** Standard OAuth 2.1 authorization-code + PKCE flow against each customer's Gatekeeper instance. **The BFF is a public PKCE client** (`token_endpoint_auth_method=none`) — no `client_secret` to store. The only Domo material persisted per user is the refresh token (encrypted-at-rest in Aurora, rotated on every use per OAuth 2.1).
+- **Layer B — Domo OAuth linkage.** Standard OAuth 2.1 authorization-code + PKCE flow against each customer's Gatekeeper instance. **The BFF is a public PKCE client** (`token_endpoint_auth_method=none`) — no `client_secret` to store. The only Domo material persisted per user is the refresh token (plaintext in the current deployment; KMS envelope encryption planned before external launch), rotated on every use per OAuth 2.1.
+
+> **Implementation status note:** The sequence diagrams below show the **target-state** design including KMS `GenerateDataKey` and AES-GCM encrypt/decrypt steps. The current implementation stores refresh tokens as plaintext — KMS envelope encryption will be wired before external launch. Diagrams are kept at target-state to document the intended architecture.
 
 See `../authentication.md` for the design rationale, table schemas, and module surface.
 

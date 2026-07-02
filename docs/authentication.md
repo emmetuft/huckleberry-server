@@ -115,62 +115,22 @@ Aurora row-level customer scoping for **huckleberry's own data** (personas, mcp_
 
 For defense in depth (per direction): primary keys on Category B tables are `(customer_id, huckleberry_user_id, id)`. Cross-tenant scope violations require failure of multiple checks simultaneously.
 
-## Aurora schema (current)
+## Aurora schema
 
-Reflects `src/common/db/schema.ts` plus applied migrations. KMS column-level encryption for `refresh_token` is planned but not yet wired — the column holds plaintext in the current deployment.
+The canonical schema definition is `src/common/db/schema.ts` (Drizzle ORM). Applied migrations live in `drizzle/*.sql`. Refer to those files for column types, indexes, and constraints.
 
-```sql
-users
-  id                BINARY(16) PK                       -- huckleberry user id
-  email             VARCHAR(255) NOT NULL UNIQUE
-  email_verified    TINYINT(1) NOT NULL DEFAULT 0
-  display_name      VARCHAR(255)
-  status            ENUM('pending_provision','pending_link','active','suspended') NOT NULL
-  created_at, updated_at, last_login_at
-  UNIQUE INDEX (email)
+**Tables by layer:**
 
-magic_links
-  token_hash        VARCHAR(64) PK                      -- SHA-256 of the random token (token itself never stored)
-  user_id           BINARY(16) NOT NULL FK -> users(id)
-  expires_at        DATETIME NOT NULL                   -- 15 minutes from issuance
-  consumed_at       DATETIME NULL                       -- atomically set with session issuance
-  ip_issued_from    VARCHAR(45)
-  INDEX (user_id), INDEX (expires_at)
+- **Layer A (identity):** `users`, `magic_links`, `sessions`
+- **Layer B (Domo linkage):** `linked_domo_instances`, `domo_oauth_tokens`, `domo_oauth_clients`
+- **Category B (app data):** `personas`, `mcp_servers`, `mcp_oauth_tokens` — designed but not yet in schema
 
-sessions
-  sid               VARCHAR(64) PK                      -- random base64url, not a JWT
-  user_id           BINARY(16) NOT NULL FK -> users(id)
-  expires_at        DATETIME NOT NULL
-  csrf_token        VARCHAR(64) NOT NULL                 -- double-submit CSRF value
-  created_at, last_seen_at
-  INDEX (user_id), INDEX (expires_at)
+**Key design choices:**
 
-linked_domo_instances
-  id                BINARY(16) PK
-  user_id           BINARY(16) NOT NULL FK -> users(id)
-  issuer_url        VARCHAR(255) NOT NULL                -- byte-matches iss claim
-  customer_id       VARCHAR(64) NOT NULL                 -- Gatekeeper cid claim
-  domo_sub          VARCHAR(64) NULL                     -- Gatekeeper sub; null until PKCE flow completes
-  scope             VARCHAR(1000) NOT NULL
-  linked_at, last_used_at
-  INDEX (user_id), INDEX (customer_id)
-
-domo_oauth_tokens
-  link_id           BINARY(16) PK FK -> linked_domo_instances(id)
-  refresh_token     VARCHAR(2000) NOT NULL               -- plaintext; KMS envelope encryption planned
-  scope             VARCHAR(1000) NOT NULL
-  updated_at
-
-domo_oauth_clients                                       -- per-instance DCR registrations (migration 0002)
-  issuer_url        VARCHAR(255) PK
-  client_id         VARCHAR(200) NOT NULL
-  registration_access_token VARCHAR(2000)               -- may be null; used for RFC 7592 self-management
-  redirect_uri      VARCHAR(500) NOT NULL
-  scope             VARCHAR(1000) NOT NULL
-  registered_at, last_used_at
-```
-
-Category B tables (`personas`, `mcp_servers`, `mcp_oauth_tokens`) are designed but not yet in the schema — they land when TenantBoundConnection is wired up.
+- UUIDs stored as `BINARY(16)` for index compactness (conversion at repository edge via `src/common/db/uuid.ts`)
+- All datetimes use `DATETIME(3)` (millisecond precision)
+- `magic_links.token_hash` is SHA-256 hex — the raw token never touches the database
+- `domo_oauth_tokens.refresh_token` is **plaintext** in the current deployment; KMS envelope encryption is planned before external launch
 
 ## Module shape (BFF code)
 
@@ -277,6 +237,26 @@ Compromise impact:
 - **#3 leaked** → attacker is _one_ huckleberry user. Per-user revocation via session-id lookup; no Domo authority.
 
 The BFF never holds Domo admin authority at runtime. The provisioning credential is the only "powerful" thing it has, and it's used only at sign-up time, not on every request.
+
+### Credential security & key rotation
+
+| Secret | Algorithm | How to rotate | Blast radius |
+| --- | --- | --- | --- |
+| **Magic-link tokens** | SHA-256 (unkeyed one-way hash) | Nothing to rotate — security comes from 256-bit randomness + single-use + 15m TTL. Old consumed hashes are dead rows. | N/A |
+| **`SESSION_SIGNING_KEY`** | HS256 (HMAC-SHA256) | Deploy a new hex value (`openssl rand -hex 32`). | **All outstanding sessions invalidate instantly.** Every user must re-authenticate via magic link. There is no graceful dual-key window — the code verifies against a single key. |
+| **`ADMIN_API_KEY`** | Constant-time string comparison | Deploy a new hex value; update any operator scripts or CI that call `POST /api/admin/users`. | Admin endpoint rejects the old key immediately. No user-facing impact. |
+| **Refresh tokens (`domo_oauth_tokens`)** | Plaintext today; KMS envelope encryption (per-row DEK, AES-256-GCM) planned before external launch | Self-rotating: Gatekeeper issues a new refresh token on every use (OAuth 2.1 rotation). No manual rotation needed. | A leaked token is cascade-revoked the next time the legitimate BFF refreshes (Gatekeeper detects reuse). |
+| **Provisioner credential** | Env-based shared secret | Rotate in Secrets Manager (or env); audit the new-instance log for fraud. | New sign-ups fail until the new credential is deployed. Existing sessions/links unaffected. |
+
+**Future improvement — graceful SESSION_SIGNING_KEY rotation:** To avoid a hard logoff for all users, the `SessionService` would need to verify against an ordered list of keys (new key first, old key as fallback) during a rollover window, then drop the old key after the session TTL expires. This is not yet implemented.
+
+### Dev-token bypass (development only)
+
+When `NODE_ENV !== 'production'` and `DEV_TOKEN` is set in the environment, `HuckleberryAuthGuard` accepts requests carrying `X-DOMO-Developer-Token: <DEV_TOKEN>` without validating a session cookie. The request is attributed to a synthetic `dev-token-user` principal with `status: 'active'`.
+
+This is a convenience for API testing (curl, Postman, automated scripts) without running the full magic-link flow. **Disabled unconditionally in production** — the `NODE_ENV` check is hardcoded in the guard (`src/common/auth/huckleberry-auth.guard.ts`).
+
+The `DomoContextInterceptor` separately uses `DOMO_DEVELOPER_TOKEN` (falling back to `DEV_TOKEN`) as the Domo bearer for dev-token requests, allowing proxied calls to reach Domo without a linked refresh token.
 
 ### Per-user identity
 

@@ -91,56 +91,11 @@ graph LR
 
 Three layers of tables: identity, Domo linkage, app data. All carry `customer_id` where multi-tenancy applies; user-level tables carry the huckleberry `user_id`.
 
-```sql
--- Layer A — Huckleberry identity (magic-link only)
-users
-  id                BINARY(16) PK
-  email             VARCHAR(255) NOT NULL UNIQUE
-  email_verified    TINYINT(1) NOT NULL DEFAULT 0
-  display_name      VARCHAR(255)
-  status            ENUM('pending_provision','pending_link','active','suspended') NOT NULL
-  created_at, updated_at, last_login_at
+The canonical schema is defined in `src/common/db/schema.ts` (Drizzle ORM) with migrations in `drizzle/*.sql`. See those files for column types, indexes, and constraints.
 
-magic_links
-  token_hash        VARCHAR(64) PK            -- SHA-256 of single-use token
-  user_id           BINARY(16) NOT NULL FK -> users(id)
-  expires_at        DATETIME NOT NULL         -- 15 min TTL
-  consumed_at       DATETIME NULL
-  ip_issued_from    VARCHAR(45)
-
-sessions
-  sid               VARCHAR(64) PK            -- random base64url, not a JWT
-  user_id           BINARY(16) NOT NULL FK -> users(id)
-  expires_at        DATETIME NOT NULL
-  csrf_token        VARCHAR(64) NOT NULL
-  created_at, last_seen_at
-
--- Layer B — Domo linkage
-linked_domo_instances
-  id                BINARY(16) PK
-  user_id           BINARY(16) NOT NULL FK -> users(id)
-  issuer_url        VARCHAR(255) NOT NULL          -- byte-matches iss claim
-  customer_id       VARCHAR(64) NOT NULL           -- Gatekeeper cid
-  domo_sub          VARCHAR(64) NULL               -- Gatekeeper sub; null until PKCE completes
-  scope             VARCHAR(1000) NOT NULL
-  linked_at, last_used_at
-
-domo_oauth_tokens
-  link_id           BINARY(16) PK FK -> linked_domo_instances(id)
-  refresh_token     VARCHAR(2000) NOT NULL         -- plaintext; KMS encryption planned
-  scope             VARCHAR(1000) NOT NULL
-  updated_at
-
-domo_oauth_clients                                 -- per-instance DCR registrations (migration 0002)
-  issuer_url        VARCHAR(255) PK
-  client_id         VARCHAR(200) NOT NULL
-  registration_access_token VARCHAR(2000)
-  redirect_uri      VARCHAR(500) NOT NULL
-  scope             VARCHAR(1000) NOT NULL
-  registered_at, last_used_at
-```
-
-Category B tables (`personas`, `mcp_servers`, `mcp_oauth_tokens`) are designed but not yet in the schema.
+- **Layer A (identity):** `users`, `magic_links`, `sessions`
+- **Layer B (Domo linkage):** `linked_domo_instances`, `domo_oauth_tokens`, `domo_oauth_clients` (DCR registrations, migration 0002)
+- **Category B (app data):** `personas`, `mcp_servers`, `mcp_oauth_tokens` — designed, not yet in schema
 
 ## Service ↔ Table matrix
 
