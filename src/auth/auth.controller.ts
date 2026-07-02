@@ -21,7 +21,7 @@ import { SessionService } from './session.service.js';
 import { SignupService } from './signup.service.js';
 import { USER_REPOSITORY, type UserRepository } from './user.repository.js';
 import type { HuckleberryPrincipal } from './types.js';
-import { HuckleberryAuthGuard } from '../common/auth/huckleberry-auth.guard.js';
+import { SessionAuthGuard } from '../common/auth/session-auth.guard.js';
 import { Public } from '../common/auth/decorators/public.decorator.js';
 import { DomoLinkService } from '../common/auth/domo-link/domo-link.service.js';
 
@@ -30,7 +30,7 @@ const CSRF_COOKIE = 'csrf_token';
 
 @ApiTags('Auth')
 @Controller('auth')
-@UseGuards(HuckleberryAuthGuard)
+@UseGuards(SessionAuthGuard)
 export class AuthController {
   constructor(
     private readonly auth: AuthService,

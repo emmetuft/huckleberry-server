@@ -13,11 +13,11 @@ import { GraphService } from './graph.service.js';
 import { FetchNodesDto } from './dto/fetch-nodes.dto.js';
 import { CypherSearchDto } from './dto/cypher-search.dto.js';
 import { ShortestPathDto } from './dto/shortest-path.dto.js';
-import { DomoAuthGuard } from '../common/guards/domo-auth.guard.js';
+import { SessionAuthGuard } from '../common/auth/session-auth.guard.js';
 
 @ApiTags('Graph')
 @Controller('graph')
-@UseGuards(DomoAuthGuard)
+@UseGuards(SessionAuthGuard)
 export class GraphController {
   constructor(private readonly graphService: GraphService) {}
 

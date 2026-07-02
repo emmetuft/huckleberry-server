@@ -3,13 +3,13 @@ import type { Request } from 'express';
 import { ApiTags } from '@nestjs/swagger';
 import { IdentityService } from './identity.service.js';
 import { DomoProxyService } from '../domo-proxy/domo-proxy.service.js';
-import { DomoAuthGuard } from '../common/guards/domo-auth.guard.js';
+import { SessionAuthGuard } from '../common/auth/session-auth.guard.js';
 import type { HuckleberryPrincipal } from '../auth/types.js';
 import type { DomoUser } from '../common/types/people.types.js';
 
 @ApiTags('Identity')
 @Controller('identity')
-@UseGuards(DomoAuthGuard)
+@UseGuards(SessionAuthGuard)
 export class IdentityController {
   constructor(
     private readonly identityService: IdentityService,

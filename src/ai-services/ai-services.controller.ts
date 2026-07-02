@@ -13,11 +13,11 @@ import { TextGenerationDto } from './dto/text-generation.dto.js';
 import { TextSummarizationDto } from './dto/text-summarization.dto.js';
 import { TextToSqlDto } from './dto/text-to-sql.dto.js';
 import { ImageToTextDto } from './dto/image-to-text.dto.js';
-import { DomoAuthGuard } from '../common/guards/domo-auth.guard.js';
+import { SessionAuthGuard } from '../common/auth/session-auth.guard.js';
 
 @ApiTags('AI Services')
 @Controller('ai')
-@UseGuards(DomoAuthGuard)
+@UseGuards(SessionAuthGuard)
 export class AiServicesController {
   constructor(private readonly aiServices: AiServicesService) {}
 

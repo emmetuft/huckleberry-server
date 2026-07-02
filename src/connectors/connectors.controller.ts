@@ -11,13 +11,13 @@ import { ApiTags } from '@nestjs/swagger';
 import type { Response as ExpressResponse } from 'express';
 import { Readable } from 'node:stream';
 import { ConnectorsService } from './connectors.service.js';
-import { DomoAuthGuard } from '../common/guards/domo-auth.guard.js';
+import { SessionAuthGuard } from '../common/auth/session-auth.guard.js';
 import { SearchDto } from '../common/dto/search.dto.js';
 import { DomoApiError } from '../common/filters/domo-exception.filter.js';
 
 @ApiTags('Connectors')
 @Controller('connectors')
-@UseGuards(DomoAuthGuard)
+@UseGuards(SessionAuthGuard)
 export class ConnectorsController {
   constructor(private readonly connectorsService: ConnectorsService) {}
 

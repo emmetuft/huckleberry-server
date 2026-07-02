@@ -20,7 +20,7 @@ import {
   SesEmailService,
   SmtpEmailService,
 } from './email.service.js';
-import { HuckleberryAuthGuard } from '../common/auth/huckleberry-auth.guard.js';
+import { SessionAuthGuard } from '../common/auth/session-auth.guard.js';
 import { DbModule, DRIZZLE, type Db } from '../common/db/db.module.js';
 import { MysqlUserRepository } from '../common/db/repositories/mysql-user.repository.js';
 import { MysqlMagicLinkRepository } from '../common/db/repositories/mysql-magic-link.repository.js';
@@ -42,7 +42,7 @@ import type { AppConfig } from '../common/config/configuration.js';
     AuthService,
     SessionService,
     SignupService,
-    HuckleberryAuthGuard,
+    SessionAuthGuard,
     {
       provide: USER_REPOSITORY,
       inject: [ConfigService, DRIZZLE],
@@ -81,7 +81,7 @@ import type { AppConfig } from '../common/config/configuration.js';
     AuthService,
     SessionService,
     SignupService,
-    HuckleberryAuthGuard,
+    SessionAuthGuard,
     USER_REPOSITORY,
     MAGIC_LINK_REPOSITORY,
     SESSION_REPOSITORY,

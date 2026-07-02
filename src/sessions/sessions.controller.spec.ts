@@ -2,7 +2,7 @@ import { jest } from '@jest/globals';
 import { Test, TestingModule } from '@nestjs/testing';
 import { SessionsController } from './sessions.controller';
 import { SessionsService } from './sessions.service';
-import { DomoAuthGuard } from '../common/guards/domo-auth.guard';
+import { SessionAuthGuard } from '../common/auth/session-auth.guard';
 import type { SearchSessionsDto } from './dto/search-sessions.dto';
 
 describe('SessionsController', () => {
@@ -27,7 +27,7 @@ describe('SessionsController', () => {
       controllers: [SessionsController],
       providers: [{ provide: SessionsService, useValue: service }],
     })
-      .overrideGuard(DomoAuthGuard)
+      .overrideGuard(SessionAuthGuard)
       .useValue({ canActivate: () => true })
       .compile();
 

@@ -5,7 +5,7 @@ import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
 import { DomoProxyService } from './../src/domo-proxy/domo-proxy.service';
 import { DomoExceptionFilter } from './../src/common/filters/domo-exception.filter';
-import { DomoAuthGuard } from './../src/common/guards/domo-auth.guard';
+import { SessionAuthGuard } from './../src/common/auth/session-auth.guard';
 
 describe('Agents (e2e)', () => {
   let app: INestApplication<App>;
@@ -38,7 +38,7 @@ describe('Agents (e2e)', () => {
     })
       .overrideProvider(DomoProxyService)
       .useValue(mockDomo)
-      .overrideGuard(DomoAuthGuard)
+      .overrideGuard(SessionAuthGuard)
       .useValue({ canActivate: () => true })
       .compile();
 

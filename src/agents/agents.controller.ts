@@ -21,12 +21,12 @@ import { SearchAgentsDto } from './dto/search-agents.dto.js';
 import { AgentContextUpdateDto } from './dto/agent-context-update.dto.js';
 import { ExecuteAgentDto } from './dto/execute-agent.dto.js';
 import { ResumeAgentDto } from './dto/resume-agent.dto.js';
-import { DomoAuthGuard } from '../common/guards/domo-auth.guard.js';
+import { SessionAuthGuard } from '../common/auth/session-auth.guard.js';
 import { AgentInclude } from '../common/types/domo-common.types.js';
 
 @ApiTags('Agents')
 @Controller('agents')
-@UseGuards(DomoAuthGuard)
+@UseGuards(SessionAuthGuard)
 export class AgentsController {
   constructor(private readonly agentsService: AgentsService) {}
 

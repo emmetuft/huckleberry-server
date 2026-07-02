@@ -12,12 +12,12 @@ import {
 } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { SessionsService } from './sessions.service.js';
-import { DomoAuthGuard } from '../common/guards/domo-auth.guard.js';
+import { SessionAuthGuard } from '../common/auth/session-auth.guard.js';
 import { SearchSessionsDto } from './dto/search-sessions.dto.js';
 
 @ApiTags('Sessions')
 @Controller('sessions')
-@UseGuards(DomoAuthGuard)
+@UseGuards(SessionAuthGuard)
 export class SessionsController {
   constructor(private readonly sessionsService: SessionsService) {}
 

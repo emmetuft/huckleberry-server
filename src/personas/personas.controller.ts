@@ -15,11 +15,11 @@ import { ApiTags } from '@nestjs/swagger';
 import { PersonasService } from './personas.service.js';
 import { CreatePersonaDto } from './dto/create-persona.dto.js';
 import { UpdatePersonaDto } from './dto/update-persona.dto.js';
-import { DomoAuthGuard } from '../common/guards/domo-auth.guard.js';
+import { SessionAuthGuard } from '../common/auth/session-auth.guard.js';
 
 @ApiTags('Personas')
 @Controller('personas')
-@UseGuards(DomoAuthGuard)
+@UseGuards(SessionAuthGuard)
 export class PersonasController {
   constructor(private readonly personasService: PersonasService) {}
 

@@ -54,7 +54,7 @@ export interface Session {
 }
 
 /**
- * The principal attached to `request.user` by `HuckleberryAuthGuard`.
+ * The principal attached to `request.user` by `SessionAuthGuard`.
  * Distinct from the Domo-side principal (which lives on `req.domoPrincipal`
  * when Layer B is involved). Keep these two namespaces explicit.
  */

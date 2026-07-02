@@ -11,7 +11,7 @@ import {
 } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { DataSourcesService } from './datasources.service.js';
-import { DomoAuthGuard } from '../common/guards/domo-auth.guard.js';
+import { SessionAuthGuard } from '../common/auth/session-auth.guard.js';
 
 /**
  * Proxies Domo DataSources API.
@@ -20,7 +20,7 @@ import { DomoAuthGuard } from '../common/guards/domo-auth.guard.js';
  */
 @ApiTags('DataSources')
 @Controller('datasources')
-@UseGuards(DomoAuthGuard)
+@UseGuards(SessionAuthGuard)
 export class DataSourcesController {
   constructor(private readonly dataSourcesService: DataSourcesService) {}
 
