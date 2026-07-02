@@ -10,6 +10,7 @@ Huckleberry currently registers as a Domo OAuth client via DCR (Dynamic Client R
 ## Proposed Solution
 
 Switch to CIMD (Client ID Metadata Document, `draft-ietf-oauth-client-id-metadata-document-00`). With CIMD:
+
 - The `client_id` is an HTTPS URL hosted by huckleberry (e.g., `https://huckleberry-dev.domotech.io/.well-known/oauth-client`)
 - Gatekeeper fetches client metadata from that URL on demand (pull model vs DCR's push model)
 - Config changes (redirect URI, scopes) take effect immediately — just update the hosted document
@@ -31,20 +32,23 @@ Switch to CIMD (Client ID Metadata Document, `draft-ietf-oauth-client-id-metadat
 Serve a static JSON response at `GET /.well-known/oauth-client` from the BFF. This is a public endpoint (no auth required — Gatekeeper fetches it server-to-server).
 
 **Document shape:**
+
 ```json
 {
   "client_id": "https://huckleberry-dev.domotech.io/.well-known/oauth-client",
   "client_name": "huckleberry",
-  "redirect_uris": ["https://huckleberry-dev.domotech.io/api/auth/domo/callback"],
+  "redirect_uris": [
+    "https://huckleberry-dev.domotech.io/api/auth/domo/callback"
+  ],
   "grant_types": ["authorization_code", "refresh_token"],
   "response_types": ["code"],
   "token_endpoint_auth_method": "none",
   "scope": "ai:execute ai:read ai:write content:data:read content:meta:read dataset:data:read dataset:meta:read identity:read identity:write search:read"
 }
-
 ```
 
 Key rules:
+
 - `client_id` field MUST exactly match the URL used to fetch the document
 - `redirect_uris` must include the actual callback URL for this deployment
 - No `client_secret` or symmetric auth methods allowed
@@ -87,6 +91,7 @@ Currently `validateInstance()` probes RFC 8414 discovery. Add a check that the d
 ### 6. Handle the `private_key_jwt` option (optional, post-MVP)
 
 CIMD supports confidential clients via `private_key_jwt`. For MVP, huckleberry remains a public PKCE client (`token_endpoint_auth_method: "none"`). If we ever need confidential client auth:
+
 - Generate an ES256 key pair
 - Add `jwks` (inline) or `jwks_uri` to the metadata document
 - Sign a `client_assertion` JWT on each `/token` request
@@ -104,12 +109,12 @@ Steps 1–2 can ship independently. Step 3 is the behavioral cutover. Step 4 is 
 
 ## Env Var Changes
 
-| Var | Current use | After CIMD |
-|---|---|---|
-| `DOMO_OAUTH_REDIRECT_URI` | Passed to DCR + authorize URL | Still needed — goes into the metadata document and authorize URL |
-| `DOMO_OAUTH_CLIENT_ID` | Fallback for `resolveClientId()` | **Remove** — replaced by the metadata URL |
-| `DOMO_OAUTH_CLIENT_SECRET` | Confidential client fallback | **Remove** — public PKCE, no secret |
-| `MAGIC_LINK_BASE_URL` | Base URL for magic-link emails | Also used to derive the metadata document URL |
+| Var                        | Current use                      | After CIMD                                                       |
+| -------------------------- | -------------------------------- | ---------------------------------------------------------------- |
+| `DOMO_OAUTH_REDIRECT_URI`  | Passed to DCR + authorize URL    | Still needed — goes into the metadata document and authorize URL |
+| `DOMO_OAUTH_CLIENT_ID`     | Fallback for `resolveClientId()` | **Remove** — replaced by the metadata URL                        |
+| `DOMO_OAUTH_CLIENT_SECRET` | Confidential client fallback     | **Remove** — public PKCE, no secret                              |
+| `MAGIC_LINK_BASE_URL`      | Base URL for magic-link emails   | Also used to derive the metadata document URL                    |
 
 ## What This Eliminates
 
@@ -131,15 +136,9 @@ Separate from CIMD but related to auth stability. Currently, session cookie JWTs
 
 ### Approach
 
-<<<<<<< Updated upstream
 1. **Dual-key verification**: Accept signatures from both the current and previous signing key during a configurable grace window. On verify, try current key first, fall back to previous. New sessions always sign with the current key.
 2. **Proactive refresh on the frontend**: When `/auth/me` returns a session nearing expiry (e.g. <1h remaining on the sliding 12h TTL), the frontend should silently re-issue via a refresh endpoint rather than waiting for a hard 401.
 3. **Stable key from Secrets Manager**: The signing key should be a stable secret that only rotates intentionally, not on every deploy. Document the rotation procedure (update secret, deploy with both keys in grace period, remove old key after TTL expires).
-=======
-1. **Stable key from Secrets Manager**: The signing key should be a stable secret that only rotates intentionally, not on every deploy. Rotation is a deliberate operational step, not a side effect of a rollout. Expected cadence: monthly. Users re-auth on rotation.
-2. **Proactive refresh on the frontend**: When `/auth/me` returns a session nearing expiry (e.g. <1h remaining on the sliding 12h TTL), the frontend should silently re-issue via a refresh endpoint rather than waiting for a hard 401.
-3. **Fail-closed on rotation**: When the key does rotate, sessions signed with the old key are invalid. Users re-authenticate. This is acceptable because (a) rotations are rare and intentional, and (b) the sliding TTL means most sessions are short-lived anyway. No dual-key grace period needed.
->>>>>>> Stashed changes
 
 ### Not doing (MVP)
 
