@@ -18,6 +18,7 @@
     "test:debug": "NODE_OPTIONS='--experimental-vm-modules --inspect-brk' jest --runInBand",
     "test:e2e": "NODE_OPTIONS='--experimental-vm-modules' jest --config ./test/jest-e2e.json",
     "test:auth": "NODE_OPTIONS='--experimental-vm-modules' jest --config ./test/jest-e2e.json --testPathPatterns=auth-flow",
+    "test:authz": "NODE_OPTIONS='--experimental-vm-modules' jest --config ./test/jest-e2e.json --testPathPatterns=authz-scoping",
     "demo:auth": "./scripts/demo-auth.sh",
     "infra:up": "podman compose up -d",
     "infra:down": "podman compose down",

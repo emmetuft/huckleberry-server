@@ -5,10 +5,9 @@
   "testEnvironment": "node",
   "testRegex": "\\.e2e-spec\\.ts$",
   "transform": {
-    "^.+\\.ts$": ["ts-jest", { "useESM": true, "tsconfig": { "rootDir": "./src", "module": "ESNext" } }]
+    "^.+\\.ts$": ["ts-jest", { "useESM": true, "tsconfig": { "rootDir": "..", "module": "ESNext", "esModuleInterop": true, "emitDecoratorMetadata": true, "experimentalDecorators": true, "target": "ES2023", "skipLibCheck": true } }]
   },
   "moduleNameMapper": {
     "^(\\.{1,2}/.*)\\.js$": "$1"
-  },
-  "setupFiles": ["<rootDir>/load-env.ts"]
+  }
 }
