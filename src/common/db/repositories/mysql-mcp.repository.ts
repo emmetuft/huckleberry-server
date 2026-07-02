@@ -148,6 +148,8 @@ export class MysqlMcpRepository implements McpRepository {
           eq(mcpServers.userId, uuidToBinary(userId)),
         ),
       );
-    return ((result as unknown as { affectedRows?: number }).affectedRows ?? 0) > 0;
+    return (
+      ((result as unknown as { affectedRows?: number }).affectedRows ?? 0) > 0
+    );
   }
 }

@@ -170,7 +170,9 @@ export class MysqlPersonaRepository implements PersonaRepository {
           eq(personas.userId, uuidToBinary(userId)),
         ),
       );
-    return ((result as unknown as { affectedRows?: number }).affectedRows ?? 0) > 0;
+    return (
+      ((result as unknown as { affectedRows?: number }).affectedRows ?? 0) > 0
+    );
   }
 
   async setDefault(

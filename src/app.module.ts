@@ -8,7 +8,10 @@ import { DomoContextInterceptor } from './common/auth/domo-context.interceptor.j
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore TS1470 — import.meta.url is needed for ESM test mode; CJS branch uses __dirname
-const _dirname = typeof __dirname !== 'undefined' ? __dirname : join(fileURLToPath(import.meta.url), '..');
+const _dirname =
+  typeof __dirname !== 'undefined'
+    ? __dirname
+    : join(fileURLToPath(import.meta.url), '..');
 import configuration from './common/config/configuration.js';
 import { AuthModule } from './common/auth/auth.module.js';
 import { DomoLinkModule } from './common/auth/domo-link/domo-link.module.js';
