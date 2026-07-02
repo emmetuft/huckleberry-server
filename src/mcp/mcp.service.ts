@@ -19,7 +19,8 @@ export class McpService {
 
   private tenant(): { customerId: string; userId: string } {
     const ctx = domoRequestContext.getStore();
-    if (!ctx) throw new Error('No request context — is DomoContextInterceptor active?');
+    if (!ctx)
+      throw new Error('No request context — is DomoContextInterceptor active?');
     return { customerId: ctx.customerId, userId: ctx.userId };
   }
 
@@ -139,7 +140,7 @@ export class McpService {
 
       const updated = await this.repo.update(customerId, userId, id, { tools });
       this.logger.log(`Synced ${tools.length} tools from ${server.name}`);
-      return { server: updated!, toolCount: tools.length };
+      return { server: updated, toolCount: tools.length };
     } catch (error) {
       throw new Error(
         `Sync failed for ${server.name}: ${error instanceof Error ? error.message : String(error)}`,
@@ -206,7 +207,10 @@ export class McpService {
     return { revoked: true };
   }
 
-  getOAuth2Status(_serverId: string): { status: string; authorizedAt?: string } {
+  getOAuth2Status(_serverId: string): {
+    status: string;
+    authorizedAt?: string;
+  } {
     return { status: 'not_authorized' };
   }
 

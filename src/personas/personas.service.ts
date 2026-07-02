@@ -1,6 +1,6 @@
 import { Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
-import type { Persona } from '../common/types/persona.types.js';
+import { RoleLevel, type Persona } from '../common/types/persona.types.js';
 import type { CreatePersonaDto } from './dto/create-persona.dto.js';
 import type { UpdatePersonaDto } from './dto/update-persona.dto.js';
 import {
@@ -49,12 +49,7 @@ export class PersonasService {
     return all[0];
   }
 
-  async saveForUser(
-    data: Omit<
-      Persona,
-      'id' | 'isDefault' | 'createdAt' | 'updatedAt' | 'name'
-    >,
-  ): Promise<Persona> {
+  async saveForUser(data: Partial<Persona>): Promise<Persona> {
     const { customerId, userId } = this.tenant();
     const existing = await this.repo.findAll(customerId, userId);
     const first = existing[0];
@@ -78,7 +73,22 @@ export class PersonasService {
       isDefault: false,
       createdAt: now,
       updatedAt: now,
-      ...data,
+      role: data.role ?? '',
+      level: data.level ?? RoleLevel.NONE,
+      department: data.department ?? '',
+      team: data.team,
+      focusAreas: data.focusAreas ?? [],
+      strengths: data.strengths ?? [],
+      weaknesses: data.weaknesses ?? [],
+      goals: data.goals ?? '',
+      skills: data.skills ?? [],
+      tools: data.tools ?? [],
+      relationships: data.relationships ?? [],
+      communicationStyle: data.communicationStyle ?? null,
+      domainKnowledge: data.domainKnowledge ?? [],
+      usePersona: data.usePersona ?? true,
+      useActivity: data.useActivity ?? true,
+      useData: data.useData ?? true,
     };
     await this.repo.create(customerId, userId, persona);
     this.logger.log(`Created persona ${persona.id} for user ${userId}`);

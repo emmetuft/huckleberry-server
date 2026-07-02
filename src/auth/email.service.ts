@@ -1,9 +1,6 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import {
-  SESv2Client,
-  SendEmailCommand,
-} from '@aws-sdk/client-sesv2';
+import { SESv2Client, SendEmailCommand } from '@aws-sdk/client-sesv2';
 import { createTransport, Transporter } from 'nodemailer';
 import type { AppConfig } from '../common/config/configuration.js';
 

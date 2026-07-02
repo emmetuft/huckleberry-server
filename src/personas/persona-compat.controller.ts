@@ -1,5 +1,6 @@
 import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
+import type { Persona } from '../common/types/persona.types.js';
 import { PersonasService } from './personas.service.js';
 import { DomoAuthGuard } from '../common/guards/domo-auth.guard.js';
 
@@ -22,7 +23,7 @@ export class PersonaCompatController {
   }
 
   @Post()
-  async saveForCurrentUser(@Body() body: Record<string, unknown>) {
-    return this.personasService.saveForUser(body as any);
+  async saveForCurrentUser(@Body() body: Partial<Persona>) {
+    return this.personasService.saveForUser(body);
   }
 }

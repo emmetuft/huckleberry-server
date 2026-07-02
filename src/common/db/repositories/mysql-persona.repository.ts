@@ -1,6 +1,10 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { and, eq } from 'drizzle-orm';
-import type { Persona } from '../../types/persona.types.js';
+import type {
+  Persona,
+  PersonaCommunicationStyle,
+  PersonaSkill,
+} from '../../types/persona.types.js';
 import type { PersonaRepository } from '../../../personas/persona.repository.js';
 import { DRIZZLE, type Db } from '../db.module.js';
 import { personas } from '../schema.js';
@@ -20,13 +24,17 @@ function fromRow(row: PersonaRow): Persona {
     strengths: JSON.parse(row.strengths) as string[],
     weaknesses: JSON.parse(row.weaknesses) as string[],
     goals: row.goals,
-    skills: row.skills ? JSON.parse(row.skills) : [],
-    tools: row.tools ? JSON.parse(row.tools) : [],
-    relationships: row.relationships ? JSON.parse(row.relationships) : [],
+    skills: row.skills ? (JSON.parse(row.skills) as PersonaSkill[]) : [],
+    tools: row.tools ? (JSON.parse(row.tools) as string[]) : [],
+    relationships: row.relationships
+      ? (JSON.parse(row.relationships) as string[])
+      : [],
     communicationStyle: row.communicationStyle
-      ? JSON.parse(row.communicationStyle)
+      ? (JSON.parse(row.communicationStyle) as PersonaCommunicationStyle)
       : null,
-    domainKnowledge: row.domainKnowledge ? JSON.parse(row.domainKnowledge) : [],
+    domainKnowledge: row.domainKnowledge
+      ? (JSON.parse(row.domainKnowledge) as string[])
+      : [],
     isDefault: row.isDefault === 1,
     usePersona: row.usePersona === 1,
     useActivity: row.useActivity === 1,

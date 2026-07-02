@@ -13,7 +13,9 @@ export class PeopleService {
   }
 
   async getUserById(id: string): Promise<DomoUser[]> {
-    return this.domo.get<DomoUser[]>('/api/content/v3/users', { query: { id } });
+    return this.domo.get<DomoUser[]>('/api/content/v3/users', {
+      query: { id },
+    });
   }
 
   async getUsersByIds(ids: string): Promise<DomoUser[]> {

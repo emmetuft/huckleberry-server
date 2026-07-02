@@ -21,7 +21,9 @@ import { ToggleServerDto } from './dto/toggle-server.dto.js';
 import { DomoAuthGuard } from '../common/guards/domo-auth.guard.js';
 import type { McpServerConfig } from '../common/types/mcp.types.js';
 
-function redactCredentials(server: McpServerConfig): Omit<McpServerConfig, 'bearerToken'> & { bearerToken?: undefined } {
+function redactCredentials(
+  server: McpServerConfig,
+): Omit<McpServerConfig, 'bearerToken'> & { bearerToken?: undefined } {
   const { bearerToken: _, oauth2Config, ...rest } = server;
   if (!oauth2Config) return rest;
   const { clientSecret: __, ...safeOauth } = oauth2Config;
@@ -76,7 +78,10 @@ export class McpController {
   @HttpCode(HttpStatus.OK)
   async syncTools(@Param('id') id: string) {
     const result = await this.mcpService.syncTools(id);
-    return { server: redactCredentials(result.server), toolCount: result.toolCount };
+    return {
+      server: redactCredentials(result.server),
+      toolCount: result.toolCount,
+    };
   }
 
   @Patch('servers/:id/toggle')
