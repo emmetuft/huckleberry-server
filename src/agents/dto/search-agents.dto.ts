@@ -35,6 +35,21 @@ export class SearchAgentsDto {
   @IsOptional()
   offset?: number;
 
+  /** Frontend-friendly sort field name — transformed to sortFieldMap before forwarding to Domo. */
+  @IsString()
+  @IsOptional()
+  sort?: string;
+
+  /** Frontend-friendly sort direction — combined with sort into sortFieldMap. */
+  @IsString()
+  @IsOptional()
+  order?: string;
+
+  /** Frontend-friendly search map — forwarded as searchFieldMap to Domo. */
+  @IsObject()
+  @IsOptional()
+  search?: Record<string, string>;
+
   @IsObject()
   @IsOptional()
   sortFieldMap?: Record<string, 'ASC' | 'DESC'>;
