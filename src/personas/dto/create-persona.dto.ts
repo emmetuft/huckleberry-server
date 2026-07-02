@@ -2,10 +2,15 @@ import {
   IsArray,
   IsBoolean,
   IsEnum,
+  IsObject,
   IsOptional,
   IsString,
 } from 'class-validator';
-import { RoleLevel } from '../../common/types/persona.types.js';
+import {
+  RoleLevel,
+  type PersonaSkill,
+  type PersonaCommunicationStyle,
+} from '../../common/types/persona.types.js';
 
 export class CreatePersonaDto {
   @IsString()
@@ -38,6 +43,29 @@ export class CreatePersonaDto {
 
   @IsString()
   goals!: string;
+
+  @IsArray()
+  @IsOptional()
+  skills?: PersonaSkill[];
+
+  @IsArray()
+  @IsString({ each: true })
+  @IsOptional()
+  tools?: string[];
+
+  @IsArray()
+  @IsString({ each: true })
+  @IsOptional()
+  relationships?: string[];
+
+  @IsObject()
+  @IsOptional()
+  communicationStyle?: PersonaCommunicationStyle;
+
+  @IsArray()
+  @IsString({ each: true })
+  @IsOptional()
+  domainKnowledge?: string[];
 
   @IsBoolean()
   @IsOptional()

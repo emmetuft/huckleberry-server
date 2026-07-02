@@ -20,6 +20,13 @@ function fromRow(row: PersonaRow): Persona {
     strengths: JSON.parse(row.strengths) as string[],
     weaknesses: JSON.parse(row.weaknesses) as string[],
     goals: row.goals,
+    skills: row.skills ? JSON.parse(row.skills) : [],
+    tools: row.tools ? JSON.parse(row.tools) : [],
+    relationships: row.relationships ? JSON.parse(row.relationships) : [],
+    communicationStyle: row.communicationStyle
+      ? JSON.parse(row.communicationStyle)
+      : null,
+    domainKnowledge: row.domainKnowledge ? JSON.parse(row.domainKnowledge) : [],
     isDefault: row.isDefault === 1,
     usePersona: row.usePersona === 1,
     useActivity: row.useActivity === 1,
@@ -102,6 +109,13 @@ export class MysqlPersonaRepository implements PersonaRepository {
       strengths: JSON.stringify(persona.strengths),
       weaknesses: JSON.stringify(persona.weaknesses),
       goals: persona.goals,
+      skills: JSON.stringify(persona.skills ?? []),
+      tools: JSON.stringify(persona.tools ?? []),
+      relationships: JSON.stringify(persona.relationships ?? []),
+      communicationStyle: persona.communicationStyle
+        ? JSON.stringify(persona.communicationStyle)
+        : null,
+      domainKnowledge: JSON.stringify(persona.domainKnowledge ?? []),
       isDefault: persona.isDefault ? 1 : 0,
       usePersona: persona.usePersona ? 1 : 0,
       useActivity: persona.useActivity ? 1 : 0,
@@ -134,6 +148,17 @@ export class MysqlPersonaRepository implements PersonaRepository {
     if (partial.weaknesses !== undefined)
       set.weaknesses = JSON.stringify(partial.weaknesses);
     if (partial.goals !== undefined) set.goals = partial.goals;
+    if (partial.skills !== undefined)
+      set.skills = JSON.stringify(partial.skills);
+    if (partial.tools !== undefined) set.tools = JSON.stringify(partial.tools);
+    if (partial.relationships !== undefined)
+      set.relationships = JSON.stringify(partial.relationships);
+    if (partial.communicationStyle !== undefined)
+      set.communicationStyle = partial.communicationStyle
+        ? JSON.stringify(partial.communicationStyle)
+        : null;
+    if (partial.domainKnowledge !== undefined)
+      set.domainKnowledge = JSON.stringify(partial.domainKnowledge);
     if (partial.isDefault !== undefined)
       set.isDefault = partial.isDefault ? 1 : 0;
     if (partial.usePersona !== undefined)
