@@ -109,10 +109,7 @@
         "ts-jest",
         {
           "useESM": true,
-          "tsconfig": {
-            "rootDir": "./src",
-            "module": "ESNext"
-          }
+          "tsconfig": "tsconfig.spec.json"
         }
       ]
     },
