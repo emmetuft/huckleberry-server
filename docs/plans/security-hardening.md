@@ -114,9 +114,11 @@ Most phases are pure code changes. Only Phase 6 has a hard external blocker:
 
 4. **Delete** `src/common/guards/domo-auth.guard.ts` and `src/common/auth/huckleberry-auth.guard.ts`
 
-5. **Update tests** — `domo-auth.guard.spec.ts` → rename/rewrite for `SessionAuthGuard`
+5. **Remove `PersonaCompatController`** (`src/personas/persona-compat.controller.ts`) — the frontend should migrate to the full personas API (`PersonasController`) which derives identity from the session and supports multiple personas. The compat shim was introduced in Phase 1 as a non-breaking bridge; Phase 2's guard unification is the right moment to complete the frontend migration and remove the shim.
 
-6. **E2e tests**:
+6. **Update tests** — `domo-auth.guard.spec.ts` → rename/rewrite for `SessionAuthGuard`
+
+7. **E2e tests**:
    - POST to any Category A endpoint without CSRF → 403
    - GET requests pass without CSRF
    - `@SkipCsrf()` annotated route accepts POST without CSRF
