@@ -131,9 +131,15 @@ Separate from CIMD but related to auth stability. Currently, session cookie JWTs
 
 ### Approach
 
+<<<<<<< Updated upstream
 1. **Dual-key verification**: Accept signatures from both the current and previous signing key during a configurable grace window. On verify, try current key first, fall back to previous. New sessions always sign with the current key.
 2. **Proactive refresh on the frontend**: When `/auth/me` returns a session nearing expiry (e.g. <1h remaining on the sliding 12h TTL), the frontend should silently re-issue via a refresh endpoint rather than waiting for a hard 401.
 3. **Stable key from Secrets Manager**: The signing key should be a stable secret that only rotates intentionally, not on every deploy. Document the rotation procedure (update secret, deploy with both keys in grace period, remove old key after TTL expires).
+=======
+1. **Stable key from Secrets Manager**: The signing key should be a stable secret that only rotates intentionally, not on every deploy. Rotation is a deliberate operational step, not a side effect of a rollout. Expected cadence: monthly. Users re-auth on rotation.
+2. **Proactive refresh on the frontend**: When `/auth/me` returns a session nearing expiry (e.g. <1h remaining on the sliding 12h TTL), the frontend should silently re-issue via a refresh endpoint rather than waiting for a hard 401.
+3. **Fail-closed on rotation**: When the key does rotate, sessions signed with the old key are invalid. Users re-authenticate. This is acceptable because (a) rotations are rare and intentional, and (b) the sliding TTL means most sessions are short-lived anyway. No dual-key grace period needed.
+>>>>>>> Stashed changes
 
 ### Not doing (MVP)
 
