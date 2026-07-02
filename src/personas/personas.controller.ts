@@ -35,7 +35,7 @@ export class PersonasController {
 
   @Get('default')
   findDefault() {
-    return this.personasService.findDefault() ?? null;
+    return this.personasService.findDefault();
   }
 
   @Get(':id')
