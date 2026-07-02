@@ -19,6 +19,14 @@ import { UpdateMcpServerDto } from './dto/update-mcp-server.dto.js';
 import { ExecuteToolDto } from './dto/execute-tool.dto.js';
 import { ToggleServerDto } from './dto/toggle-server.dto.js';
 import { DomoAuthGuard } from '../common/guards/domo-auth.guard.js';
+import type { McpServerConfig } from '../common/types/mcp.types.js';
+
+function redactCredentials(server: McpServerConfig): Omit<McpServerConfig, 'bearerToken'> & { bearerToken?: undefined } {
+  const { bearerToken: _, oauth2Config, ...rest } = server;
+  if (!oauth2Config) return rest;
+  const { clientSecret: __, ...safeOauth } = oauth2Config;
+  return { ...rest, oauth2Config: safeOauth };
+}
 
 @ApiTags('MCP')
 @Controller('mcp')
@@ -29,23 +37,27 @@ export class McpController {
   // --- Server management ---
 
   @Get('servers')
-  findAll(@Query('enabled') enabled?: string) {
-    return this.mcpService.findAll(enabled === 'true');
+  async findAll(@Query('enabled') enabled?: string) {
+    const servers = await this.mcpService.findAll(enabled === 'true');
+    return servers.map(redactCredentials);
   }
 
   @Post('servers')
-  create(@Body() dto: CreateMcpServerDto) {
-    return this.mcpService.create(dto);
+  async create(@Body() dto: CreateMcpServerDto) {
+    const server = await this.mcpService.create(dto);
+    return redactCredentials(server);
   }
 
   @Get('servers/:id')
-  findOne(@Param('id') id: string) {
-    return this.mcpService.findOne(id);
+  async findOne(@Param('id') id: string) {
+    const server = await this.mcpService.findOne(id);
+    return redactCredentials(server);
   }
 
   @Put('servers/:id')
-  update(@Param('id') id: string, @Body() dto: UpdateMcpServerDto) {
-    return this.mcpService.update(id, dto);
+  async update(@Param('id') id: string, @Body() dto: UpdateMcpServerDto) {
+    const server = await this.mcpService.update(id, dto);
+    return redactCredentials(server);
   }
 
   @Delete('servers/:id')
@@ -62,13 +74,15 @@ export class McpController {
 
   @Post('servers/:id/sync')
   @HttpCode(HttpStatus.OK)
-  syncTools(@Param('id') id: string) {
-    return this.mcpService.syncTools(id);
+  async syncTools(@Param('id') id: string) {
+    const result = await this.mcpService.syncTools(id);
+    return { server: redactCredentials(result.server), toolCount: result.toolCount };
   }
 
   @Patch('servers/:id/toggle')
-  toggle(@Param('id') id: string, @Body() dto: ToggleServerDto) {
-    return this.mcpService.toggle(id, dto.enabled);
+  async toggle(@Param('id') id: string, @Body() dto: ToggleServerDto) {
+    const server = await this.mcpService.toggle(id, dto.enabled);
+    return redactCredentials(server);
   }
 
   // --- Tools ---

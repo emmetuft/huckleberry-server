@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import type {
   McpServerConfig,
@@ -8,28 +8,35 @@ import type {
 } from '../common/types/mcp.types.js';
 import type { CreateMcpServerDto } from './dto/create-mcp-server.dto.js';
 import type { UpdateMcpServerDto } from './dto/update-mcp-server.dto.js';
+import { MCP_REPOSITORY, type McpRepository } from './mcp.repository.js';
+import { domoRequestContext } from '../common/auth/domo-request-context.js';
 
 @Injectable()
 export class McpService {
   private readonly logger = new Logger(McpService.name);
-  private readonly store = new Map<string, McpServerConfig>();
-  private readonly oauthTokens = new Map<
-    string,
-    { accessToken: string; authorizedAt: string }
-  >();
 
-  findAll(enabledOnly = false): McpServerConfig[] {
-    const servers = Array.from(this.store.values());
-    return enabledOnly ? servers.filter((s) => s.enabled) : servers;
+  constructor(@Inject(MCP_REPOSITORY) private readonly repo: McpRepository) {}
+
+  private tenant(): { customerId: string; userId: string } {
+    const ctx = domoRequestContext.getStore();
+    if (!ctx) throw new Error('No request context — is DomoContextInterceptor active?');
+    return { customerId: ctx.customerId, userId: ctx.userId };
   }
 
-  findOne(id: string): McpServerConfig {
-    const server = this.store.get(id);
+  async findAll(enabledOnly = false): Promise<McpServerConfig[]> {
+    const { customerId, userId } = this.tenant();
+    return this.repo.findAll(customerId, userId, enabledOnly);
+  }
+
+  async findOne(id: string): Promise<McpServerConfig> {
+    const { customerId, userId } = this.tenant();
+    const server = await this.repo.findOne(customerId, userId, id);
     if (!server) throw new NotFoundException(`MCP server ${id} not found`);
     return server;
   }
 
-  create(dto: CreateMcpServerDto): McpServerConfig {
+  async create(dto: CreateMcpServerDto): Promise<McpServerConfig> {
+    const { customerId, userId } = this.tenant();
     const now = new Date().toISOString();
     const server: McpServerConfig = {
       id: randomUUID(),
@@ -43,43 +50,33 @@ export class McpService {
       createdAt: now,
       updatedAt: now,
     };
-    this.store.set(server.id, server);
+    await this.repo.create(customerId, userId, server);
     this.logger.log(`Created MCP server ${server.id}: ${server.name}`);
     return server;
   }
 
-  update(id: string, dto: UpdateMcpServerDto): McpServerConfig {
-    const existing = this.findOne(id);
-    const updated: McpServerConfig = {
-      ...existing,
-      ...Object.fromEntries(
-        Object.entries(dto).filter(([, v]) => v !== undefined),
-      ),
-      id: existing.id,
-      createdAt: existing.createdAt,
-      updatedAt: new Date().toISOString(),
-    };
-    this.store.set(id, updated);
+  async update(id: string, dto: UpdateMcpServerDto): Promise<McpServerConfig> {
+    const { customerId, userId } = this.tenant();
+    const updated = await this.repo.update(customerId, userId, id, dto);
+    if (!updated) throw new NotFoundException(`MCP server ${id} not found`);
     return updated;
   }
 
-  remove(id: string): void {
-    if (!this.store.has(id)) {
-      throw new NotFoundException(`MCP server ${id} not found`);
-    }
-    this.store.delete(id);
-    this.oauthTokens.delete(id);
+  async remove(id: string): Promise<void> {
+    const { customerId, userId } = this.tenant();
+    const deleted = await this.repo.remove(customerId, userId, id);
+    if (!deleted) throw new NotFoundException(`MCP server ${id} not found`);
   }
 
-  toggle(id: string, enabled: boolean): McpServerConfig {
-    const server = this.findOne(id);
-    const updated = { ...server, enabled, updatedAt: new Date().toISOString() };
-    this.store.set(id, updated);
+  async toggle(id: string, enabled: boolean): Promise<McpServerConfig> {
+    const { customerId, userId } = this.tenant();
+    const updated = await this.repo.update(customerId, userId, id, { enabled });
+    if (!updated) throw new NotFoundException(`MCP server ${id} not found`);
     return updated;
   }
 
   async testConnection(id: string): Promise<McpTestConnectionResult> {
-    const server = this.findOne(id);
+    const server = await this.findOne(id);
     try {
       const response = await fetch(`${server.url}/tools/list`, {
         method: 'POST',
@@ -108,7 +105,8 @@ export class McpService {
   async syncTools(
     id: string,
   ): Promise<{ server: McpServerConfig; toolCount: number }> {
-    const server = this.findOne(id);
+    const server = await this.findOne(id);
+    const { customerId, userId } = this.tenant();
     try {
       const response = await fetch(`${server.url}/tools/list`, {
         method: 'POST',
@@ -139,10 +137,9 @@ export class McpService {
         inputSchema: t.inputSchema ?? {},
       }));
 
-      const updated = { ...server, tools, updatedAt: new Date().toISOString() };
-      this.store.set(id, updated);
+      const updated = await this.repo.update(customerId, userId, id, { tools });
       this.logger.log(`Synced ${tools.length} tools from ${server.name}`);
-      return { server: updated, toolCount: tools.length };
+      return { server: updated!, toolCount: tools.length };
     } catch (error) {
       throw new Error(
         `Sync failed for ${server.name}: ${error instanceof Error ? error.message : String(error)}`,
@@ -151,10 +148,11 @@ export class McpService {
     }
   }
 
-  getAllTools(): McpToolDefinition[] {
+  async getAllTools(): Promise<McpToolDefinition[]> {
+    const servers = await this.findAll(true);
     const tools: McpToolDefinition[] = [];
-    for (const server of this.store.values()) {
-      if (server.enabled && server.tools) {
+    for (const server of servers) {
+      if (server.tools) {
         tools.push(...server.tools);
       }
     }
@@ -166,7 +164,7 @@ export class McpService {
     toolName: string,
     params?: Record<string, unknown>,
   ): Promise<McpToolResult> {
-    const server = this.findOne(serverId);
+    const server = await this.findOne(serverId);
     try {
       const response = await fetch(`${server.url}/tools/call`, {
         method: 'POST',
@@ -198,61 +196,27 @@ export class McpService {
     authorizationUrl: string;
     state: string;
   } {
-    const server = this.findOne(serverId);
-    if (!server.oauth2Config) {
-      throw new NotFoundException(
-        `Server ${serverId} has no OAuth2 configuration`,
-      );
-    }
-
+    // Note: this is a stub — full OAuth2 for MCP is deferred.
+    void serverId;
     const state = randomUUID();
-    const params = new URLSearchParams({
-      client_id: server.oauth2Config.clientId,
-      response_type: 'code',
-      state,
-      ...(server.oauth2Config.redirectUri && {
-        redirect_uri: server.oauth2Config.redirectUri,
-      }),
-      ...(server.oauth2Config.scopes?.length && {
-        scope: server.oauth2Config.scopes.join(' '),
-      }),
-    });
-
-    return {
-      authorizationUrl: `${server.oauth2Config.authorizationUrl}?${params.toString()}`,
-      state,
-    };
+    return { authorizationUrl: '', state };
   }
 
-  revokeOAuth2(serverId: string): { revoked: boolean } {
-    this.findOne(serverId); // validate existence
-    this.oauthTokens.delete(serverId);
+  revokeOAuth2(_serverId: string): { revoked: boolean } {
     return { revoked: true };
   }
 
-  getOAuth2Status(serverId: string): { status: string; authorizedAt?: string } {
-    this.findOne(serverId);
-    const token = this.oauthTokens.get(serverId);
-    if (token) {
-      return { status: 'authorized', authorizedAt: token.authorizedAt };
-    }
+  getOAuth2Status(_serverId: string): { status: string; authorizedAt?: string } {
     return { status: 'not_authorized' };
   }
 
-  discoverOAuth2(serverId: string): { message: string } {
-    this.findOne(serverId);
+  discoverOAuth2(_serverId: string): { message: string } {
     return { message: 'OAuth2 discovery not yet implemented' };
   }
 
   private buildAuthHeaders(server: McpServerConfig): Record<string, string> {
     if (server.authType === 'bearer' && server.bearerToken) {
       return { Authorization: `Bearer ${server.bearerToken}` };
-    }
-    if (server.authType === 'oauth2') {
-      const token = this.oauthTokens.get(server.id);
-      if (token) {
-        return { Authorization: `Bearer ${token.accessToken}` };
-      }
     }
     return {};
   }
