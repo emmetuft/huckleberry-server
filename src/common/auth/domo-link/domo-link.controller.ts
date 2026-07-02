@@ -90,11 +90,8 @@ export class DomoLinkController {
       });
       return res.redirect(this.successRedirect);
     } catch (err) {
-      // Redirect back to the SPA with a flag — the SPA decides UX.
-      // Detailed errors land in BFF logs, not the redirect URL.
-      const reason = err instanceof Error ? err.message : 'unknown';
       const url = new URL(this.failureRedirect);
-      url.searchParams.set('reason', reason);
+      url.searchParams.set('reason', toStableErrorCode(err));
       return res.redirect(url.toString());
     }
   }
@@ -106,4 +103,18 @@ export class DomoLinkController {
     const link = await this.link.activeLinkFor(req.user.userId);
     return { link };
   }
+}
+
+const KNOWN_ERROR_CODES = new Set([
+  'invalid_or_expired_state',
+  'state_user_mismatch',
+  'access_token_unverified',
+  'access_token_malformed',
+  'access_token_missing_cid_or_sub',
+]);
+
+function toStableErrorCode(err: unknown): string {
+  const msg = err instanceof Error ? err.message : '';
+  if (KNOWN_ERROR_CODES.has(msg)) return msg;
+  return 'link_failed';
 }
