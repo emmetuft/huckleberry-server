@@ -14,6 +14,7 @@ import {
   mysqlTable,
   customType,
   varchar,
+  text,
   datetime,
   tinyint,
   mysqlEnum,
@@ -138,3 +139,54 @@ export const domoOauthClients = mysqlTable('domo_oauth_clients', {
   registeredAt: datetime('registered_at', { fsp: 3 }).notNull(),
   lastUsedAt: datetime('last_used_at', { fsp: 3 }),
 });
+
+export const personas = mysqlTable(
+  'personas',
+  {
+    id: binary16('id').primaryKey(),
+    customerId: varchar('customer_id', { length: 64 }).notNull(),
+    userId: binary16('user_id').notNull(),
+    name: varchar('name', { length: 255 }).notNull(),
+    role: varchar('role', { length: 255 }).notNull().default(''),
+    level: varchar('level', { length: 50 }).notNull().default(''),
+    department: varchar('department', { length: 255 }).notNull().default(''),
+    team: varchar('team', { length: 255 }),
+    focusAreas: varchar('focus_areas', { length: 2000 })
+      .notNull()
+      .default('[]'),
+    strengths: varchar('strengths', { length: 2000 }).notNull().default('[]'),
+    weaknesses: varchar('weaknesses', { length: 2000 }).notNull().default('[]'),
+    goals: varchar('goals', { length: 2000 }).notNull().default(''),
+    skills: text('skills'),
+    tools: text('tools'),
+    relationships: text('relationships'),
+    communicationStyle: text('communication_style'),
+    domainKnowledge: text('domain_knowledge'),
+    isDefault: tinyint('is_default').notNull().default(0),
+    usePersona: tinyint('use_persona').notNull().default(1),
+    useActivity: tinyint('use_activity').notNull().default(1),
+    useData: tinyint('use_data').notNull().default(1),
+    createdAt: datetime('created_at', { fsp: 3 }).notNull(),
+    updatedAt: datetime('updated_at', { fsp: 3 }).notNull(),
+  },
+  (t) => [index('personas_tenant_idx').on(t.customerId, t.userId)],
+);
+
+export const mcpServers = mysqlTable(
+  'mcp_servers',
+  {
+    id: binary16('id').primaryKey(),
+    customerId: varchar('customer_id', { length: 64 }).notNull(),
+    userId: binary16('user_id').notNull(),
+    name: varchar('name', { length: 255 }).notNull(),
+    url: varchar('url', { length: 2000 }).notNull(),
+    enabled: tinyint('enabled').notNull().default(1),
+    authType: varchar('auth_type', { length: 20 }).notNull().default('none'),
+    bearerToken: varchar('bearer_token', { length: 2000 }),
+    oauth2Config: text('oauth2_config'),
+    tools: text('tools'),
+    createdAt: datetime('created_at', { fsp: 3 }).notNull(),
+    updatedAt: datetime('updated_at', { fsp: 3 }).notNull(),
+  },
+  (t) => [index('mcp_servers_tenant_idx').on(t.customerId, t.userId)],
+);

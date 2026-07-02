@@ -1,68 +1,84 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Inject,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
-import type { Persona } from '../common/types/persona.types.js';
+import { RoleLevel, type Persona } from '../common/types/persona.types.js';
 import type { CreatePersonaDto } from './dto/create-persona.dto.js';
 import type { UpdatePersonaDto } from './dto/update-persona.dto.js';
+import {
+  PERSONA_REPOSITORY,
+  type PersonaRepository,
+} from './persona.repository.js';
+import { domoRequestContext } from '../common/auth/domo-request-context.js';
 
 @Injectable()
 export class PersonasService {
   private readonly logger = new Logger(PersonasService.name);
-  private readonly store = new Map<string, Persona>();
-  /** Maps userId -> persona ID for the legacy /persona/:userId route */
-  private readonly userPersonaMap = new Map<string, string>();
 
-  findAll(): Persona[] {
-    return Array.from(this.store.values());
+  constructor(
+    @Inject(PERSONA_REPOSITORY) private readonly repo: PersonaRepository,
+  ) {}
+
+  private tenant(): { customerId: string; userId: string } {
+    const ctx = domoRequestContext.getStore();
+    if (!ctx) throw new ForbiddenException('no_active_domo_link');
+    return { customerId: ctx.customerId, userId: ctx.userId };
   }
 
-  findOne(id: string): Persona {
-    const persona = this.store.get(id);
+  async findAll(): Promise<Persona[]> {
+    const { customerId, userId } = this.tenant();
+    return this.repo.findAll(customerId, userId);
+  }
+
+  async findOne(id: string): Promise<Persona> {
+    const { customerId, userId } = this.tenant();
+    const persona = await this.repo.findOne(customerId, userId, id);
     if (!persona) throw new NotFoundException(`Persona ${id} not found`);
     return persona;
   }
 
-  findDefault(): Persona | undefined {
-    return this.findAll().find((p) => p.isDefault);
+  async findDefault(): Promise<Persona | undefined> {
+    const { customerId, userId } = this.tenant();
+    return (await this.repo.findDefault(customerId, userId)) ?? undefined;
   }
 
-  /**
-   * Find the persona associated with a userId.
-   * Falls back to the default persona if no mapping exists.
-   */
-  findByUserId(userId: string): Persona | undefined {
-    const personaId = this.userPersonaMap.get(userId);
-    if (personaId) {
-      return this.store.get(personaId);
-    }
-    return this.findDefault();
+  async findByUserId(): Promise<Persona | undefined> {
+    const { customerId, userId } = this.tenant();
+    const defaultPersona = await this.repo.findDefault(customerId, userId);
+    if (defaultPersona) return defaultPersona;
+    const all = await this.repo.findAll(customerId, userId);
+    return all[0];
   }
 
-  /**
-   * Save/update a persona for a specific user.
-   * If the user already has a persona, update it. Otherwise, create one.
-   */
-  saveForUser(
-    userId: string,
-    data: Omit<
-      Persona,
-      'id' | 'isDefault' | 'createdAt' | 'updatedAt' | 'name'
-    >,
-  ): Persona {
-    const existingId = this.userPersonaMap.get(userId);
+  async saveForUser(data: Partial<Persona>): Promise<Persona> {
+    const { customerId, userId } = this.tenant();
+    const existing = await this.repo.findAll(customerId, userId);
+    const first = existing[0];
     const now = new Date().toISOString();
 
-    if (existingId && this.store.has(existingId)) {
-      const existing = this.store.get(existingId);
-      const updated: Persona = {
-        ...existing,
-        ...data,
-        id: existing.id,
-        name: existing.name,
-        isDefault: existing.isDefault,
-        createdAt: existing.createdAt,
-        updatedAt: now,
-      };
-      this.store.set(existingId, updated);
+    // Strip server-managed fields — clients must not overwrite these via the compat route.
+    const {
+      id: _id,
+      name: _name,
+      isDefault: _isDefault,
+      createdAt: _createdAt,
+      updatedAt: _updatedAt,
+      ...safe
+    } = data;
+
+    if (first) {
+      const updated = await this.repo.update(
+        customerId,
+        userId,
+        first.id,
+        safe,
+      );
+      if (!updated)
+        throw new NotFoundException(`Persona ${first.id} not found`);
       return updated;
     }
 
@@ -72,15 +88,30 @@ export class PersonasService {
       isDefault: false,
       createdAt: now,
       updatedAt: now,
-      ...data,
+      role: safe.role ?? '',
+      level: safe.level ?? RoleLevel.NONE,
+      department: safe.department ?? '',
+      team: safe.team,
+      focusAreas: safe.focusAreas ?? [],
+      strengths: safe.strengths ?? [],
+      weaknesses: safe.weaknesses ?? [],
+      goals: safe.goals ?? '',
+      skills: safe.skills ?? [],
+      tools: safe.tools ?? [],
+      relationships: safe.relationships ?? [],
+      communicationStyle: safe.communicationStyle ?? null,
+      domainKnowledge: safe.domainKnowledge ?? [],
+      usePersona: safe.usePersona ?? true,
+      useActivity: safe.useActivity ?? true,
+      useData: safe.useData ?? true,
     };
-    this.store.set(persona.id, persona);
-    this.userPersonaMap.set(userId, persona.id);
+    await this.repo.create(customerId, userId, persona);
     this.logger.log(`Created persona ${persona.id} for user ${userId}`);
     return persona;
   }
 
-  create(dto: CreatePersonaDto): Persona {
+  async create(dto: CreatePersonaDto): Promise<Persona> {
+    const { customerId, userId } = this.tenant();
     const now = new Date().toISOString();
     const persona: Persona = {
       id: randomUUID(),
@@ -93,6 +124,11 @@ export class PersonasService {
       strengths: dto.strengths,
       weaknesses: dto.weaknesses,
       goals: dto.goals,
+      skills: dto.skills ?? [],
+      tools: dto.tools ?? [],
+      relationships: dto.relationships ?? [],
+      communicationStyle: dto.communicationStyle ?? null,
+      domainKnowledge: dto.domainKnowledge ?? [],
       isDefault: false,
       usePersona: dto.usePersona ?? true,
       useActivity: dto.useActivity ?? true,
@@ -100,54 +136,31 @@ export class PersonasService {
       createdAt: now,
       updatedAt: now,
     };
-    this.store.set(persona.id, persona);
+    await this.repo.create(customerId, userId, persona);
     this.logger.log(`Created persona ${persona.id}: ${persona.name}`);
     return persona;
   }
 
-  update(id: string, dto: UpdatePersonaDto): Persona {
-    const existing = this.findOne(id);
-    const updated: Persona = {
-      ...existing,
-      ...Object.fromEntries(
-        Object.entries(dto).filter(([, v]) => v !== undefined),
-      ),
-      id: existing.id,
-      isDefault: existing.isDefault,
-      createdAt: existing.createdAt,
-      updatedAt: new Date().toISOString(),
-    };
-    this.store.set(id, updated);
+  async update(id: string, dto: UpdatePersonaDto): Promise<Persona> {
+    const { customerId, userId } = this.tenant();
+    const updated = await this.repo.update(customerId, userId, id, dto);
+    if (!updated) throw new NotFoundException(`Persona ${id} not found`);
     return updated;
   }
 
-  remove(id: string): void {
-    if (!this.store.has(id)) {
-      throw new NotFoundException(`Persona ${id} not found`);
-    }
-    this.store.delete(id);
+  async remove(id: string): Promise<void> {
+    const { customerId, userId } = this.tenant();
+    const deleted = await this.repo.remove(customerId, userId, id);
+    if (!deleted) throw new NotFoundException(`Persona ${id} not found`);
   }
 
-  setDefault(id: string): Persona {
-    const persona = this.findOne(id);
-    for (const p of this.store.values()) {
-      if (p.isDefault) {
-        this.store.set(p.id, { ...p, isDefault: false });
-      }
-    }
-    const updated = {
-      ...persona,
-      isDefault: true,
-      updatedAt: new Date().toISOString(),
-    };
-    this.store.set(id, updated);
-    return updated;
+  async setDefault(id: string): Promise<Persona> {
+    const { customerId, userId } = this.tenant();
+    const result = await this.repo.setDefault(customerId, userId, id);
+    if (!result) throw new NotFoundException(`Persona ${id} not found`);
+    return result;
   }
 
-  /**
-   * Serialize a persona into a prompt-friendly string for injection
-   * into the Huckleberry system prompt.
-   */
   toPromptString(persona: Persona): string {
     const lines = [
       `Role: ${persona.role} (${persona.level || 'N/A'})`,

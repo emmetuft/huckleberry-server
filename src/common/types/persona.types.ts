@@ -23,10 +23,26 @@ export interface Persona {
   strengths: string[];
   weaknesses: string[];
   goals: string;
+  skills: PersonaSkill[];
+  tools: string[];
+  relationships: string[];
+  communicationStyle: PersonaCommunicationStyle | null;
+  domainKnowledge: string[];
   isDefault: boolean;
   usePersona: boolean;
   useActivity: boolean;
   useData: boolean;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface PersonaSkill {
+  name: string;
+  type: 'hard' | 'soft';
+}
+
+export interface PersonaCommunicationStyle {
+  preferredFormat: 'brief' | 'balanced' | 'detailed' | 'visual';
+  tone: 'formal' | 'professional' | 'casual' | 'technical';
+  decisionStyle: 'data-driven' | 'intuition' | 'consensus';
 }

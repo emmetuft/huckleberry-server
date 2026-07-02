@@ -6,7 +6,6 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { randomBytes, randomUUID } from 'node:crypto';
-import { decodeJwt } from 'jose';
 import type { AppConfig } from '../../config/configuration.js';
 import { JwksService } from '../jwks.service.js';
 import { KnownTenantsService } from '../known-tenants.service.js';
@@ -168,19 +167,10 @@ export class DomoLinkService {
       cid = typeof payload.cid === 'string' ? payload.cid : undefined;
       sub = payload.sub;
     } catch (err) {
-      // Fall back to an *unverified* decode for the customer/sub fields
-      // only — the token will already have been exchanged so we know it's
-      // freshly minted; the decode is a routing read, not a trust read.
-      this.logger.warn(
-        `Access-token JWKS verify failed (${String(err)}) — proceeding with unverified decode`,
+      this.logger.error(
+        `Access-token JWKS verify failed for user ${opts.sessionUserId}: ${String(err)}`,
       );
-      try {
-        const claims = decodeJwt(tokenResp.accessToken);
-        cid = typeof claims.cid === 'string' ? claims.cid : undefined;
-        sub = claims.sub;
-      } catch {
-        throw new BadRequestException('access_token_malformed');
-      }
+      throw new BadRequestException('access_token_unverified');
     }
     if (!cid || !sub) {
       throw new BadRequestException('access_token_missing_cid_or_sub');

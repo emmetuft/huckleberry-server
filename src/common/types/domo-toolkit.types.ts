@@ -39,4 +39,3 @@ export interface ToolkitSearchPage {
   toolkits: ToolkitSearchResult[];
   pageContext?: Record<string, unknown>;
 }
-

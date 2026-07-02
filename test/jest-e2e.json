@@ -5,10 +5,9 @@
   "testEnvironment": "node",
   "testRegex": "\\.e2e-spec\\.ts$",
   "transform": {
-    "^.+\\.ts$": ["ts-jest", { "useESM": true, "tsconfig": { "rootDir": "./src", "module": "ESNext" } }]
+    "^.+\\.ts$": ["ts-jest", { "useESM": true, "tsconfig": "test/tsconfig.e2e.json" }]
   },
   "moduleNameMapper": {
     "^(\\.{1,2}/.*)\\.js$": "$1"
-  },
-  "setupFiles": ["<rootDir>/load-env.ts"]
+  }
 }

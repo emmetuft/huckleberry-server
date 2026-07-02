@@ -69,4 +69,3 @@ export interface AgentToolsPage {
   tools: ToolDescriptor[];
   pageContext?: PageContext;
 }
-

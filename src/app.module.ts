@@ -32,7 +32,7 @@ import { WorkflowsModule } from './workflows/workflows.module.js';
       envFilePath: [`.env.${process.env.DOMO_TARGET || 'dev'}`, '.env'],
     }),
     ServeStaticModule.forRoot({
-      rootPath: join(__dirname, '..', 'public'),
+      rootPath: join(process.cwd(), 'public'),
       exclude: [
         '/api{/*path}',
         '/domo{/*path}',
