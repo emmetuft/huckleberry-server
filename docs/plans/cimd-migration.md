@@ -119,6 +119,29 @@ Steps 1–2 can ship independently. Step 3 is the behavioral cutover. Step 4 is 
 - The "stale registration" failure mode (redirect URI mismatch after config change)
 - Orphaned client registrations at Gatekeeper
 
+## Session Resilience (parallel improvement)
+
+Separate from CIMD but related to auth stability. Currently, session cookie JWTs are signed with `SESSION_SIGNING_KEY`. If the key rotates on deploy, all active sessions are immediately invalid (hard logoff for every user).
+
+### Goals
+
+- No hard logoff on routine deploys
+- Graceful session expiry with user-visible TTL
+- Key rotation without mass invalidation
+
+### Approach
+
+1. **Dual-key verification**: Accept signatures from both the current and previous signing key during a configurable grace window. On verify, try current key first, fall back to previous. New sessions always sign with the current key.
+2. **Proactive refresh on the frontend**: When `/auth/me` returns a session nearing expiry (e.g. <1h remaining on the sliding 12h TTL), the frontend should silently re-issue via a refresh endpoint rather than waiting for a hard 401.
+3. **Stable key from Secrets Manager**: The signing key should be a stable secret that only rotates intentionally, not on every deploy. Document the rotation procedure (update secret, deploy with both keys in grace period, remove old key after TTL expires).
+
+### Not doing (MVP)
+
+- Redis session store (solves multi-replica, not key rotation)
+- Opaque tokens (removes JWT verification advantage for the guard)
+
+---
+
 ## Risks / Open Questions
 
 1. **Gatekeeper caching:** Metadata documents are cached up to 1 hour. If we deploy a redirect URI change, there's up to a 1h window where Gatekeeper might serve the old metadata from cache. Mitigation: set short `Cache-Control: max-age=300` on the metadata endpoint.
