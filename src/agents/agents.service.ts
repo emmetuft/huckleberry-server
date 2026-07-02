@@ -93,8 +93,14 @@ export class AgentsService {
   async search(dto: SearchAgentsDto): Promise<SearchAgentsResponse> {
     const { sort, order, search, sortFieldMap, searchFieldMap, ...rest } = dto;
     const body: Record<string, unknown> = { ...rest };
-    if (sort && order) body.sortFieldMap = { [sort]: order };
-    else if (sortFieldMap) body.sortFieldMap = sortFieldMap;
+    if (sort && order) {
+      // Object.create(null) has no prototype — safe to use user-supplied sort as key.
+      const map = Object.create(null) as Record<string, string>;
+      map[sort] = order;
+      body.sortFieldMap = map;
+    } else if (sortFieldMap) {
+      body.sortFieldMap = sortFieldMap;
+    }
     if (search) body.searchFieldMap = search;
     else if (searchFieldMap) body.searchFieldMap = searchFieldMap;
     return this.domo.post<SearchAgentsResponse>(`${AGENTS_BASE}/search`, body);

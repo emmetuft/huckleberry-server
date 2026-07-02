@@ -2,10 +2,12 @@ import { Type } from 'class-transformer';
 import {
   IsArray,
   IsBoolean,
+  IsIn,
   IsNumber,
   IsObject,
   IsOptional,
   IsString,
+  Matches,
   ValidateNested,
 } from 'class-validator';
 
@@ -37,13 +39,16 @@ export class SearchAgentsDto {
 
   /** Frontend-friendly sort field name — transformed to sortFieldMap before forwarding to Domo. */
   @IsString()
+  @Matches(/^[A-Z_][A-Z0-9_]*$/i, {
+    message: 'sort must be an identifier (letters, digits, underscores)',
+  })
   @IsOptional()
   sort?: string;
 
   /** Frontend-friendly sort direction — combined with sort into sortFieldMap. */
-  @IsString()
+  @IsIn(['ASC', 'DESC'])
   @IsOptional()
-  order?: string;
+  order?: 'ASC' | 'DESC';
 
   /** Frontend-friendly search map — forwarded as searchFieldMap to Domo. */
   @IsObject()
