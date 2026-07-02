@@ -16,26 +16,26 @@ graph TB
     end
 
     subgraph "src/common/auth — guard side"
-        HG[HuckleberryAuthGuard<br/>verify cookie JWT<br/>check session in Redis<br/>attach HuckleberryPrincipal]
-        SESS[SessionService<br/>issue / revoke<br/>Redis-backed]
+        HG[HuckleberryAuthGuard<br/>verify cookie JWT<br/>check session in MySQL<br/>attach HuckleberryPrincipal]
+        SESS[SessionService<br/>issue / revoke<br/>MySQL-backed]
         CSRF[CsrfGuard<br/>double-submit token<br/>on state-changing routes]
-        PUB[@Public bypass]
-        PRINCIPAL[HuckleberryPrincipal<br/>userId · sessionId · activeLinkId]
+        PUB[Public bypass]
+        PRINCIPAL[HuckleberryPrincipal<br/>userId, sessionId, activeLinkId]
     end
 
-    subgraph "src/auth — identity flows (magic-link)"
-        AC[AuthController<br/>/auth/signin/request<br/>/auth/signin (consume)<br/>/auth/logout · /auth/me]
-        AS[AuthService<br/>issue + consume magic links<br/>rate-limit · audit]
+    subgraph "src/auth — identity flows magic-link"
+        AC[AuthController<br/>/auth/signin/request<br/>/auth/signin consume<br/>/auth/logout, /auth/me]
+        AS[AuthService<br/>issue + consume magic links<br/>rate-limit, audit]
         DLC[DomoLinkController<br/>/auth/domo/link/start<br/>/auth/domo/callback]
         DLS[DomoLinkService<br/>complete the pre-seeded link]
     end
 
     subgraph "src/common/auth/domo-auth-broker — Domo back-channel"
-        DAB[DomoAuthBroker<br/>tokenFor(linkId) → Bearer<br/>refresh on demand]
+        DAB[DomoAuthBroker<br/>tokenFor linkId to Bearer<br/>refresh on demand]
         DTS[DomoTokenStore<br/>Aurora R/W<br/>KMS envelope encryption]
-        DOC[DomoOAuthClient<br/>buildAuthorizeUrl<br/>exchangeCode · refresh · revoke]
+        DOC[DomoOAuthClient<br/>buildAuthorizeUrl<br/>exchangeCode, refresh, revoke]
         JWKS[JwksService<br/>per-issuer JWKS cache]
-        GAG[GatekeeperAuthGuard<br/>(internal use only)<br/>verifies tokens from /oauth2/token responses]
+        GAG[GatekeeperAuthGuard<br/>internal use only<br/>verifies tokens from /oauth2/token responses]
         KT[KnownTenantsService<br/>issuer allowlist /<br/>pattern matcher]
     end
 
