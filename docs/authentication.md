@@ -62,30 +62,37 @@ No passwords are ever stored. No `password_hash` column, no `password_resets` ta
 
 ### Per-request — putting it together
 
-```
-Browser            BFF                              Aurora / Redis            Gatekeeper           Domo API
-   │                │                                       │                       │                  │
-   │── GET /agents─▶│                                       │                       │                  │
-   │   Cookie:      │  HuckleberryAuthGuard:                │                       │                  │
-   │   hb_session   │  - read `sid` from cookie             │                       │                  │
-   │                │  - look up sid in MySQL sessions table─▶                       │                  │
-   │                │  - reject if expired/missing          │                       │                  │
-   │                │  attach { huckleberryUserId, activeLinkId }                   │                  │
-   │                │                                       │                       │                  │
-   │                │  DomoAuthBroker.tokenFor(userId, linkId):                     │                  │
-   │                │  - check in-memory cache for access token                     │                  │
-   │                │  - miss → read refresh token from Aurora ──────────────────────                  │                  │
-   │                │  - decrypt via KMS                                            │                  │
-   │                │  - POST /oauth2/token (refresh_token grant)──────────────────▶│                  │
-   │                │                                       │   new access + new    │                  │
-   │                │                                       │   refresh ◀───────────│                  │
-   │                │  - upsert encrypted refresh in Aurora (rotation)              │                  │
-   │                │  - cache new access in Redis                                  │                  │
-   │                │                                       │                       │                  │
-   │                │  DomoProxyService.get(/api/ai/v1/agents,                      │                  │
-   │                │     targetHost=link.issuer, bearer=access)─────────────────────────────────────▶│
-   │                │                                       │                       │   agents ◀───────│
-   │   200 OK ◀─────│                                       │                       │                  │
+```mermaid
+sequenceDiagram
+    autonumber
+    participant FE as Browser
+    participant BFF as Huckleberry BFF
+    participant DB as Aurora MySQL
+    participant GK as Gatekeeper
+    participant DOMO as Domo API
+
+    FE->>BFF: GET /agents<br/>Cookie: hb_session
+
+    Note over BFF: HuckleberryAuthGuard
+    BFF->>DB: look up sid from cookie in sessions table
+    DB-->>BFF: session row (userId, activeLinkId, expiresAt)
+    BFF->>BFF: attach { huckleberryUserId, activeLinkId }
+
+    Note over BFF: DomoAuthBroker.tokenFor(linkId)
+    alt cache hit
+        BFF->>BFF: return cached access token
+    else cache miss
+        BFF->>DB: read refresh token from domo_oauth_tokens
+        DB-->>BFF: refresh token (plaintext today, KMS-encrypted planned)
+        BFF->>GK: POST /oauth2/token grant_type=refresh_token
+        GK-->>BFF: { access_token, refresh_token (rotated), expires_in }
+        BFF->>DB: upsert new refresh token (atomic rotation)
+        BFF->>BFF: cache access token (TTL = expires_in - 60s)
+    end
+
+    BFF->>DOMO: GET /api/ai/v1/agents<br/>Authorization: Bearer <access_token>
+    DOMO-->>BFF: 200 { agents }
+    BFF-->>FE: 200 { agents }
 ```
 
 ## Scope mapping (unchanged at the catalog level)
