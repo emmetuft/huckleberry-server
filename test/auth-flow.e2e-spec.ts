@@ -173,13 +173,13 @@ describe('Auth flow (e2e)', () => {
       .expect(403);
   });
 
-  it('signin/request auto-provisions a new user (freemium signup)', async () => {
+  it('signup auto-provisions a new user (freemium signup)', async () => {
     const server = app.getHttpServer() as Parameters<typeof request>[0];
     await request(server)
-      .post('/api/auth/signin/request')
-      .send({ email: 'fresh-signup@huckleberry.ai' })
+      .post('/api/auth/signup')
+      .send({ email: 'fresh-signup@huckleberry.ai', path: 'new' })
       .expect(202);
-    // The signin/request endpoint find-or-creates the user and emails a
+    // The signup endpoint find-or-creates the user and emails a
     // magic-link in both branches — freemium-style. The new user now has
     // a linked instance via the stub provisioner.
     expect(emails.lastEmail?.to).toBe('fresh-signup@huckleberry.ai');

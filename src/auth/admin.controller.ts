@@ -99,9 +99,9 @@ export class AdminController {
       message = 'user created and linked to provisioned Domo instance';
     }
 
-    // 3. Bootstrap the pending Domo link (no-op if one already exists for
-    //    the same user — MVP allows one link per user). The user completes
-    //    the PKCE flow on first sign-in.
+    // 3. Bootstrap the pending Domo link and flip the user to active so they
+    //    skip the browser-side PKCE dance on first sign-in (operator-managed
+    //    provisioning = no user consent step needed).
     const existingLink = await this.link.activeLinkFor(user.id);
     if (!existingLink) {
       await this.link.bootstrapLink({
@@ -111,6 +111,7 @@ export class AdminController {
         scope: instance.scope,
       });
     }
+    user = await this.users.updateStatus(user.id, 'active');
 
     // 4. Send magic-link email.
     const url = await this.auth.requestMagicLink(user.email, null);
