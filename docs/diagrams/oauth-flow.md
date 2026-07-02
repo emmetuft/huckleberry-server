@@ -48,9 +48,9 @@ sequenceDiagram
         BFF->>DB: UPDATE magic_links SET consumed_at=NOW() WHERE token_hash AND consumed_at IS NULL
         Note over BFF,DB: Atomic — affected rows = 1 means we won the race
         BFF->>DB: UPDATE users SET email_verified=1, last_login_at=NOW()
-        BFF->>R: SET session:<sid> = { userId, exp } (TTL 12h)
-        BFF-->>FE: Set-Cookie: hb_session=<HS256 JWT { sub, sid, exp }><br/>HttpOnly; Secure; SameSite=Lax
-        BFF-->>FE: Set-Cookie: csrf_token=<random><br/>Secure; SameSite=Lax (NOT HttpOnly)
+        BFF->>R: SET session:sid = userId, exp, TTL 12h
+        BFF-->>FE: Set-Cookie hb_session=HS256 JWT<br/>HttpOnly Secure SameSite=Lax
+        BFF-->>FE: Set-Cookie csrf_token=random<br/>Secure SameSite=Lax, NOT HttpOnly
         alt user.status == 'pending_link'
             BFF-->>FE: 302 → /auth/domo/link/start (forced OAuth handoff)
         else
@@ -75,8 +75,8 @@ sequenceDiagram
     Note over U,R: Sign out
     U->>FE: POST /auth/logout (Cookie + X-CSRF-Token)
     FE->>BFF: POST /auth/logout
-    BFF->>R: DEL session:<sid>
-    BFF-->>FE: Set-Cookie: hb_session=; Max-Age=0<br/>Set-Cookie: csrf_token=; Max-Age=0
+    BFF->>R: DEL session:sid
+    BFF-->>FE: Clear hb_session + csrf_token cookies
 ```
 
 The very first magic-link click does double duty: marks the user `email_verified=1` and issues their first session. No separate "verify email then come back to sign in" round-trip.

@@ -15,13 +15,13 @@ graph LR
     UI[Huckleberry UI<br/>huckleberry.ai]
 
     subgraph "NestJS BFF"
-        HAG[HuckleberryAuthGuard<br/>cookie → principal]
+        HAG[HuckleberryAuthGuard<br/>cookie to principal]
         SESS[SessionService<br/>MySQL sessions table]
-        AUTH[Auth controllers<br/>signup · signin/request<br/>signin (consume) · logout · me]
-        LINK[DomoLink service<br/>start · completeLink · unlink]
+        AUTH[Auth controllers<br/>signup, signin/request<br/>signin consume, logout, me]
+        LINK[DomoLink service<br/>start / completeLink / unlink]
         BROKER[DomoAuthBroker<br/>token cache + refresh]
         STORE[DomoTokenStore<br/>domo_oauth_tokens]
-        OAUTH[DomoOAuthClient<br/>public PKCE · DCR]
+        OAUTH[DomoOAuthClient<br/>public PKCE / DCR]
         CREDS[ClientCredentialStore<br/>domo_oauth_clients]
         JWKS_SVC[JwksService<br/>cached per-issuer]
         IDENT[Identity]
@@ -30,7 +30,7 @@ graph LR
         AGENTS[Agents]
         SESS_CTRL[Sessions]
         MCP[MCP]
-        PROXY_SVCS[Domo proxy services<br/>AI · Graph · DataSources<br/>Connectors · Toolkits · Huckleberry]
+        PROXY_SVCS[Domo proxy services<br/>AI / Graph / DataSources<br/>Connectors / Toolkits / Huckleberry]
         PROXY[DomoProxyService<br/>targetHost + bearer]
     end
 
@@ -39,7 +39,7 @@ graph LR
         T_MAGIC[(magic_links)]
         T_SESS[(sessions)]
         T_LINKS[(linked_domo_instances)]
-        T_TOKENS[(domo_oauth_tokens<br/>refresh plaintext→KMS planned)]
+        T_TOKENS[(domo_oauth_tokens<br/>refresh plaintext, KMS planned)]
         T_CLIENTS[(domo_oauth_clients<br/>DCR registrations)]
     end
 
