@@ -2,9 +2,9 @@
 
 ## Context
 
-The huckleberry-server threat model (2026-06-23) identified 6 High, 5 Medium, and 4 Low findings. The server is VPN-accessible with self-service signup — authorization findings are exploitable today by any internal user. The most critical: any authenticated user can read/write any other user's persona (IDOR → stored prompt injection) and see every MCP server's bearer tokens (cross-tenant disclosure).
+The huckleberry-server threat model (2026-06-23) identified 8 High, 5 Medium, and 4 Low findings (17 total). The server is VPN-accessible with self-service signup — authorization findings are exploitable today by any internal user. The most critical: any authenticated user can read/write any other user's persona (IDOR → stored prompt injection) and see every MCP server's bearer tokens (cross-tenant disclosure).
 
-This plan remediates all findings in 8 dependency-ordered phases. Each phase is an independent PR. Phase 1 (tenant scoping) is foundational — Phase 4 (MCP) depends on it. All others are parallel-safe.
+This plan remediates 15 of 17 findings in 8 dependency-ordered phases. Each phase is an independent PR. Two findings are deferred as accepted risk (see Lower Priority section): THR-TB04-T-01 (Cypher passthrough) and THR-TB08-I-01 (dev secrets in compose). Phase 1 (tenant scoping) is foundational — Phase 4 (MCP) depends on it. All others are parallel-safe.
 
 ---
 
@@ -149,24 +149,24 @@ Most phases are pure code changes. Only Phase 6 has a hard external blocker:
    - `app.set('trust proxy', 1)` (or the specific ALB CIDR if tighter control needed)
    - Without this, `req.ip` resolves to the load balancer IP — all users share a single rate-limit bucket
 
-3. **Add throttler config** to `configuration.ts`:
+4. **Add throttler config** to `configuration.ts`:
    - File: `src/common/config/configuration.ts`
    - Env vars: `THROTTLE_GLOBAL_LIMIT`, `THROTTLE_AUTH_EMAIL_LIMIT`, etc.
 
-4. **Apply per-endpoint throttling** on auth routes:
+5. **Apply per-endpoint throttling** on auth routes:
    - File: `src/auth/auth.controller.ts`
    - `@Throttle('auth-email')` on `/signup`, `/signin/request`
    - `@Throttle('consume')` on `/signin`
 
-5. **Normalize auth timing** — both known and unknown email paths must return in equivalent time:
+6. **Normalize auth timing** — both known and unknown email paths must return in equivalent time:
    - File: `src/auth/auth.service.ts`
    - Return 202 immediately in both branches; perform all work (DB write + email send) asynchronously
    - `setImmediate()` is NOT sufficient — the known-user path performs `randomBytes` + `sha256` + `magicLinks.insert()` synchronously, which is measurably slower than the unknown-email path
    - Alternative: queue both paths identically (always do a dummy DB write for unknown emails)
 
-6. **Custom 429 response** — no disclosure of which limit hit; include `Retry-After`
+7. **Custom 429 response** — no disclosure of which limit hit; include `Retry-After`
 
-7. **E2e tests**:
+8. **E2e tests**:
    - Exceed per-email limit → 429
    - Exceed per-IP limit → 429
    - Below limit → 200/202
@@ -403,14 +403,14 @@ Each phase MUST update the relevant documentation before the PR is considered co
 
 | Phase | Docs to update |
 |-------|----------------|
-| 1 (tenant scoping) | `docs/authentication.md` (ALS context shape, repository scoping), DB schema docs (new tables), `docs/development.md` or equivalent (local MySQL setup for personas/MCP) |
+| 1 (tenant scoping) | `docs/authentication.md` (ALS context shape, repository scoping), DB schema docs (new tables), `docs/local-development.md` (local MySQL setup for personas/MCP) |
 | 2 (unified guard) | `docs/authentication.md` (guard architecture, CSRF enforcement, SkipCsrf decorator usage) |
-| 3 (rate limiting) | `docs/authentication.md` (rate limit thresholds), `docs/development.md` (throttler config env vars) |
+| 3 (rate limiting) | `docs/authentication.md` (rate limit thresholds), `docs/local-development.md` (throttler config env vars) |
 | 4 (MCP hardening) | `docs/authentication.md` (MCP authz model), MCP API docs (URL requirements, redacted fields) |
 | 5 (OAuth fail-closed) | `docs/authentication.md` (link flow error handling, removed fallback) |
-| 6 (KMS encryption) | `docs/authentication.md` (token-at-rest encryption), `docs/development.md` (local dev key setup), `docs/security/` (encryption implementation notes) |
-| 7 (web hardening) | `docs/development.md` (CORS origin config, Swagger access), security headers documentation |
-| 8 (housekeeping) | `docs/development.md` (ALLOW_DEV_BYPASS flag, audit event format), `docs/security/` (audit trail schema) |
+| 6 (KMS encryption) | `docs/authentication.md` (token-at-rest encryption), `docs/local-development.md` (local dev key setup), `docs/security/` (encryption implementation notes) |
+| 7 (web hardening) | `docs/local-development.md` (CORS origin config, Swagger access), security headers documentation |
+| 8 (housekeeping) | `docs/local-development.md` (ALLOW_DEV_BYPASS flag, audit event format), `docs/security/` (audit trail schema) |
 
 Additionally, after all phases complete:
 - Update `docs/security/ThreatModel_huckleberry-server.md` with a remediation status table marking each finding as resolved + the PR/commit that addressed it
@@ -428,7 +428,7 @@ For each phase:
 5. Documentation reviewed and updated per the table above
 
 Final validation:
-- All 17 threat model findings have a corresponding code change
+- 15 of 17 threat model findings have a corresponding code change; 2 deferred with rationale
 - Each negative-case test proves the vulnerability is closed
 - No in-memory data stores remain for Category B resources
 - All docs reflect the new architecture (no stale references to DomoAuthGuard, in-memory stores, or plaintext tokens)
