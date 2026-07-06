@@ -73,12 +73,12 @@ export class LoggingInterceptor implements NestInterceptor {
   private static redactBody(
     body: Record<string, unknown>,
   ): Record<string, unknown> {
-    const redacted = Object.create(null) as Record<string, unknown>;
-    for (const [key, value] of Object.entries(body)) {
-      redacted[key] = LoggingInterceptor.REDACTED_BODY_KEYS.has(key)
-        ? '[REDACTED]'
-        : value;
-    }
-    return redacted;
+    return JSON.parse(
+      JSON.stringify(body, (key, value) =>
+        key !== '' && LoggingInterceptor.REDACTED_BODY_KEYS.has(key)
+          ? '[REDACTED]'
+          : (value as unknown),
+      ),
+    ) as Record<string, unknown>;
   }
 }
