@@ -2,13 +2,12 @@
  * Rate limiting end-to-end tests — Phase 3 (THR-TB01-D-01, THR-TB01-I-01)
  *
  * Three isolated describe blocks, each with their own Nest app instance so
- * the AuthRateLimitGuard's in-memory buckets start empty for each group.
+ * the in-memory buckets start empty for each group.
  *
- * Limits configured for fast execution (defaults are higher in production):
- *   - email: 3 attempts per 15 min
- *   - IP:    5 attempts per min (low enough to test, high enough that email
- *            tests with 3 requests don't inadvertently trigger it)
- *   - consume: 3 attempts per min
+ * IP limit is set high (50) globally so it never fires in the email-limit
+ * block, where all three `it` blocks share one app and the IP counter
+ * accumulates across them (~7 total requests). The IP-limit block overrides
+ * it to 5 in its own beforeAll before calling buildApp().
  */
 
 process.env.NODE_ENV = 'development';
@@ -28,7 +27,7 @@ process.env.DEV_INSTANCE_SCOPES = 'ai:read';
 process.env.THROTTLE_GLOBAL_LIMIT = '1000';
 process.env.THROTTLE_AUTH_EMAIL_LIMIT = '3';
 process.env.THROTTLE_AUTH_EMAIL_TTL = '900000';
-process.env.THROTTLE_AUTH_IP_LIMIT = '5';
+process.env.THROTTLE_AUTH_IP_LIMIT = '50';
 process.env.THROTTLE_AUTH_IP_TTL = '60000';
 process.env.THROTTLE_CONSUME_LIMIT = '3';
 process.env.THROTTLE_CONSUME_TTL = '60000';
@@ -137,7 +136,9 @@ describe('Rate limiting — IP limit (e2e)', () => {
   let app: INestApplication<App>;
 
   // Fresh app — in-memory IP bucket starts at 0.
+  // Override IP limit to 5 here so this block tests the actual threshold.
   beforeAll(async () => {
+    process.env.THROTTLE_AUTH_IP_LIMIT = '5';
     app = await buildApp();
   });
   afterAll(async () => {
