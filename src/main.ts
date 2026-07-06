@@ -42,11 +42,6 @@ function freePort(port: number): void {
 }
 
 async function bootstrap() {
-  // Allow self-signed certificates when targeting a local Domo instance in dev
-  if (process.env.NODE_ENV === 'development') {
-    process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
-  }
-
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     bodyParser: false,
   });
