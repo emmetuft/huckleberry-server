@@ -16,6 +16,7 @@ import type { CreateMcpServerDto } from './dto/create-mcp-server.dto.js';
 import type { UpdateMcpServerDto } from './dto/update-mcp-server.dto.js';
 import { MCP_REPOSITORY, type McpRepository } from './mcp.repository.js';
 import { domoRequestContext } from '../common/auth/domo-request-context.js';
+import { ssrfSafeFetch } from './ssrf-safe-fetch.js';
 
 @Injectable()
 export class McpService {
@@ -84,7 +85,7 @@ export class McpService {
   async testConnection(id: string): Promise<McpTestConnectionResult> {
     const server = await this.findOne(id);
     try {
-      const response = await fetch(`${server.url}/tools/list`, {
+      const response = await ssrfSafeFetch(`${server.url}/tools/list`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -114,7 +115,7 @@ export class McpService {
     const server = await this.findOne(id);
     const { customerId, userId } = this.tenant();
     try {
-      const response = await fetch(`${server.url}/tools/list`, {
+      const response = await ssrfSafeFetch(`${server.url}/tools/list`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -172,7 +173,7 @@ export class McpService {
   ): Promise<McpToolResult> {
     const server = await this.findOne(serverId);
     try {
-      const response = await fetch(`${server.url}/tools/call`, {
+      const response = await ssrfSafeFetch(`${server.url}/tools/call`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
