@@ -113,7 +113,7 @@ export class AuthRateLimitGuard implements CanActivate {
 
   private enforce(
     res: Response,
-    store: Map<string, Bucket>,
+    store: BoundedLruMap<string, Bucket>,
     key: string,
     limit: number,
     ttl: number,
