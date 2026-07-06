@@ -15,7 +15,6 @@ import {
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { ApiTags } from '@nestjs/swagger';
-import { Throttle } from '@nestjs/throttler';
 import { AuthService } from './auth.service.js';
 import { RequestSigninDto } from './dto/request-signin.dto.js';
 import { SignupDto } from './dto/signup.dto.js';
@@ -26,7 +25,10 @@ import type { HuckleberryPrincipal } from './types.js';
 import { SessionAuthGuard } from '../common/auth/session-auth.guard.js';
 import { Public } from '../common/auth/decorators/public.decorator.js';
 import { DomoLinkService } from '../common/auth/domo-link/domo-link.service.js';
-import { AuthRateLimitGuard } from './guards/throttler.guard.js';
+import {
+  AuthRateLimitGuard,
+  ConsumeThrottlerGuard,
+} from './guards/throttler.guard.js';
 
 const SESSION_COOKIE = 'hb_session';
 const CSRF_COOKIE = 'csrf_token';
@@ -58,19 +60,16 @@ export class AuthController {
   @Post('signup')
   @HttpCode(HttpStatus.ACCEPTED)
   @UseGuards(AuthRateLimitGuard)
-  async signupRequest(
+  signupRequest(
     @Body() dto: SignupDto,
     @Req() req: Request,
-  ): Promise<{ status: 'accepted' }> {
+  ): { status: 'accepted' } {
     const ip = readClientIp(req);
-    await this.signup.ensureUser(dto.email, {
-      path: dto.path,
-      instanceUrl: dto.instanceUrl,
-    });
-    // Fire-and-forget: both known and unknown email paths return at the same
-    // point in time (after ensureUser), preventing timing-based email enumeration.
-    this.auth
-      .requestMagicLink(dto.email, ip)
+    // Fire-and-forget the full chain so response time is independent of whether
+    // the email already exists — prevents timing-based email enumeration (THR-TB01-I-01).
+    this.signup
+      .ensureUser(dto.email, { path: dto.path, instanceUrl: dto.instanceUrl })
+      .then(() => this.auth.requestMagicLink(dto.email, ip))
       .catch((err: unknown) => this.logger.error(err));
     return { status: 'accepted' };
   }
@@ -99,7 +98,7 @@ export class AuthController {
 
   @Public()
   @Get('signin')
-  @Throttle({ consume: {} })
+  @UseGuards(ConsumeThrottlerGuard)
   async consumeSignin(
     @Query('token') token: string | string[] | undefined,
     @Res({ passthrough: true }) res: Response,

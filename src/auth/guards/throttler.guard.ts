@@ -100,6 +100,44 @@ export class AuthRateLimitGuard implements CanActivate {
   }
 }
 
+/**
+ * Per-IP rate limiter for GET /auth/signin (token consume).
+ * Applies a tighter limit than the global default to slow token-stuffing attacks.
+ * In-memory store — same acceptable-single-pod caveat as AuthRateLimitGuard.
+ */
+@Injectable()
+export class ConsumeThrottlerGuard implements CanActivate {
+  private readonly ipBuckets = new Map<string, Bucket>();
+
+  constructor(private readonly config: ConfigService) {}
+
+  canActivate(ctx: ExecutionContext): boolean {
+    const req = ctx.switchToHttp().getRequest<Request>();
+    const res = ctx.switchToHttp().getResponse<Response>();
+    const cfg = this.config.get<AppConfig>('app');
+    const ip = extractIp(req);
+    if (ip) {
+      const now = Date.now();
+      const entry = this.ipBuckets.get(ip);
+      if (!entry || now > entry.resetAt) {
+        this.ipBuckets.set(ip, {
+          count: 1,
+          resetAt: now + cfg.throttleConsumeTtl,
+        });
+      } else if (entry.count >= cfg.throttleConsumeLimit) {
+        res.setHeader('Retry-After', Math.ceil((entry.resetAt - now) / 1000));
+        throw new HttpException(
+          'too_many_requests',
+          HttpStatus.TOO_MANY_REQUESTS,
+        );
+      } else {
+        entry.count++;
+      }
+    }
+    return true;
+  }
+}
+
 function extractIp(req: Request): string | null {
   // req.ip is already resolved correctly by Express given app.set('trust proxy', 1).
   // Reading X-Forwarded-For directly here would take the leftmost value, which is

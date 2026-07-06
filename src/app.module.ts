@@ -45,11 +45,6 @@ import { WorkflowsModule } from './workflows/workflows.module.js';
             ttl: app.throttleGlobalTtl,
             limit: app.throttleGlobalLimit,
           },
-          {
-            name: 'consume',
-            ttl: app.throttleConsumeTtl,
-            limit: app.throttleConsumeLimit,
-          },
         ];
       },
     }),

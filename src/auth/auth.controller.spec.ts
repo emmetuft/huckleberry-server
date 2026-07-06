@@ -7,7 +7,10 @@ import { SignupService } from './signup.service';
 import { USER_REPOSITORY } from './user.repository';
 import { SessionAuthGuard } from '../common/auth/session-auth.guard';
 import { DomoLinkService } from '../common/auth/domo-link/domo-link.service';
-import { AuthRateLimitGuard } from './guards/throttler.guard';
+import {
+  AuthRateLimitGuard,
+  ConsumeThrottlerGuard,
+} from './guards/throttler.guard';
 import type { HuckleberryPrincipal } from './types';
 import type { Request, Response } from 'express';
 
@@ -48,6 +51,8 @@ describe('AuthController', () => {
       .overrideGuard(SessionAuthGuard)
       .useValue({ canActivate: () => true })
       .overrideGuard(AuthRateLimitGuard)
+      .useValue({ canActivate: () => true })
+      .overrideGuard(ConsumeThrottlerGuard)
       .useValue({ canActivate: () => true })
       .compile();
 
