@@ -158,3 +158,22 @@ Boot-time migrations are gated by `DATABASE_RUN_MIGRATIONS=true`. Production run
 ### Migration runner — `src/common/db/migrate.ts`
 
 Called either at boot (when `DATABASE_RUN_MIGRATIONS=true`) or by the Helm Job. Uses Drizzle's `migrate()` against the `drizzle/` folder. The Job uses `GET_LOCK` to ensure only one pod runs migrations on a rolling deploy.
+
+### Rate limiting
+
+In-memory bucket throttling (Phase 3). Counters reset on pod restart — acceptable because `maxReplicas: 1` in all current environments. If HPA is ever enabled for >1 replica, migrate to a Redis-backed store.
+
+All limits are configurable via env vars in `huckleberry-gitops/instances/dev-ai/<env>/values.yaml`:
+
+| Env var                  | Default  | Description                                           |
+| ------------------------ | -------- | ----------------------------------------------------- |
+| `THROTTLE_GLOBAL_LIMIT`  | `200`    | Requests per IP per minute (all routes)               |
+| `THROTTLE_GLOBAL_TTL`    | `60000`  | TTL in ms for global bucket                           |
+| `THROTTLE_AUTH_EMAIL_LIMIT` | `3`   | Attempts per email per window — signup + signin/request |
+| `THROTTLE_AUTH_EMAIL_TTL`   | `900000`| Window length in ms (15 min)                          |
+| `THROTTLE_AUTH_IP_LIMIT` | `10`     | Attempts per IP per minute — signup + signin/request  |
+| `THROTTLE_AUTH_IP_TTL`   | `60000`  | TTL in ms for auth IP bucket                          |
+| `THROTTLE_CONSUME_LIMIT` | `20`     | `GET /auth/signin` (magic-link consume) per IP per min |
+| `THROTTLE_CONSUME_TTL`   | `60000`  | TTL in ms for consume bucket                          |
+
+All 8 vars are set explicitly in `dev3/values.yaml` (Phase 3 deployment). Secrets-stored vars (`SESSION_SIGNING_KEY`, etc.) are not affected.
