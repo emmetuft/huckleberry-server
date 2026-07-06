@@ -87,7 +87,9 @@ export class AuthRateLimitGuard implements CanActivate {
     const res = ctx.switchToHttp().getResponse<Response>();
     const cfg = this.config.get<AppConfig>('app');
 
-    const email = (req.body as { email?: string })?.email?.toLowerCase().trim();
+    const rawEmail = (req.body as { email?: unknown })?.email;
+    const email =
+      typeof rawEmail === 'string' ? rawEmail.toLowerCase().trim() : undefined;
     const ip = extractIp(req);
 
     if (email) {
