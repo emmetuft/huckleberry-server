@@ -11,6 +11,39 @@ import type { Request, Response } from 'express';
 import type { AppConfig } from '../../common/config/configuration.js';
 
 /**
+ * LRU map capped at maxSize. On capacity, evicts the least-recently-used entry.
+ * Map iteration order is insertion order, so the first key is always the LRU.
+ * get() repositions the key at the MRU end; set() on a new key evicts the LRU
+ * first if at capacity.
+ */
+class BoundedLruMap<K, V> {
+  private readonly map = new Map<K, V>();
+  constructor(private readonly maxSize: number) {}
+
+  get(key: K): V | undefined {
+    const value = this.map.get(key);
+    if (value !== undefined) {
+      this.map.delete(key);
+      this.map.set(key, value);
+    }
+    return value;
+  }
+
+  set(key: K, value: V): void {
+    if (this.map.has(key)) {
+      this.map.delete(key);
+    } else if (this.map.size >= this.maxSize) {
+      this.map.delete(this.map.keys().next().value);
+    }
+    this.map.set(key, value);
+  }
+}
+
+// Max distinct keys per bucket map. Prevents unbounded Map growth driven by
+// attacker-controlled email values cycling unique keys into the store.
+const MAX_BUCKETS = 10_000;
+
+/**
  * Global IP-based throttler guard. Wraps the default ThrottlerGuard to:
  * - Add `Retry-After` header on 429 responses
  * - Return a generic message (does not disclose which limit was hit)
@@ -42,8 +75,10 @@ interface Bucket {
  */
 @Injectable()
 export class AuthRateLimitGuard implements CanActivate {
-  private readonly emailBuckets = new Map<string, Bucket>();
-  private readonly ipBuckets = new Map<string, Bucket>();
+  private readonly emailBuckets = new BoundedLruMap<string, Bucket>(
+    MAX_BUCKETS,
+  );
+  private readonly ipBuckets = new BoundedLruMap<string, Bucket>(MAX_BUCKETS);
 
   constructor(private readonly config: ConfigService) {}
 
@@ -107,7 +142,7 @@ export class AuthRateLimitGuard implements CanActivate {
  */
 @Injectable()
 export class ConsumeThrottlerGuard implements CanActivate {
-  private readonly ipBuckets = new Map<string, Bucket>();
+  private readonly ipBuckets = new BoundedLruMap<string, Bucket>(MAX_BUCKETS);
 
   constructor(private readonly config: ConfigService) {}
 
