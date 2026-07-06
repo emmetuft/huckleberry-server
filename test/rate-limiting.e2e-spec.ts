@@ -34,7 +34,11 @@ process.env.THROTTLE_CONSUME_LIMIT = '3';
 process.env.THROTTLE_CONSUME_TTL = '60000';
 
 import { jest } from '@jest/globals';
-import { INestApplication, RequestMethod, ValidationPipe } from '@nestjs/common';
+import {
+  INestApplication,
+  RequestMethod,
+  ValidationPipe,
+} from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import type { App } from 'supertest/types';
@@ -49,7 +53,9 @@ import {
 
 async function buildApp(): Promise<INestApplication<App>> {
   const emails: EmailService = {
-    sendMagicLink: jest.fn<(e: MagicLinkEmail) => Promise<void>>().mockResolvedValue(undefined),
+    sendMagicLink: jest
+      .fn<(e: MagicLinkEmail) => Promise<void>>()
+      .mockResolvedValue(undefined),
   };
 
   const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
@@ -81,23 +87,30 @@ async function buildApp(): Promise<INestApplication<App>> {
 describe('Rate limiting — email limit (e2e)', () => {
   let app: INestApplication<App>;
 
-  beforeAll(async () => { app = await buildApp(); });
-  afterAll(async () => { await app.close(); });
+  beforeAll(async () => {
+    app = await buildApp();
+  });
+  afterAll(async () => {
+    await app.close();
+  });
 
   it('allows up to 3 signup requests per email then blocks', async () => {
-    const srv = app.getHttpServer() as Parameters<typeof request>[0];
+    const srv = app.getHttpServer();
     const body = { email: 'rl-email1@test.com', path: 'new' };
 
     await request(srv).post('/api/auth/signup').send(body).expect(202);
     await request(srv).post('/api/auth/signup').send(body).expect(202);
     await request(srv).post('/api/auth/signup').send(body).expect(202);
 
-    const res = await request(srv).post('/api/auth/signup').send(body).expect(429);
+    const res = await request(srv)
+      .post('/api/auth/signup')
+      .send(body)
+      .expect(429);
     expect(res.headers['retry-after']).toBeTruthy();
   });
 
   it('allows up to 3 signin/request calls per email then blocks', async () => {
-    const srv = app.getHttpServer() as Parameters<typeof request>[0];
+    const srv = app.getHttpServer();
     const body = { email: 'rl-email2@test.com' };
 
     await request(srv).post('/api/auth/signin/request').send(body).expect(202);
@@ -112,7 +125,7 @@ describe('Rate limiting — email limit (e2e)', () => {
   });
 
   it('does not throttle a single request within the limit', async () => {
-    const srv = app.getHttpServer() as Parameters<typeof request>[0];
+    const srv = app.getHttpServer();
     await request(srv)
       .post('/api/auth/signin/request')
       .send({ email: 'rl-control@test.com' })
@@ -124,11 +137,15 @@ describe('Rate limiting — IP limit (e2e)', () => {
   let app: INestApplication<App>;
 
   // Fresh app — in-memory IP bucket starts at 0.
-  beforeAll(async () => { app = await buildApp(); });
-  afterAll(async () => { await app.close(); });
+  beforeAll(async () => {
+    app = await buildApp();
+  });
+  afterAll(async () => {
+    await app.close();
+  });
 
   it('allows 5 auth requests from one IP then blocks on the 6th', async () => {
-    const srv = app.getHttpServer() as Parameters<typeof request>[0];
+    const srv = app.getHttpServer();
 
     for (let i = 1; i <= 5; i++) {
       await request(srv)
@@ -149,11 +166,15 @@ describe('Rate limiting — consume limit (e2e)', () => {
   let app: INestApplication<App>;
 
   // Fresh app — consume bucket starts at 0.
-  beforeAll(async () => { app = await buildApp(); });
-  afterAll(async () => { await app.close(); });
+  beforeAll(async () => {
+    app = await buildApp();
+  });
+  afterAll(async () => {
+    await app.close();
+  });
 
   it('blocks consume after 3 attempts regardless of token validity', async () => {
-    const srv = app.getHttpServer() as Parameters<typeof request>[0];
+    const srv = app.getHttpServer();
 
     // Three requests with invalid tokens — rate guard allows these through;
     // the handler returns 400 for each.

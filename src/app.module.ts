@@ -5,7 +5,9 @@ import { ThrottlerModule } from '@nestjs/throttler';
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { join } from 'node:path';
 import { DomoContextInterceptor } from './common/auth/domo-context.interceptor.js';
-import configuration, { type AppConfig } from './common/config/configuration.js';
+import configuration, {
+  type AppConfig,
+} from './common/config/configuration.js';
 import { HbThrottlerGuard } from './auth/guards/throttler.guard.js';
 import { AuthModule } from './common/auth/auth.module.js';
 import { DomoLinkModule } from './common/auth/domo-link/domo-link.module.js';
@@ -36,10 +38,18 @@ import { WorkflowsModule } from './workflows/workflows.module.js';
     ThrottlerModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => {
-        const app = config.get<AppConfig>('app')!;
+        const app = config.get<AppConfig>('app');
         return [
-          { name: 'default', ttl: app.throttleGlobalTtl,  limit: app.throttleGlobalLimit },
-          { name: 'consume', ttl: app.throttleConsumeTtl, limit: app.throttleConsumeLimit },
+          {
+            name: 'default',
+            ttl: app.throttleGlobalTtl,
+            limit: app.throttleGlobalLimit,
+          },
+          {
+            name: 'consume',
+            ttl: app.throttleConsumeTtl,
+            limit: app.throttleConsumeLimit,
+          },
         ];
       },
     }),

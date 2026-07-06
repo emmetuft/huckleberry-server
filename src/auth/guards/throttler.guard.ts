@@ -17,7 +17,7 @@ import type { AppConfig } from '../../common/config/configuration.js';
  */
 @Injectable()
 export class HbThrottlerGuard extends ThrottlerGuard {
-  protected async throwThrottlingException(
+  protected throwThrottlingException(
     ctx: ExecutionContext,
     detail: ThrottlerLimitDetail,
   ): Promise<void> {
@@ -47,10 +47,10 @@ export class AuthRateLimitGuard implements CanActivate {
 
   constructor(private readonly config: ConfigService) {}
 
-  async canActivate(ctx: ExecutionContext): Promise<boolean> {
+  canActivate(ctx: ExecutionContext): boolean {
     const req = ctx.switchToHttp().getRequest<Request>();
     const res = ctx.switchToHttp().getResponse<Response>();
-    const cfg = this.config.get<AppConfig>('app')!;
+    const cfg = this.config.get<AppConfig>('app');
 
     const email = (req.body as { email?: string })?.email?.toLowerCase().trim();
     const ip = extractIp(req);

@@ -85,10 +85,10 @@ export class AuthController {
   @Post('signin/request')
   @HttpCode(HttpStatus.ACCEPTED)
   @UseGuards(AuthRateLimitGuard)
-  async requestSignin(
+  requestSignin(
     @Body() dto: RequestSigninDto,
     @Req() req: Request,
-  ): Promise<{ status: 'accepted' }> {
+  ): { status: 'accepted' } {
     // Fire-and-forget: both known and unknown email paths return immediately,
     // preventing timing-based email enumeration.
     this.auth
