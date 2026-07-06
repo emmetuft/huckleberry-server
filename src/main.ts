@@ -1,4 +1,5 @@
 import { NestFactory } from '@nestjs/core';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import { Logger, RequestMethod, ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
@@ -45,7 +46,10 @@ async function bootstrap() {
     process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
   }
 
-  const app = await NestFactory.create(AppModule, { bodyParser: false });
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+    bodyParser: false,
+  });
+  app.set('trust proxy', 1);
   app.use(json({ limit: '10mb' }));
 
   app.setGlobalPrefix('api', {

@@ -147,6 +147,18 @@ export interface AppConfig {
   devInstanceOAuthClientId: string;
   devInstanceOAuthClientSecret: string;
   devInstanceScopes: string;
+  /** Rate limiting — global default (all routes, IP-based). */
+  throttleGlobalLimit: number;
+  throttleGlobalTtl: number;
+  /** Rate limiting — auth email-based (signup + signin/request). */
+  throttleAuthEmailLimit: number;
+  throttleAuthEmailTtl: number;
+  /** Rate limiting — auth IP-based (signup + signin/request). */
+  throttleAuthIpLimit: number;
+  throttleAuthIpTtl: number;
+  /** Rate limiting — consume (GET /auth/signin). */
+  throttleConsumeLimit: number;
+  throttleConsumeTtl: number;
 }
 
 function stripTrailingSlash(s: string): string {
@@ -209,6 +221,11 @@ function parseTransportOverrides(
   return overrides;
 }
 
+function intEnv(raw: string | undefined, fallback: number): number {
+  const n = parseInt(raw ?? '', 10);
+  return Number.isNaN(n) ? fallback : n;
+}
+
 export default (): { app: AppConfig } => ({
   app: {
     domoInstanceUrl: process.env.DOMO_INSTANCE_URL || '',
@@ -263,5 +280,13 @@ export default (): { app: AppConfig } => ({
     devInstanceScopes:
       process.env.DEV_INSTANCE_SCOPES ||
       'ai:read ai:execute identity:read dataset:data:read',
+    throttleGlobalLimit: intEnv(process.env.THROTTLE_GLOBAL_LIMIT, 200),
+    throttleGlobalTtl: intEnv(process.env.THROTTLE_GLOBAL_TTL, 60_000),
+    throttleAuthEmailLimit: intEnv(process.env.THROTTLE_AUTH_EMAIL_LIMIT, 3),
+    throttleAuthEmailTtl: intEnv(process.env.THROTTLE_AUTH_EMAIL_TTL, 900_000),
+    throttleAuthIpLimit: intEnv(process.env.THROTTLE_AUTH_IP_LIMIT, 10),
+    throttleAuthIpTtl: intEnv(process.env.THROTTLE_AUTH_IP_TTL, 60_000),
+    throttleConsumeLimit: intEnv(process.env.THROTTLE_CONSUME_LIMIT, 20),
+    throttleConsumeTtl: intEnv(process.env.THROTTLE_CONSUME_TTL, 60_000),
   },
 });

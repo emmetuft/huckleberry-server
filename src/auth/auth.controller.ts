@@ -6,6 +6,7 @@ import {
   HttpCode,
   HttpStatus,
   Inject,
+  Logger,
   Post,
   Query,
   Req,
@@ -24,6 +25,10 @@ import type { HuckleberryPrincipal } from './types.js';
 import { SessionAuthGuard } from '../common/auth/session-auth.guard.js';
 import { Public } from '../common/auth/decorators/public.decorator.js';
 import { DomoLinkService } from '../common/auth/domo-link/domo-link.service.js';
+import {
+  AuthRateLimitGuard,
+  ConsumeThrottlerGuard,
+} from './guards/throttler.guard.js';
 
 const SESSION_COOKIE = 'hb_session';
 const CSRF_COOKIE = 'csrf_token';
@@ -32,6 +37,8 @@ const CSRF_COOKIE = 'csrf_token';
 @Controller('auth')
 @UseGuards(SessionAuthGuard)
 export class AuthController {
+  private readonly logger = new Logger(AuthController.name);
+
   constructor(
     private readonly auth: AuthService,
     private readonly signup: SignupService,
@@ -52,16 +59,18 @@ export class AuthController {
   @Public()
   @Post('signup')
   @HttpCode(HttpStatus.ACCEPTED)
-  async signupRequest(
+  @UseGuards(AuthRateLimitGuard)
+  signupRequest(
     @Body() dto: SignupDto,
     @Req() req: Request,
-  ): Promise<{ status: 'accepted' }> {
+  ): { status: 'accepted' } {
     const ip = readClientIp(req);
-    await this.signup.ensureUser(dto.email, {
-      path: dto.path,
-      instanceUrl: dto.instanceUrl,
-    });
-    await this.auth.requestMagicLink(dto.email, ip);
+    // Fire-and-forget the full chain so response time is independent of whether
+    // the email already exists — prevents timing-based email enumeration (THR-TB01-I-01).
+    this.signup
+      .ensureUser(dto.email, { path: dto.path, instanceUrl: dto.instanceUrl })
+      .then(() => this.auth.requestMagicLink(dto.email, ip))
+      .catch((err: unknown) => this.logger.error(err));
     return { status: 'accepted' };
   }
 
@@ -74,17 +83,22 @@ export class AuthController {
   @Public()
   @Post('signin/request')
   @HttpCode(HttpStatus.ACCEPTED)
-  async requestSignin(
+  @UseGuards(AuthRateLimitGuard)
+  requestSignin(
     @Body() dto: RequestSigninDto,
     @Req() req: Request,
-  ): Promise<{ status: 'accepted' }> {
-    const ip = readClientIp(req);
-    await this.auth.requestMagicLink(dto.email, ip);
+  ): { status: 'accepted' } {
+    // Fire-and-forget: both known and unknown email paths return immediately,
+    // preventing timing-based email enumeration.
+    this.auth
+      .requestMagicLink(dto.email, readClientIp(req))
+      .catch((err: unknown) => this.logger.error(err));
     return { status: 'accepted' };
   }
 
   @Public()
   @Get('signin')
+  @UseGuards(ConsumeThrottlerGuard)
   async consumeSignin(
     @Query('token') token: string | string[] | undefined,
     @Res({ passthrough: true }) res: Response,
