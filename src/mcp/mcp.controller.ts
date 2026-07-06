@@ -10,8 +10,10 @@ import {
   Post,
   Put,
   Query,
+  Res,
   UseGuards,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import { ApiTags } from '@nestjs/swagger';
 import { McpService } from './mcp.service.js';
 import { CreateMcpServerDto } from './dto/create-mcp-server.dto.js';
@@ -99,8 +101,17 @@ export class McpController {
 
   @Post('tools/execute')
   @HttpCode(HttpStatus.OK)
-  executeTool(@Body() dto: ExecuteToolDto) {
-    return this.mcpService.executeTool(dto.serverId, dto.toolName, dto.params);
+  async executeTool(
+    @Body() dto: ExecuteToolDto,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const result = await this.mcpService.executeTool(
+      dto.serverId,
+      dto.toolName,
+      dto.params,
+    );
+    res.setHeader('X-MCP-Untrusted', 'true');
+    return result;
   }
 
   // --- OAuth2 ---

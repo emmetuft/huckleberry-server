@@ -52,9 +52,26 @@ import {
 
 class CapturingEmailService implements EmailService {
   public lastEmail: MagicLinkEmail | null = null;
+  private waiters: Array<(email: MagicLinkEmail) => void> = [];
+
   sendMagicLink(email: MagicLinkEmail): Promise<void> {
     this.lastEmail = email;
+    this.waiters.splice(0).forEach((resolve) => resolve(email));
     return Promise.resolve();
+  }
+
+  /** Resolves with the next email that arrives, whenever that is. */
+  nextEmail(timeoutMs = 2000): Promise<MagicLinkEmail> {
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(
+        () => reject(new Error('Timed out waiting for email')),
+        timeoutMs,
+      );
+      this.waiters.push((email) => {
+        clearTimeout(timer);
+        resolve(email);
+      });
+    });
   }
 }
 
@@ -175,14 +192,15 @@ describe('Auth flow (e2e)', () => {
 
   it('signup auto-provisions a new user (freemium signup)', async () => {
     const server = app.getHttpServer() as Parameters<typeof request>[0];
+    // Register the waiter BEFORE the request so we don't race the async chain.
+    const nextEmailPromise = emails.nextEmail();
     await request(server)
       .post('/api/auth/signup')
       .send({ email: 'fresh-signup@huckleberry.ai', path: 'new' })
       .expect(202);
-    // The signup endpoint find-or-creates the user and emails a
-    // magic-link in both branches — freemium-style. The new user now has
-    // a linked instance via the stub provisioner.
-    expect(emails.lastEmail?.to).toBe('fresh-signup@huckleberry.ai');
+    // signupRequest fire-and-forgets the magic-link chain — wait for it.
+    const received = await nextEmailPromise;
+    expect(received.to).toBe('fresh-signup@huckleberry.ai');
   });
 
   it('rejects CSRF mismatch on state-changing routes', async () => {
