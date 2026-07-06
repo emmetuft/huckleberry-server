@@ -101,7 +101,8 @@ export class AuthRateLimitGuard implements CanActivate {
 }
 
 function extractIp(req: Request): string | null {
-  const xff = req.headers['x-forwarded-for'];
-  if (typeof xff === 'string') return xff.split(',')[0].trim();
+  // req.ip is already resolved correctly by Express given app.set('trust proxy', 1).
+  // Reading X-Forwarded-For directly here would take the leftmost value, which is
+  // client-controlled and trivially bypassable behind an ALB.
   return (req as Request & { ip?: string }).ip ?? null;
 }
