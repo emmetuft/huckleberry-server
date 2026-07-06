@@ -7,10 +7,7 @@
  */
 
 export type UserStatus =
-  | 'pending_provision'
-  | 'pending_link'
-  | 'active'
-  | 'suspended';
+  'pending_provision' | 'pending_link' | 'active' | 'suspended';
 
 export interface User {
   /** UUID v4. We carry the canonical form as a string; persistence layer may store BINARY(16). */

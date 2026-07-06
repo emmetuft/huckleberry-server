@@ -58,9 +58,7 @@ export class FlagFilterDto {
 }
 
 export type NodePropertyFilterDto =
-  | SingleValueFilterDto
-  | RangeFilterDto
-  | FlagFilterDto;
+  SingleValueFilterDto | RangeFilterDto | FlagFilterDto;
 
 export class NodeFilterDto {
   @IsArray()
