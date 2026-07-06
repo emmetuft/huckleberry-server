@@ -18,6 +18,7 @@ process.env.SESSION_SIGNING_KEY =
   '0000000000000000000000000000000000000000000000000000000000000001';
 process.env.ADMIN_API_KEY = 'test-admin-key';
 process.env.MAGIC_LINK_BASE_URL = 'http://localhost:5173';
+process.env.CORS_ORIGIN = 'https://test.huckleberry.ai';
 process.env.MAGIC_LINK_TTL_SECONDS = '900';
 process.env.SESSION_TTL_SECONDS = '43200';
 process.env.DEV_TOKEN = '';

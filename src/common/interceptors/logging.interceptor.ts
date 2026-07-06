@@ -36,7 +36,9 @@ export class LoggingInterceptor implements NestInterceptor {
         parts.push(`  query: ${JSON.stringify(req.query)}`);
       }
       if (req.body && Object.keys(req.body as Record<string, unknown>).length) {
-        parts.push(`  body:  ${JSON.stringify(req.body)}`);
+        parts.push(
+          `  body:  ${JSON.stringify(LoggingInterceptor.redactBody(req.body as Record<string, unknown>))}`,
+        );
       }
       this.logger.log(parts.join('\n'));
     }
@@ -56,5 +58,27 @@ export class LoggingInterceptor implements NestInterceptor {
         },
       }),
     );
+  }
+
+  private static readonly REDACTED_BODY_KEYS = new Set([
+    'token',
+    'password',
+    'secret',
+    'bearerToken',
+    'clientSecret',
+    'refreshToken',
+    'accessToken',
+  ]);
+
+  private static redactBody(
+    body: Record<string, unknown>,
+  ): Record<string, unknown> {
+    return JSON.parse(
+      JSON.stringify(body, (key, value) =>
+        key !== '' && LoggingInterceptor.REDACTED_BODY_KEYS.has(key)
+          ? '[REDACTED]'
+          : (value as unknown),
+      ),
+    ) as Record<string, unknown>;
   }
 }

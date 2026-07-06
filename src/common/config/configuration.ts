@@ -159,6 +159,8 @@ export interface AppConfig {
   /** Rate limiting — consume (GET /auth/signin). */
   throttleConsumeLimit: number;
   throttleConsumeTtl: number;
+  /** CORS origin allowlist (comma-separated). Defaults to '*' in dev. */
+  corsOrigin: string[];
 }
 
 function stripTrailingSlash(s: string): string {
@@ -226,6 +228,28 @@ function intEnv(raw: string | undefined, fallback: number): number {
   return Number.isNaN(n) ? fallback : n;
 }
 
+function parseCorsOrigin(env: NodeJS.ProcessEnv): string[] {
+  const raw = env.CORS_ORIGIN || '';
+  if (!raw) {
+    if (env.NODE_ENV === 'production') {
+      throw new Error(
+        'CORS_ORIGIN must be set in production (comma-separated origins)',
+      );
+    }
+    return ['*'];
+  }
+  const origins = raw
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (env.NODE_ENV === 'production' && origins.includes('*')) {
+    throw new Error(
+      'CORS_ORIGIN must not contain "*" in production — list explicit origins',
+    );
+  }
+  return origins;
+}
+
 export default (): { app: AppConfig } => ({
   app: {
     domoInstanceUrl: process.env.DOMO_INSTANCE_URL || '',
@@ -288,5 +312,6 @@ export default (): { app: AppConfig } => ({
     throttleAuthIpTtl: intEnv(process.env.THROTTLE_AUTH_IP_TTL, 60_000),
     throttleConsumeLimit: intEnv(process.env.THROTTLE_CONSUME_LIMIT, 20),
     throttleConsumeTtl: intEnv(process.env.THROTTLE_CONSUME_TTL, 60_000),
+    corsOrigin: parseCorsOrigin(process.env),
   },
 });
