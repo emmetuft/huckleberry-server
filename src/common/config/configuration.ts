@@ -221,6 +221,11 @@ function parseTransportOverrides(
   return overrides;
 }
 
+function intEnv(raw: string | undefined, fallback: number): number {
+  const n = parseInt(raw ?? '', 10);
+  return Number.isNaN(n) ? fallback : n;
+}
+
 export default (): { app: AppConfig } => ({
   app: {
     domoInstanceUrl: process.env.DOMO_INSTANCE_URL || '',
@@ -275,34 +280,13 @@ export default (): { app: AppConfig } => ({
     devInstanceScopes:
       process.env.DEV_INSTANCE_SCOPES ||
       'ai:read ai:execute identity:read dataset:data:read',
-    throttleGlobalLimit: parseInt(
-      process.env.THROTTLE_GLOBAL_LIMIT || '200',
-      10,
-    ),
-    throttleGlobalTtl: parseInt(process.env.THROTTLE_GLOBAL_TTL || '60000', 10),
-    throttleAuthEmailLimit: parseInt(
-      process.env.THROTTLE_AUTH_EMAIL_LIMIT || '3',
-      10,
-    ),
-    throttleAuthEmailTtl: parseInt(
-      process.env.THROTTLE_AUTH_EMAIL_TTL || '900000',
-      10,
-    ),
-    throttleAuthIpLimit: parseInt(
-      process.env.THROTTLE_AUTH_IP_LIMIT || '10',
-      10,
-    ),
-    throttleAuthIpTtl: parseInt(
-      process.env.THROTTLE_AUTH_IP_TTL || '60000',
-      10,
-    ),
-    throttleConsumeLimit: parseInt(
-      process.env.THROTTLE_CONSUME_LIMIT || '20',
-      10,
-    ),
-    throttleConsumeTtl: parseInt(
-      process.env.THROTTLE_CONSUME_TTL || '60000',
-      10,
-    ),
+    throttleGlobalLimit: intEnv(process.env.THROTTLE_GLOBAL_LIMIT, 200),
+    throttleGlobalTtl: intEnv(process.env.THROTTLE_GLOBAL_TTL, 60_000),
+    throttleAuthEmailLimit: intEnv(process.env.THROTTLE_AUTH_EMAIL_LIMIT, 3),
+    throttleAuthEmailTtl: intEnv(process.env.THROTTLE_AUTH_EMAIL_TTL, 900_000),
+    throttleAuthIpLimit: intEnv(process.env.THROTTLE_AUTH_IP_LIMIT, 10),
+    throttleAuthIpTtl: intEnv(process.env.THROTTLE_AUTH_IP_TTL, 60_000),
+    throttleConsumeLimit: intEnv(process.env.THROTTLE_CONSUME_LIMIT, 20),
+    throttleConsumeTtl: intEnv(process.env.THROTTLE_CONSUME_TTL, 60_000),
   },
 });
