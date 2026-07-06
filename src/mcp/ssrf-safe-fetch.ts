@@ -30,12 +30,38 @@ export async function ssrfSafeFetch(
 
   const response = await fetch(url, { ...init, redirect: 'error' });
 
-  const ab = await response.arrayBuffer();
-  if (ab.byteLength > MAX_RESPONSE_BYTES) {
-    throw new BadRequestException('response_too_large');
+  // Stream the body and abort early if it exceeds MAX_RESPONSE_BYTES.
+  // This prevents a malicious server from exhausting process memory.
+  const reader = response.body?.getReader();
+  if (!reader) {
+    return new Response(null, {
+      status: response.status,
+      headers: response.headers,
+    });
   }
 
-  return new Response(ab, {
+  const chunks: Uint8Array[] = [];
+  let totalBytes = 0;
+
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    totalBytes += value.byteLength;
+    if (totalBytes > MAX_RESPONSE_BYTES) {
+      await reader.cancel();
+      throw new BadRequestException('response_too_large');
+    }
+    chunks.push(value);
+  }
+
+  const body = new Uint8Array(totalBytes);
+  let offset = 0;
+  for (const chunk of chunks) {
+    body.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+
+  return new Response(body, {
     status: response.status,
     headers: response.headers,
   });
