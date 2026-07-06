@@ -6,6 +6,7 @@ import {
   HttpCode,
   HttpStatus,
   Inject,
+  Logger,
   Post,
   Query,
   Req,
@@ -14,6 +15,7 @@ import {
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { ApiTags } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import { AuthService } from './auth.service.js';
 import { RequestSigninDto } from './dto/request-signin.dto.js';
 import { SignupDto } from './dto/signup.dto.js';
@@ -24,6 +26,7 @@ import type { HuckleberryPrincipal } from './types.js';
 import { SessionAuthGuard } from '../common/auth/session-auth.guard.js';
 import { Public } from '../common/auth/decorators/public.decorator.js';
 import { DomoLinkService } from '../common/auth/domo-link/domo-link.service.js';
+import { AuthRateLimitGuard } from './guards/throttler.guard.js';
 
 const SESSION_COOKIE = 'hb_session';
 const CSRF_COOKIE = 'csrf_token';
@@ -32,6 +35,8 @@ const CSRF_COOKIE = 'csrf_token';
 @Controller('auth')
 @UseGuards(SessionAuthGuard)
 export class AuthController {
+  private readonly logger = new Logger(AuthController.name);
+
   constructor(
     private readonly auth: AuthService,
     private readonly signup: SignupService,
@@ -52,6 +57,7 @@ export class AuthController {
   @Public()
   @Post('signup')
   @HttpCode(HttpStatus.ACCEPTED)
+  @UseGuards(AuthRateLimitGuard)
   async signupRequest(
     @Body() dto: SignupDto,
     @Req() req: Request,
@@ -61,7 +67,11 @@ export class AuthController {
       path: dto.path,
       instanceUrl: dto.instanceUrl,
     });
-    await this.auth.requestMagicLink(dto.email, ip);
+    // Fire-and-forget: both known and unknown email paths return at the same
+    // point in time (after ensureUser), preventing timing-based email enumeration.
+    this.auth
+      .requestMagicLink(dto.email, ip)
+      .catch((err: unknown) => this.logger.error(err));
     return { status: 'accepted' };
   }
 
@@ -74,17 +84,22 @@ export class AuthController {
   @Public()
   @Post('signin/request')
   @HttpCode(HttpStatus.ACCEPTED)
+  @UseGuards(AuthRateLimitGuard)
   async requestSignin(
     @Body() dto: RequestSigninDto,
     @Req() req: Request,
   ): Promise<{ status: 'accepted' }> {
-    const ip = readClientIp(req);
-    await this.auth.requestMagicLink(dto.email, ip);
+    // Fire-and-forget: both known and unknown email paths return immediately,
+    // preventing timing-based email enumeration.
+    this.auth
+      .requestMagicLink(dto.email, readClientIp(req))
+      .catch((err: unknown) => this.logger.error(err));
     return { status: 'accepted' };
   }
 
   @Public()
   @Get('signin')
+  @Throttle({ consume: {} })
   async consumeSignin(
     @Query('token') token: string | string[] | undefined,
     @Res({ passthrough: true }) res: Response,

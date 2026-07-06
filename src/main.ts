@@ -46,6 +46,7 @@ async function bootstrap() {
   }
 
   const app = await NestFactory.create(AppModule, { bodyParser: false });
+  app.set('trust proxy', 1);
   app.use(json({ limit: '10mb' }));
 
   app.setGlobalPrefix('api', {

@@ -147,6 +147,18 @@ export interface AppConfig {
   devInstanceOAuthClientId: string;
   devInstanceOAuthClientSecret: string;
   devInstanceScopes: string;
+  /** Rate limiting — global default (all routes, IP-based). */
+  throttleGlobalLimit: number;
+  throttleGlobalTtl: number;
+  /** Rate limiting — auth email-based (signup + signin/request). */
+  throttleAuthEmailLimit: number;
+  throttleAuthEmailTtl: number;
+  /** Rate limiting — auth IP-based (signup + signin/request). */
+  throttleAuthIpLimit: number;
+  throttleAuthIpTtl: number;
+  /** Rate limiting — consume (GET /auth/signin). */
+  throttleConsumeLimit: number;
+  throttleConsumeTtl: number;
 }
 
 function stripTrailingSlash(s: string): string {
@@ -263,5 +275,34 @@ export default (): { app: AppConfig } => ({
     devInstanceScopes:
       process.env.DEV_INSTANCE_SCOPES ||
       'ai:read ai:execute identity:read dataset:data:read',
+    throttleGlobalLimit: parseInt(
+      process.env.THROTTLE_GLOBAL_LIMIT || '200',
+      10,
+    ),
+    throttleGlobalTtl: parseInt(process.env.THROTTLE_GLOBAL_TTL || '60000', 10),
+    throttleAuthEmailLimit: parseInt(
+      process.env.THROTTLE_AUTH_EMAIL_LIMIT || '3',
+      10,
+    ),
+    throttleAuthEmailTtl: parseInt(
+      process.env.THROTTLE_AUTH_EMAIL_TTL || '900000',
+      10,
+    ),
+    throttleAuthIpLimit: parseInt(
+      process.env.THROTTLE_AUTH_IP_LIMIT || '10',
+      10,
+    ),
+    throttleAuthIpTtl: parseInt(
+      process.env.THROTTLE_AUTH_IP_TTL || '60000',
+      10,
+    ),
+    throttleConsumeLimit: parseInt(
+      process.env.THROTTLE_CONSUME_LIMIT || '20',
+      10,
+    ),
+    throttleConsumeTtl: parseInt(
+      process.env.THROTTLE_CONSUME_TTL || '60000',
+      10,
+    ),
   },
 });

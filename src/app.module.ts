@@ -1,10 +1,12 @@
 import { Module } from '@nestjs/common';
-import { APP_INTERCEPTOR } from '@nestjs/core';
-import { ConfigModule } from '@nestjs/config';
+import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
+import { ConfigModule, ConfigService } from '@nestjs/config';
+import { ThrottlerModule } from '@nestjs/throttler';
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { join } from 'node:path';
 import { DomoContextInterceptor } from './common/auth/domo-context.interceptor.js';
-import configuration from './common/config/configuration.js';
+import configuration, { type AppConfig } from './common/config/configuration.js';
+import { HbThrottlerGuard } from './auth/guards/throttler.guard.js';
 import { AuthModule } from './common/auth/auth.module.js';
 import { DomoLinkModule } from './common/auth/domo-link/domo-link.module.js';
 import { HuckleberryAuthModule } from './auth/auth.module.js';
@@ -30,6 +32,16 @@ import { WorkflowsModule } from './workflows/workflows.module.js';
       isGlobal: true,
       load: [configuration],
       envFilePath: [`.env.${process.env.DOMO_TARGET || 'dev'}`, '.env'],
+    }),
+    ThrottlerModule.forRootAsync({
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => {
+        const app = config.get<AppConfig>('app')!;
+        return [
+          { name: 'default', ttl: app.throttleGlobalTtl,  limit: app.throttleGlobalLimit },
+          { name: 'consume', ttl: app.throttleConsumeTtl, limit: app.throttleConsumeLimit },
+        ];
+      },
     }),
     ServeStaticModule.forRoot({
       rootPath: join(process.cwd(), 'public'),
@@ -61,6 +73,10 @@ import { WorkflowsModule } from './workflows/workflows.module.js';
     WorkflowsModule,
   ],
   providers: [
+    {
+      provide: APP_GUARD,
+      useClass: HbThrottlerGuard,
+    },
     {
       provide: APP_INTERCEPTOR,
       useClass: DomoContextInterceptor,
