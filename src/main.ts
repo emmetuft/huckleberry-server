@@ -64,13 +64,15 @@ async function bootstrap() {
     }),
   );
 
-  // CORS
+  // CORS — wildcard is incompatible with credentials per spec, so only
+  // enable credentials when an explicit allowlist is configured.
   const config = app.get(ConfigService);
   const appConfig = config.getOrThrow<AppConfig>('app');
   const origins = appConfig.corsOrigin;
+  const isWildcard = origins.includes('*');
   app.enableCors({
-    origin: origins.includes('*') ? true : origins,
-    credentials: true,
+    origin: isWildcard ? '*' : origins,
+    credentials: !isWildcard,
   });
 
   app.setGlobalPrefix('api', {

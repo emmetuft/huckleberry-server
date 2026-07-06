@@ -238,10 +238,16 @@ function parseCorsOrigin(env: NodeJS.ProcessEnv): string[] {
     }
     return ['*'];
   }
-  return raw
+  const origins = raw
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean);
+  if (env.NODE_ENV === 'production' && origins.includes('*')) {
+    throw new Error(
+      'CORS_ORIGIN must not contain "*" in production — list explicit origins',
+    );
+  }
+  return origins;
 }
 
 export default (): { app: AppConfig } => ({
