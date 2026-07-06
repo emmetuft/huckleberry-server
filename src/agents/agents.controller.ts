@@ -17,16 +17,17 @@ import { ApiTags } from '@nestjs/swagger';
 import type { Response as ExpressResponse } from 'express';
 import { AgentsService } from './agents.service.js';
 import { AgentDto } from './dto/agent.dto.js';
+import { UpdateAgentDto } from './dto/update-agent.dto.js';
 import { SearchAgentsDto } from './dto/search-agents.dto.js';
 import { AgentContextUpdateDto } from './dto/agent-context-update.dto.js';
 import { ExecuteAgentDto } from './dto/execute-agent.dto.js';
 import { ResumeAgentDto } from './dto/resume-agent.dto.js';
-import { DomoAuthGuard } from '../common/guards/domo-auth.guard.js';
+import { SessionAuthGuard } from '../common/auth/session-auth.guard.js';
 import { AgentInclude } from '../common/types/domo-common.types.js';
 
 @ApiTags('Agents')
 @Controller('agents')
-@UseGuards(DomoAuthGuard)
+@UseGuards(SessionAuthGuard)
 export class AgentsController {
   constructor(private readonly agentsService: AgentsService) {}
 
@@ -64,7 +65,7 @@ export class AgentsController {
   }
 
   @Put(':agentId')
-  update(@Param('agentId') agentId: string, @Body() dto: AgentDto) {
+  update(@Param('agentId') agentId: string, @Body() dto: UpdateAgentDto) {
     return this.agentsService.update(agentId, dto);
   }
 

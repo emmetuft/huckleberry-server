@@ -5,7 +5,7 @@ import { AuthService } from './auth.service';
 import { SessionService } from './session.service';
 import { SignupService } from './signup.service';
 import { USER_REPOSITORY } from './user.repository';
-import { HuckleberryAuthGuard } from '../common/auth/huckleberry-auth.guard';
+import { SessionAuthGuard } from '../common/auth/session-auth.guard';
 import { DomoLinkService } from '../common/auth/domo-link/domo-link.service';
 import type { HuckleberryPrincipal } from './types';
 import type { Request, Response } from 'express';
@@ -44,7 +44,7 @@ describe('AuthController', () => {
         { provide: USER_REPOSITORY, useValue: {} },
       ],
     })
-      .overrideGuard(HuckleberryAuthGuard)
+      .overrideGuard(SessionAuthGuard)
       .useValue({ canActivate: () => true })
       .compile();
 

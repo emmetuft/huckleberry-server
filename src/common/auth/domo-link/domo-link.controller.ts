@@ -15,7 +15,7 @@ import { ApiTags } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
 import { IsOptional, IsUrl, MaxLength } from 'class-validator';
 import type { AppConfig } from '../../config/configuration.js';
-import { HuckleberryAuthGuard } from '../huckleberry-auth.guard.js';
+import { SessionAuthGuard } from '../session-auth.guard.js';
 import { DomoLinkService } from './domo-link.service.js';
 import type { HuckleberryPrincipal } from '../../../auth/types.js';
 
@@ -43,7 +43,7 @@ class StartLinkDto {
  */
 @ApiTags('Auth — Domo linkage')
 @Controller('auth/domo')
-@UseGuards(HuckleberryAuthGuard)
+@UseGuards(SessionAuthGuard)
 export class DomoLinkController {
   private readonly successRedirect: string;
   private readonly failureRedirect: string;

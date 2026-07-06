@@ -49,8 +49,7 @@ import { DomoExceptionFilter } from '../src/common/filters/domo-exception.filter
 import { ResponseEnvelopeInterceptor } from '../src/common/interceptors/response-envelope.interceptor';
 import { DomoContextInterceptor } from '../src/common/auth/domo-context.interceptor';
 import { domoRequestContext } from '../src/common/auth/domo-request-context';
-import { DomoAuthGuard } from '../src/common/guards/domo-auth.guard';
-import { HuckleberryAuthGuard } from '../src/common/auth/huckleberry-auth.guard';
+import { SessionAuthGuard } from '../src/common/auth/session-auth.guard';
 
 /**
  * Test interceptor that reads tenant identity from request headers instead
@@ -105,9 +104,7 @@ describe('Authorization scoping (e2e)', () => {
     })
       .overrideProvider(DomoContextInterceptor)
       .useClass(TestTenantInterceptor)
-      .overrideGuard(DomoAuthGuard)
-      .useClass(AlwaysAllowGuard)
-      .overrideGuard(HuckleberryAuthGuard)
+      .overrideGuard(SessionAuthGuard)
       .useClass(AlwaysAllowGuard)
       .compile();
 

@@ -2,7 +2,7 @@ import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import type { Persona } from '../common/types/persona.types.js';
 import { PersonasService } from './personas.service.js';
-import { DomoAuthGuard } from '../common/guards/domo-auth.guard.js';
+import { SessionAuthGuard } from '../common/auth/session-auth.guard.js';
 
 /**
  * Backward-compatible persona routes matching the frontend's storage.ts:
@@ -13,7 +13,7 @@ import { DomoAuthGuard } from '../common/guards/domo-auth.guard.js';
  */
 @ApiTags('Personas')
 @Controller('persona')
-@UseGuards(DomoAuthGuard)
+@UseGuards(SessionAuthGuard)
 export class PersonaCompatController {
   constructor(private readonly personasService: PersonasService) {}
 

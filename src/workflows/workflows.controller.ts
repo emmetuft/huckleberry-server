@@ -1,12 +1,12 @@
 import { Body, Controller, Post, UseGuards } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { WorkflowsService } from './workflows.service.js';
-import { DomoAuthGuard } from '../common/guards/domo-auth.guard.js';
+import { SessionAuthGuard } from '../common/auth/session-auth.guard.js';
 import { SearchDto } from '../common/dto/search.dto.js';
 
 @ApiTags('Workflows')
 @Controller('workflows')
-@UseGuards(DomoAuthGuard)
+@UseGuards(SessionAuthGuard)
 export class WorkflowsController {
   constructor(private readonly workflowsService: WorkflowsService) {}
 

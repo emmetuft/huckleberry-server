@@ -21,7 +21,8 @@ Switch to CIMD (Client ID Metadata Document, `draft-ietf-oauth-client-id-metadat
 1. **Gatekeeper allowlist:** `https://huckleberry-dev.domotech.io` (dev3) and `https://huckleberry.ai` (prod) must be added to `oauth.server.cimd.allowed-origins` on their respective Gatekeeper instances. This is a Config Central change — coordinate with the Gatekeeper team.
 
 2. **Gatekeeper version:** The target Gatekeeper instance must advertise `client_id_metadata_document_supported: true` in its RFC 8414 discovery response. Verify with:
-   ```
+
+   ```shell
    GET https://dev3.domo.com/.well-known/oauth-authorization-server
    ```
 
@@ -60,8 +61,9 @@ Key rules:
 
 In `buildAuthorizeUrl()` and `exchangeCode()`, pass the metadata document URL as `client_id` instead of the stored DCR `client_id`.
 
-```
+```javascript
 client_id = https://huckleberry-dev.domotech.io/.well-known/oauth-client
+
 ```
 
 Gatekeeper detects the URL shape (`scheme=https`, non-empty path) and enters CIMD handling instead of client-store lookup.

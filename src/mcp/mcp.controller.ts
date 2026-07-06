@@ -18,7 +18,7 @@ import { CreateMcpServerDto } from './dto/create-mcp-server.dto.js';
 import { UpdateMcpServerDto } from './dto/update-mcp-server.dto.js';
 import { ExecuteToolDto } from './dto/execute-tool.dto.js';
 import { ToggleServerDto } from './dto/toggle-server.dto.js';
-import { DomoAuthGuard } from '../common/guards/domo-auth.guard.js';
+import { SessionAuthGuard } from '../common/auth/session-auth.guard.js';
 import type { McpServerConfig } from '../common/types/mcp.types.js';
 
 function redactCredentials(
@@ -32,7 +32,7 @@ function redactCredentials(
 
 @ApiTags('MCP')
 @Controller('mcp')
-@UseGuards(DomoAuthGuard)
+@UseGuards(SessionAuthGuard)
 export class McpController {
   constructor(private readonly mcpService: McpService) {}
 

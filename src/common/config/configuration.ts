@@ -6,7 +6,7 @@ export interface AppConfig {
    * from `req.user.issuer` per request.
    *
    * This value is kept as the dev-mode fallback for two cases:
-   *  - `DomoAuthGuard` (legacy `AUTH_PROVIDER=dev`) — no token to forward.
+   *  - `SessionAuthGuard` (dev bypass via x-domo-developer-token) — no token to forward.
    *  - Local containers and remote dev instances pointed at by a single env.
    */
   domoInstanceUrl: string;

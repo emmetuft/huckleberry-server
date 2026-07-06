@@ -1,11 +1,11 @@
 import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { PeopleService } from './people.service.js';
-import { DomoAuthGuard } from '../common/guards/domo-auth.guard.js';
+import { SessionAuthGuard } from '../common/auth/session-auth.guard.js';
 
 @ApiTags('People')
 @Controller()
-@UseGuards(DomoAuthGuard)
+@UseGuards(SessionAuthGuard)
 export class PeopleController {
   constructor(private readonly peopleService: PeopleService) {}
 

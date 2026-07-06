@@ -3,7 +3,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
 import { AgentsController } from './agents.controller';
 import { AgentsService } from './agents.service';
-import { DomoAuthGuard } from '../common/guards/domo-auth.guard';
+import { SessionAuthGuard } from '../common/auth/session-auth.guard';
 import { Response as ExpressResponse } from 'express';
 import {
   CustomAgent,
@@ -50,7 +50,7 @@ describe('AgentsController', () => {
         },
       ],
     })
-      .overrideGuard(DomoAuthGuard)
+      .overrideGuard(SessionAuthGuard)
       .useValue({ canActivate: () => true })
       .compile();
 

@@ -9,6 +9,7 @@ import {
 } from '../common/types/domo-agent.types.js';
 import { AgentInclude, AgentType } from '../common/types/domo-common.types.js';
 import { AgentDto } from './dto/agent.dto.js';
+import { UpdateAgentDto } from './dto/update-agent.dto.js';
 import { AgentContextUpdateDto } from './dto/agent-context-update.dto.js';
 import { SearchAgentsDto } from './dto/search-agents.dto.js';
 import { ExecuteAgentDto } from './dto/execute-agent.dto.js';
@@ -81,7 +82,7 @@ export class AgentsService {
     return this.domo.get<CustomAgent>(`${AGENTS_BASE}/${agentId}`, { query });
   }
 
-  async update(agentId: string, dto: AgentDto): Promise<CustomAgent> {
+  async update(agentId: string, dto: UpdateAgentDto): Promise<CustomAgent> {
     return this.domo.put<CustomAgent>(`${AGENTS_BASE}/${agentId}`, dto);
   }
 
@@ -90,7 +91,19 @@ export class AgentsService {
   }
 
   async search(dto: SearchAgentsDto): Promise<SearchAgentsResponse> {
-    return this.domo.post<SearchAgentsResponse>(`${AGENTS_BASE}/search`, dto);
+    const { sort, order, search, sortFieldMap, searchFieldMap, ...rest } = dto;
+    const body: Record<string, unknown> = { ...rest };
+    if (sort && order) {
+      // Object.create(null) has no prototype — safe to use user-supplied sort as key.
+      const map = Object.create(null) as Record<string, string>;
+      map[sort] = order;
+      body.sortFieldMap = map;
+    } else if (sortFieldMap) {
+      body.sortFieldMap = sortFieldMap;
+    }
+    if (search) body.searchFieldMap = search;
+    else if (searchFieldMap) body.searchFieldMap = searchFieldMap;
+    return this.domo.post<SearchAgentsResponse>(`${AGENTS_BASE}/search`, body);
   }
 
   async updateContext(
