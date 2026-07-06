@@ -17,14 +17,6 @@ export class LoggingInterceptor implements NestInterceptor {
   private readonly isDev: boolean;
   private readonly verbose: boolean;
 
-  private static readonly REDACTED_HEADERS = new Set([
-    'authorization',
-    'cookie',
-    'x-csrf-token',
-    'x-admin-api-key',
-    'x-domo-developer-token',
-  ]);
-
   constructor(config: ConfigService) {
     const appConfig = config.get<AppConfig>('app');
     this.isDev = appConfig?.nodeEnv === 'development';

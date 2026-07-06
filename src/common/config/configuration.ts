@@ -230,7 +230,14 @@ function intEnv(raw: string | undefined, fallback: number): number {
 
 function parseCorsOrigin(env: NodeJS.ProcessEnv): string[] {
   const raw = env.CORS_ORIGIN || '';
-  if (!raw) return ['*'];
+  if (!raw) {
+    if (env.NODE_ENV === 'production') {
+      throw new Error(
+        'CORS_ORIGIN must be set in production (comma-separated origins)',
+      );
+    }
+    return ['*'];
+  }
   return raw
     .split(',')
     .map((s) => s.trim())
