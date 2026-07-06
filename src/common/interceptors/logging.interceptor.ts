@@ -17,6 +17,14 @@ export class LoggingInterceptor implements NestInterceptor {
   private readonly isDev: boolean;
   private readonly verbose: boolean;
 
+  private static readonly REDACTED_HEADERS = new Set([
+    'authorization',
+    'cookie',
+    'x-csrf-token',
+    'x-admin-api-key',
+    'x-domo-developer-token',
+  ]);
+
   constructor(config: ConfigService) {
     const appConfig = config.get<AppConfig>('app');
     this.isDev = appConfig?.nodeEnv === 'development';
@@ -36,7 +44,9 @@ export class LoggingInterceptor implements NestInterceptor {
         parts.push(`  query: ${JSON.stringify(req.query)}`);
       }
       if (req.body && Object.keys(req.body as Record<string, unknown>).length) {
-        parts.push(`  body:  ${JSON.stringify(req.body)}`);
+        parts.push(
+          `  body:  ${JSON.stringify(LoggingInterceptor.redactBody(req.body as Record<string, unknown>))}`,
+        );
       }
       this.logger.log(parts.join('\n'));
     }
@@ -56,5 +66,27 @@ export class LoggingInterceptor implements NestInterceptor {
         },
       }),
     );
+  }
+
+  private static readonly REDACTED_BODY_KEYS = new Set([
+    'token',
+    'password',
+    'secret',
+    'bearerToken',
+    'clientSecret',
+    'refreshToken',
+    'accessToken',
+  ]);
+
+  private static redactBody(
+    body: Record<string, unknown>,
+  ): Record<string, unknown> {
+    const redacted: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(body)) {
+      redacted[key] = LoggingInterceptor.REDACTED_BODY_KEYS.has(key)
+        ? '[REDACTED]'
+        : value;
+    }
+    return redacted;
   }
 }

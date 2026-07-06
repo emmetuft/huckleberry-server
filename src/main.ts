@@ -5,6 +5,7 @@ import { ConfigService } from '@nestjs/config';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { execSync } from 'node:child_process';
 import { json } from 'express';
+import helmet from 'helmet';
 import { AppModule } from './app.module.js';
 import { DomoExceptionFilter } from './common/filters/domo-exception.filter.js';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor.js';
@@ -52,6 +53,26 @@ async function bootstrap() {
   app.set('trust proxy', 1);
   app.use(json({ limit: '10mb' }));
 
+  // Security headers
+  app.use(
+    helmet({
+      hsts: { maxAge: 31_536_000, includeSubDomains: true },
+      contentSecurityPolicy: {
+        directives: { frameAncestors: ["'none'"] },
+      },
+      referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
+    }),
+  );
+
+  // CORS
+  const config = app.get(ConfigService);
+  const appConfig = config.getOrThrow<AppConfig>('app');
+  const origins = appConfig.corsOrigin;
+  app.enableCors({
+    origin: origins.includes('*') ? true : origins,
+    credentials: true,
+  });
+
   app.setGlobalPrefix('api', {
     exclude: [{ path: 'health', method: RequestMethod.ALL }],
   });
@@ -67,34 +88,35 @@ async function bootstrap() {
 
   app.useGlobalFilters(new DomoExceptionFilter());
 
-  const config = app.get(ConfigService);
   app.useGlobalInterceptors(
     new LoggingInterceptor(config),
     new ResponseEnvelopeInterceptor(),
   );
 
-  // Swagger / OpenAPI
-  const swaggerConfig = new DocumentBuilder()
-    .setTitle('Huckleberry Server')
-    .setDescription(
-      'BFF for the Huckleberry AI platform — agents, ontology, context, personas, MCP',
-    )
-    .setVersion('0.1.0')
-    .addApiKey(
-      { type: 'apiKey', name: 'x-domo-developer-token', in: 'header' },
-      'domo-dev-token',
-    )
-    .addApiKey(
-      { type: 'apiKey', name: 'x-eps-auth-token', in: 'header' },
-      'eps-auth-token',
-    )
-    .build();
-  const document = SwaggerModule.createDocument(app, swaggerConfig);
-  SwaggerModule.setup('docs', app, document);
+  // Swagger / OpenAPI — dev only
+  if (appConfig.nodeEnv !== 'production') {
+    const swaggerConfig = new DocumentBuilder()
+      .setTitle('Huckleberry Server')
+      .setDescription(
+        'BFF for the Huckleberry AI platform — agents, ontology, context, personas, MCP',
+      )
+      .setVersion('0.1.0')
+      .addApiKey(
+        { type: 'apiKey', name: 'x-domo-developer-token', in: 'header' },
+        'domo-dev-token',
+      )
+      .addApiKey(
+        { type: 'apiKey', name: 'x-eps-auth-token', in: 'header' },
+        'eps-auth-token',
+      )
+      .build();
+    const document = SwaggerModule.createDocument(app, swaggerConfig);
+    SwaggerModule.setup('docs', app, document);
+  }
 
-  const port = config.get<AppConfig>('app')?.port ?? 3000;
+  const port = appConfig.port ?? 3000;
 
-  if (config.get<AppConfig>('app')?.nodeEnv === 'development') {
+  if (appConfig.nodeEnv === 'development') {
     freePort(port);
   }
 
