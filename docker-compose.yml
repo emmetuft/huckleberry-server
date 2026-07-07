@@ -45,6 +45,7 @@ services:
   # LocalStack — KMS-only, for local integration testing against a real KMS API.
   # Disabled by default (profile: kms). Start with: pnpm infra:kms
   # Bypass entirely by keeping KMS_KEY_ARN unset and using DEV_ENCRYPTION_KEY.
+  # Note: state is in-memory — re-run `pnpm infra:kms` after a restart to get a fresh ARN.
   localstack:
     profiles: [kms]
     image: localstack/localstack:latest
@@ -54,11 +55,7 @@ services:
       - '4566:4566'
     environment:
       SERVICES: kms
-      PERSISTENCE: '1'
       DEBUG: '0'
-    volumes:
-      - localstack-data:/var/lib/localstack
 
 volumes:
   mysql-data:
-  localstack-data:
