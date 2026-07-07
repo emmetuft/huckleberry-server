@@ -114,7 +114,11 @@ export class EnvelopeEncryptionService {
   private async getOrFetchDek(dekId: string): Promise<Buffer> {
     const now = Date.now();
     const cached = this.dekCache.get(dekId);
-    if (cached && cached.expiresAt > now) return cached.key;
+    if (cached) {
+      if (cached.expiresAt > now) return cached.key;
+      cached.key.fill(0); // zero expired key material before GC
+      this.dekCache.delete(dekId);
+    }
 
     if (!this.kmsClient) throw new Error('KMS client not initialised');
 
@@ -134,9 +138,12 @@ export class EnvelopeEncryptionService {
 
   private evictIfFull(): void {
     if (this.dekCache.size < EnvelopeEncryptionService.MAX_CACHE) return;
-    // Evict the oldest entry (Map preserves insertion order)
+    // FIFO eviction — Map preserves insertion order; cache hits do not refresh position
     const oldest = this.dekCache.keys().next().value as string | undefined;
-    if (oldest !== undefined) this.dekCache.delete(oldest);
+    if (oldest !== undefined) {
+      this.dekCache.get(oldest)?.key.fill(0); // zero key material before GC
+      this.dekCache.delete(oldest);
+    }
   }
 
   private aesgcmEncrypt(plaintext: Buffer, key: Buffer, iv: Buffer): Buffer {

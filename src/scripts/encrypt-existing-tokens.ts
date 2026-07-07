@@ -34,6 +34,26 @@ async function main() {
     process.exit(1);
   }
 
+  // Fail fast if no durable key is configured — encryption under an ephemeral
+  // key permanently destroys all tokens at process exit.
+  if (!process.env.KMS_KEY_ARN && !process.env.DEV_ENCRYPTION_KEY) {
+    console.error(
+      'ERROR: Neither KMS_KEY_ARN nor DEV_ENCRYPTION_KEY is set.\n' +
+        'Refusing to run — tokens would be encrypted under an ephemeral key\n' +
+        'that is discarded at process exit, making them permanently undecryptable.',
+    );
+    process.exit(1);
+  }
+
+  if (process.env.NODE_ENV === 'production' && !process.env.KMS_KEY_ARN) {
+    console.error(
+      'ERROR: Running in production without KMS_KEY_ARN.\n' +
+        "Refusing to run — this would write refresh_dek_id='local' on all rows,\n" +
+        'which fails decryption when the server later boots with KMS mode active.',
+    );
+    process.exit(1);
+  }
+
   const port = parseInt(process.env.DATABASE_PORT || '3306', 10);
   const user = process.env.DATABASE_USER ?? 'huckleberry_app';
   const database = process.env.DATABASE_NAME ?? 'huckleberry';

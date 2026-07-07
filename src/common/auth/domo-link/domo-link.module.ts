@@ -88,5 +88,5 @@ export class DomoLinkModule {}
 
 function useMysql(config: ConfigService): boolean {
   const app = config.get<AppConfig>('app');
-  return !!app?.databaseUrl;
+  return !!(app?.databaseUrl || app?.databaseHost);
 }

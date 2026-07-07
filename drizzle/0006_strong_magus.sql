@@ -1,0 +1,1 @@
+ALTER TABLE `domo_oauth_tokens` MODIFY COLUMN `refresh_token` varchar(3000) NOT NULL;

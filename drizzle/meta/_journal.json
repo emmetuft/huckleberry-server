@@ -43,6 +43,13 @@
       "when": 1783436097553,
       "tag": "0005_volatile_wild_child",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "5",
+      "when": 1783440102951,
+      "tag": "0006_strong_magus",
+      "breakpoints": true
     }
   ]
 }
