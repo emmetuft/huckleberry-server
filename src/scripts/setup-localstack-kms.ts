@@ -28,19 +28,27 @@ const client = new KMSClient({
   credentials: { accessKeyId: 'test', secretAccessKey: 'test' },
 });
 
-async function waitForLocalStack(maxAttempts = 30): Promise<void> {
+async function waitForLocalStack(maxAttempts = 90): Promise<void> {
   for (let i = 0; i < maxAttempts; i++) {
     try {
-      await client.send(new ListAliasesCommand({ Limit: 1 }));
-      return;
+      const res = await fetch('http://localhost:4566/_localstack/health');
+      if (res.ok) {
+        const body = (await res.json()) as Record<string, unknown>;
+        const services = body.services as Record<string, string> | undefined;
+        if (services?.kms === 'available' || services?.kms === 'running')
+          return;
+      }
     } catch {
-      if (i === maxAttempts - 1)
-        throw new Error('LocalStack did not become ready after 30 seconds');
-      process.stdout.write('.');
-      await new Promise<void>((r) => {
-        setTimeout(r, 1000);
-      });
+      // not up yet
     }
+    if (i === maxAttempts - 1)
+      throw new Error(
+        `LocalStack did not become ready after ${maxAttempts} seconds`,
+      );
+    process.stdout.write('.');
+    await new Promise<void>((r) => {
+      setTimeout(r, 1000);
+    });
   }
 }
 
