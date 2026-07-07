@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { eq, isNull, sql } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import type { DomoOAuthTokens } from '../../auth/domo-link/types.js';
 import type { DomoTokenStore } from '../../auth/domo-link/token.store.js';
 import { DRIZZLE, type Db } from '../db.module.js';
@@ -76,15 +76,5 @@ export class MysqlDomoTokenStore implements DomoTokenStore {
       scope: row.scope,
       updatedAt: row.updatedAt,
     };
-  }
-
-  /** Exposed for the encrypt-existing-tokens migration script. */
-  hasPlaintextRows(): Promise<boolean> {
-    return this.db
-      .select({ linkId: domoOauthTokens.linkId })
-      .from(domoOauthTokens)
-      .where(isNull(domoOauthTokens.refreshDekId))
-      .limit(1)
-      .then((rows) => rows.length > 0);
   }
 }

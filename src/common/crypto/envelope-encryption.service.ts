@@ -48,6 +48,11 @@ export class EnvelopeEncryptionService {
       this.kmsClient = null;
       if (app.devEncryptionKey) {
         this.localKey = Buffer.from(app.devEncryptionKey, 'hex');
+        if (this.localKey.length !== 32) {
+          throw new Error(
+            `DEV_ENCRYPTION_KEY must decode to 32 bytes (64 hex chars); got ${this.localKey.length}`,
+          );
+        }
       } else {
         this.localKey = randomBytes(32);
         this.logger.warn(

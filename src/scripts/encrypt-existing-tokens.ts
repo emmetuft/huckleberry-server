@@ -16,7 +16,6 @@ import { createPool, type Pool } from 'mysql2/promise';
 import { isNull, eq, and } from 'drizzle-orm';
 import { Signer } from '@aws-sdk/rds-signer';
 import { ConfigService } from '@nestjs/config';
-import configuration from '../common/config/configuration.js';
 import { domoOauthTokens } from '../common/db/schema.js';
 import { EnvelopeEncryptionService } from '../common/crypto/envelope-encryption.service.js';
 import { binaryToUuid } from '../common/db/uuid.js';
@@ -81,9 +80,11 @@ async function main() {
 
   const db = drizzle(pool);
 
-  const cfg = configuration();
   const configService = {
-    get: (_key: string) => cfg.app,
+    get: (_key: string) => ({
+      kmsKeyArn: process.env.KMS_KEY_ARN ?? null,
+      devEncryptionKey: process.env.DEV_ENCRYPTION_KEY ?? '',
+    }),
   } as unknown as ConfigService;
   const crypto = new EnvelopeEncryptionService(configService);
 
