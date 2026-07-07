@@ -254,7 +254,6 @@ Most phases are pure code changes. Only Phase 6 has a hard external blocker:
 - **Decrypt:** `KMS.Decrypt({ CiphertextBlob: wrappedDEK })` → returns plaintext DEK. AES-GCM-decrypt the refresh token.
 - **Caching:** Unwrapped DEKs cached in-memory keyed by `dekId`, 5-min TTL, max 1 000 entries (LRU eviction).
 - **Local dev mode:** `KMS_KEY_ARN` absent → `DEV_ENCRYPTION_KEY` static hex key, no KMS calls. `DEV_ENCRYPTION_KEY` absent → ephemeral key at boot (tokens don't survive restart, warns loudly).
-- **LocalStack testing:** `pnpm infra:kms` starts LocalStack KMS, creates an idempotent key via `alias/huckleberry-dev`, prints `KMS_ENDPOINT` + `KMS_KEY_ARN` to add to `.env`. No AWS credentials needed locally.
 
 **What was built:**
 
