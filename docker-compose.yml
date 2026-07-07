@@ -42,20 +42,5 @@ services:
       MP_SMTP_AUTH_ACCEPT_ANY: 'true'
       MP_SMTP_AUTH_ALLOW_INSECURE: 'true'
 
-  # LocalStack — KMS-only, for local integration testing against a real KMS API.
-  # Disabled by default (profile: kms). Start with: pnpm infra:kms
-  # Bypass entirely by keeping KMS_KEY_ARN unset and using DEV_ENCRYPTION_KEY.
-  # Note: state is in-memory — re-run `pnpm infra:kms` after a restart to get a fresh ARN.
-  localstack:
-    profiles: [kms]
-    image: localstack/localstack:latest
-    container_name: huckleberry-localstack
-    restart: unless-stopped
-    ports:
-      - '4566:4566'
-    environment:
-      SERVICES: kms
-      DEBUG: '0'
-
 volumes:
   mysql-data:

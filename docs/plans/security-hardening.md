@@ -260,14 +260,12 @@ Most phases are pure code changes. Only Phase 6 has a hard external blocker:
 
 1. `src/common/crypto/envelope-encryption.service.ts` — two-mode service (KMS / local dev)
 2. `src/common/crypto/envelope-encryption.service.spec.ts` — 10 tests; all green
-3. `src/common/config/configuration.ts` — `kmsKeyArn`, `devEncryptionKey`, `kmsEndpoint`
+3. `src/common/config/configuration.ts` — `kmsKeyArn`, `devEncryptionKey`
 4. `src/common/db/schema.ts` — nullable `refreshIv` + `refreshDekId` columns
 5. `drizzle/0005_volatile_wild_child.sql` — auto-generated migration
 6. `src/common/db/repositories/mysql-domo-token.store.ts` — encrypt on upsert, decrypt on read, null-dekId fallback for pre-migration rows
 7. `src/main.ts` — boot guard: throws if `production` and `KMS_KEY_ARN` absent
 8. `src/scripts/encrypt-existing-tokens.ts` — one-time idempotent migration script
-9. `src/scripts/setup-localstack-kms.ts` — LocalStack setup script (idempotent via alias)
-10. `docker-compose.yml` — LocalStack service under `profiles: [kms]`
 
 7. **Accepted risk:** `domo_oauth_clients.registration_access_token` is also a stored credential (RFC 7592 — can manage/delete the OAuth client). Not encrypting it here because the CIMD migration will eliminate this table entirely. If CIMD is deferred, revisit.
 

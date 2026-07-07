@@ -149,7 +149,7 @@ These come into play in production but not on your laptop:
 
 - **IAM database auth.** Local MySQL uses password; Aurora uses a 15-minute IAM token signed from the ECS task role.
 - **RDS Proxy.** Local pool talks directly to MySQL; prod goes through a proxy for connection multiplexing.
-- **KMS envelope encryption on `refresh_token`.** Local dev encrypts with a static AES-256-GCM key (`DEV_ENCRYPTION_KEY` in `.env`) — no KMS calls. Production uses per-row DEKs wrapped by AWS KMS. To exercise the real KMS code path locally, run `pnpm infra:kms` (starts LocalStack, prints two env vars to copy into `.env`). Devs who don't need this skip it entirely.
+- **KMS envelope encryption on `refresh_token`.** Local dev encrypts with a static AES-256-GCM key (`DEV_ENCRYPTION_KEY` in `.env`) — no KMS calls. Production uses per-row DEKs wrapped by AWS KMS (flip is a single env var once Adam's key arrives).
 - **Multi-AZ failover, replica lag, deadlock alarms.** Single-node container locally; CloudWatch wiring happens in infra.
 - **Secrets Manager / SSM.** Local uses `.env`; prod fetches via the SDK at boot and on rotation.
 
