@@ -173,6 +173,13 @@ export interface AppConfig {
    * If unset, a random ephemeral key is generated at boot (tokens don't survive restart).
    */
   devEncryptionKey: string;
+  /**
+   * Custom KMS endpoint URL. Set to `http://localhost:4566` when using LocalStack
+   * for local KMS integration testing. Null in production.
+   * When set, `EnvelopeEncryptionService` uses LocalStack-friendly dummy credentials
+   * automatically — no AWS_ACCESS_KEY_ID needed.
+   */
+  kmsEndpoint: string | null;
 }
 
 function stripTrailingSlash(s: string): string {
@@ -327,5 +334,6 @@ export default (): { app: AppConfig } => ({
     corsOrigin: parseCorsOrigin(process.env),
     kmsKeyArn: process.env.KMS_KEY_ARN || null,
     devEncryptionKey: process.env.DEV_ENCRYPTION_KEY || '',
+    kmsEndpoint: process.env.KMS_ENDPOINT || null,
   },
 });

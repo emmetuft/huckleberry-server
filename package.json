@@ -23,6 +23,8 @@
     "infra:up": "podman compose up -d",
     "infra:down": "podman compose down",
     "infra:reset": "podman compose down -v && podman compose up -d",
+    "infra:kms": "podman compose --profile kms up -d && tsx src/scripts/setup-localstack-kms.ts",
+    "infra:kms:down": "podman compose --profile kms down",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:migrate:prod": "tsx src/scripts/migrate-prod.ts",

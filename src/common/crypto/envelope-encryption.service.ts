@@ -42,7 +42,15 @@ export class EnvelopeEncryptionService {
     this.kmsKeyArn = app.kmsKeyArn;
 
     if (this.kmsKeyArn) {
-      this.kmsClient = new KMSClient({});
+      this.kmsClient = new KMSClient(
+        app.kmsEndpoint
+          ? {
+              endpoint: app.kmsEndpoint,
+              region: 'us-east-1',
+              credentials: { accessKeyId: 'test', secretAccessKey: 'test' },
+            }
+          : {},
+      );
       this.localKey = Buffer.alloc(0); // unused in KMS mode
     } else {
       this.kmsClient = null;
