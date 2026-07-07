@@ -121,6 +121,10 @@ export const domoOauthTokens = mysqlTable('domo_oauth_tokens', {
   refreshToken: varchar('refresh_token', { length: 2000 }).notNull(),
   scope: varchar('scope', { length: 1000 }).notNull(),
   updatedAt: datetime('updated_at', { fsp: 3 }).notNull(),
+  /** base64-encoded 12-byte AES-GCM IV. Null until KMS encryption migration runs. */
+  refreshIv: varchar('refresh_iv', { length: 64 }),
+  /** base64(KMS CiphertextBlob) in prod; 'local' in dev. Null = pre-migration plaintext row. */
+  refreshDekId: varchar('refresh_dek_id', { length: 500 }),
 });
 
 /**

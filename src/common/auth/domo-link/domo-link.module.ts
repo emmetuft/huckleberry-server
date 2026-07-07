@@ -22,6 +22,7 @@ import { DbModule, DRIZZLE, type Db } from '../../db/db.module.js';
 import { MysqlLinkRepository } from '../../db/repositories/mysql-link.repository.js';
 import { MysqlDomoTokenStore } from '../../db/repositories/mysql-domo-token.store.js';
 import { MysqlClientCredentialStore } from '../../db/repositories/mysql-client-credential.store.js';
+import { EnvelopeEncryptionService } from '../../crypto/envelope-encryption.service.js';
 import type { AppConfig } from '../../config/configuration.js';
 
 /**
@@ -40,6 +41,7 @@ import type { AppConfig } from '../../config/configuration.js';
     DomoLinkService,
     DomoOAuthClient,
     DomoAuthBroker,
+    EnvelopeEncryptionService,
     {
       provide: LINK_REPOSITORY,
       inject: [ConfigService, DRIZZLE],
@@ -50,10 +52,14 @@ import type { AppConfig } from '../../config/configuration.js';
     },
     {
       provide: DOMO_TOKEN_STORE,
-      inject: [ConfigService, DRIZZLE],
-      useFactory: (config: ConfigService, db: Db | null) =>
+      inject: [ConfigService, DRIZZLE, EnvelopeEncryptionService],
+      useFactory: (
+        config: ConfigService,
+        db: Db | null,
+        crypto: EnvelopeEncryptionService,
+      ) =>
         useMysql(config) && db
-          ? new MysqlDomoTokenStore(db)
+          ? new MysqlDomoTokenStore(db, crypto)
           : new InMemoryDomoTokenStore(),
     },
     { provide: OAUTH_STATE_STORE, useClass: InMemoryOAuthStateStore },

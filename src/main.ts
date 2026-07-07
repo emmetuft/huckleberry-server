@@ -63,6 +63,11 @@ async function bootstrap() {
   // enable credentials when an explicit allowlist is configured.
   const config = app.get(ConfigService);
   const appConfig = config.getOrThrow<AppConfig>('app');
+
+  if (appConfig.nodeEnv === 'production' && !appConfig.kmsKeyArn) {
+    throw new Error('KMS_KEY_ARN must be set in production');
+  }
+
   const origins = appConfig.corsOrigin;
   const isWildcard = origins.includes('*');
   app.enableCors({

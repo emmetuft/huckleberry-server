@@ -161,6 +161,18 @@ export interface AppConfig {
   throttleConsumeTtl: number;
   /** CORS origin allowlist (comma-separated). Defaults to '*' in dev. */
   corsOrigin: string[];
+  /**
+   * AWS KMS key ARN used to wrap per-row DEKs for AES-256-GCM token encryption.
+   * Required in production. When absent, `EnvelopeEncryptionService` falls back
+   * to `devEncryptionKey` (local dev only — never allowed in production).
+   */
+  kmsKeyArn: string | null;
+  /**
+   * 32-byte hex key for local-dev envelope encryption when `kmsKeyArn` is absent.
+   * Generate with: `openssl rand -hex 32`
+   * If unset, a random ephemeral key is generated at boot (tokens don't survive restart).
+   */
+  devEncryptionKey: string;
 }
 
 function stripTrailingSlash(s: string): string {
@@ -313,5 +325,7 @@ export default (): { app: AppConfig } => ({
     throttleConsumeLimit: intEnv(process.env.THROTTLE_CONSUME_LIMIT, 20),
     throttleConsumeTtl: intEnv(process.env.THROTTLE_CONSUME_TTL, 60_000),
     corsOrigin: parseCorsOrigin(process.env),
+    kmsKeyArn: process.env.KMS_KEY_ARN || null,
+    devEncryptionKey: process.env.DEV_ENCRYPTION_KEY || '',
   },
 });
