@@ -2,7 +2,7 @@ import { jest } from '@jest/globals';
 import { ExecutionContext, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Reflector } from '@nestjs/core';
-import { SignJWT, generateKeyPair, type KeyLike } from 'jose';
+import { SignJWT, generateKeyPair } from 'jose';
 import { GatekeeperAuthGuard } from './gatekeeper-auth.guard';
 import { JwksService } from './jwks.service';
 import { KnownTenantsService } from './known-tenants.service';
@@ -13,7 +13,7 @@ const ISSUER_B = 'https://cust2.domo.com';
 const ISSUER_UNKNOWN = 'https://evil.domo.com';
 const SUB = 'user-123';
 
-type Keys = { priv: KeyLike; pub: KeyLike; kid: string };
+type Keys = { priv: CryptoKey; pub: CryptoKey; kid: string };
 const keysByIssuer = new Map<string, Keys>();
 
 async function makeKeys(kid: string): Promise<Keys> {
