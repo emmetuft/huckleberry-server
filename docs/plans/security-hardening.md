@@ -239,48 +239,35 @@ Most phases are pure code changes. Only Phase 6 has a hard external blocker:
 
 **Threat ID:** THR-TB03-I-02 (plaintext refresh tokens)
 
-**External prerequisites (must be completed before implementation):**
+**Status: Implemented.** Branch `users/jon.tiritilli/security-phase-6`. Pending production flip once Adam creates the KMS key.
+
+**External prerequisites (still outstanding for production):**
 
 | Dependency | Owner | What's needed |
 |------------|-------|---------------|
 | KMS key (CMK) | Adam | Create a symmetric `AES_256` KMS key in the same region as EKS. Dedicated to huckleberry token encryption — not shared with RDS. Tag: `service=huckleberry`, `purpose=token-encryption`. |
 | IAM policy | Adam | Grant the huckleberry EKS pod role `kms:GenerateDataKey` and `kms:Decrypt` on the new key ARN. |
-| Config env var | Deployment manifest | Add `KMS_KEY_ARN` (or `KMS_KEY_ID`) to the EKS deployment env. |
-| npm package | Dev | `pnpm add @aws-sdk/client-kms` (trivial — other `@aws-sdk/*` packages already installed). |
+| Config env var | Deployment manifest | Add `KMS_KEY_ARN` to the EKS deployment env. Production flip is a single env var — no code change required. |
 
 **How envelope encryption works:**
 - **Encrypt:** `KMS.GenerateDataKey({ KeyId, KeySpec: 'AES_256' })` → returns `{ Plaintext: DEK, CiphertextBlob: wrappedDEK }`. Use DEK for `AES-256-GCM(refreshToken)`. Store `{ ciphertext, iv, wrappedDEK }` in DB. Zero the plaintext DEK after use.
 - **Decrypt:** `KMS.Decrypt({ CiphertextBlob: wrappedDEK })` → returns plaintext DEK. AES-GCM-decrypt the refresh token.
-- **Caching:** Cache unwrapped DEKs in-memory (keyed by wrappedDEK hash, 5-min TTL) to avoid per-request KMS round-trips.
+- **Caching:** Unwrapped DEKs cached in-memory keyed by `dekId`, 5-min TTL, max 1 000 entries (LRU eviction).
+- **Local dev mode:** `KMS_KEY_ARN` absent → `DEV_ENCRYPTION_KEY` static hex key, no KMS calls. `DEV_ENCRYPTION_KEY` absent → ephemeral key at boot (tokens don't survive restart, warns loudly).
+- **LocalStack testing:** `pnpm infra:kms` starts LocalStack KMS, creates an idempotent key via `alias/huckleberry-dev`, prints `KMS_ENDPOINT` + `KMS_KEY_ARN` to add to `.env`. No AWS credentials needed locally.
 
-**What changes:**
+**What was built:**
 
-1. **Create encryption service**:
-   - New file: `src/common/crypto/envelope-encryption.service.ts`
-   - `encrypt(plaintext) → { ciphertext, iv, dekId }`
-   - `decrypt(ciphertext, iv, dekId) → plaintext`
-   - AES-256-GCM with per-row DEK wrapped by KMS
-   - In-memory DEK cache (5-min TTL)
-   - Local dev mode: file-based key (no KMS calls) gated on `NODE_ENV !== 'production'`
-
-2. **Add config** to `configuration.ts`:
-   - `kms.keyArn` from `KMS_KEY_ARN` env var
-   - Required in production; absent in local dev triggers file-based key mode
-
-3. **Add schema columns** to `domoOauthTokens`:
-   - File: `src/common/db/schema.ts`
-   - Add `refreshIv` (VARBINARY), `refreshDekId` (VARCHAR)
-   - Drizzle migration
-
-4. **Update token store** to encrypt/decrypt:
-   - File: `src/common/db/repositories/mysql-domo-token.store.ts`
-   - `upsert()`: encrypt before write
-   - `get()`: decrypt after read
-   - Fail hard if KMS unavailable (no plaintext fallback)
-
-5. **Migration script** — encrypt existing plaintext tokens in-place
-
-6. **Unit tests** — encrypt → decrypt round-trip; KMS failure → throws; DEK cache hit avoids second KMS call
+1. `src/common/crypto/envelope-encryption.service.ts` — two-mode service (KMS / local dev)
+2. `src/common/crypto/envelope-encryption.service.spec.ts` — 10 tests; all green
+3. `src/common/config/configuration.ts` — `kmsKeyArn`, `devEncryptionKey`, `kmsEndpoint`
+4. `src/common/db/schema.ts` — nullable `refreshIv` + `refreshDekId` columns
+5. `drizzle/0005_volatile_wild_child.sql` — auto-generated migration
+6. `src/common/db/repositories/mysql-domo-token.store.ts` — encrypt on upsert, decrypt on read, null-dekId fallback for pre-migration rows
+7. `src/main.ts` — boot guard: throws if `production` and `KMS_KEY_ARN` absent
+8. `src/scripts/encrypt-existing-tokens.ts` — one-time idempotent migration script
+9. `src/scripts/setup-localstack-kms.ts` — LocalStack setup script (idempotent via alias)
+10. `docker-compose.yml` — LocalStack service under `profiles: [kms]`
 
 7. **Accepted risk:** `domo_oauth_clients.registration_access_token` is also a stored credential (RFC 7592 — can manage/delete the OAuth client). Not encrypting it here because the CIMD migration will eliminate this table entirely. If CIMD is deferred, revisit.
 
