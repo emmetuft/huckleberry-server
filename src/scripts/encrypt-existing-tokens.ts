@@ -13,7 +13,7 @@
 
 import { drizzle } from 'drizzle-orm/mysql2';
 import { createPool, type Pool } from 'mysql2/promise';
-import { isNull, eq } from 'drizzle-orm';
+import { isNull, eq, and } from 'drizzle-orm';
 import { Signer } from '@aws-sdk/rds-signer';
 import { ConfigService } from '@nestjs/config';
 import configuration from '../common/config/configuration.js';
@@ -111,7 +111,12 @@ async function main() {
           refreshIv: encVal.iv,
           refreshDekId: encVal.dekId,
         })
-        .where(eq(domoOauthTokens.linkId, row.linkId));
+        .where(
+          and(
+            eq(domoOauthTokens.linkId, row.linkId),
+            isNull(domoOauthTokens.refreshDekId),
+          ),
+        );
       encrypted++;
     } catch (err) {
       console.error(`Failed to encrypt row ${binaryToUuid(row.linkId)}:`, err);
