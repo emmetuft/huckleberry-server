@@ -117,10 +117,14 @@ export const linkedDomoInstances = mysqlTable(
  */
 export const domoOauthTokens = mysqlTable('domo_oauth_tokens', {
   linkId: binary16('link_id').primaryKey(),
-  /** Plaintext locally. Aurora will hold AES-GCM ciphertext in this column. */
-  refreshToken: varchar('refresh_token', { length: 2000 }).notNull(),
+  /** AES-256-GCM ciphertext (base64). Sized for encrypted output: base64(plaintext + 16-byte auth tag) expands ~34%. */
+  refreshToken: varchar('refresh_token', { length: 3000 }).notNull(),
   scope: varchar('scope', { length: 1000 }).notNull(),
   updatedAt: datetime('updated_at', { fsp: 3 }).notNull(),
+  /** base64-encoded 12-byte AES-GCM IV. Null until KMS encryption migration runs. */
+  refreshIv: varchar('refresh_iv', { length: 64 }),
+  /** base64(KMS CiphertextBlob) in prod; 'local' in dev. Null = pre-migration plaintext row. */
+  refreshDekId: varchar('refresh_dek_id', { length: 500 }),
 });
 
 /**

@@ -33,7 +33,8 @@ class BoundedLruMap<K, V> {
     if (this.map.has(key)) {
       this.map.delete(key);
     } else if (this.map.size >= this.maxSize) {
-      this.map.delete(this.map.keys().next().value);
+      const lru = this.map.keys().next().value as K | undefined;
+      if (lru !== undefined) this.map.delete(lru);
     }
     this.map.set(key, value);
   }
