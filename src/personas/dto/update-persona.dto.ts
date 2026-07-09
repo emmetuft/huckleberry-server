@@ -4,8 +4,12 @@ import {
   IsEnum,
   IsOptional,
   IsString,
+  ValidateNested,
 } from 'class-validator';
+import { Type } from 'class-transformer';
 import { RoleLevel } from '../../common/types/persona.types.js';
+import { PersonaSkillDto } from './persona-skill.dto.js';
+import { CommunicationStyleDto } from './communication-style.dto.js';
 
 export class UpdatePersonaDto {
   @IsString()
@@ -46,6 +50,32 @@ export class UpdatePersonaDto {
   @IsString()
   @IsOptional()
   goals?: string;
+
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => PersonaSkillDto)
+  @IsOptional()
+  skills?: PersonaSkillDto[];
+
+  @IsArray()
+  @IsString({ each: true })
+  @IsOptional()
+  tools?: string[];
+
+  @IsArray()
+  @IsString({ each: true })
+  @IsOptional()
+  relationships?: string[];
+
+  @ValidateNested()
+  @Type(() => CommunicationStyleDto)
+  @IsOptional()
+  communicationStyle?: CommunicationStyleDto;
+
+  @IsArray()
+  @IsString({ each: true })
+  @IsOptional()
+  domainKnowledge?: string[];
 
   @IsBoolean()
   @IsOptional()
