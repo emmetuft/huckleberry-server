@@ -6,7 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
-import { RoleLevel, type Persona } from '../common/types/persona.types.js';
+import type { Persona } from '../common/types/persona.types.js';
 import type { CreatePersonaDto } from './dto/create-persona.dto.js';
 import type { UpdatePersonaDto } from './dto/update-persona.dto.js';
 import {
@@ -44,70 +44,6 @@ export class PersonasService {
   async findDefault(): Promise<Persona | undefined> {
     const { customerId, userId } = this.tenant();
     return (await this.repo.findDefault(customerId, userId)) ?? undefined;
-  }
-
-  async findByUserId(): Promise<Persona | undefined> {
-    const { customerId, userId } = this.tenant();
-    const defaultPersona = await this.repo.findDefault(customerId, userId);
-    if (defaultPersona) return defaultPersona;
-    const all = await this.repo.findAll(customerId, userId);
-    return all[0];
-  }
-
-  async saveForUser(data: Partial<Persona>): Promise<Persona> {
-    const { customerId, userId } = this.tenant();
-    const existing = await this.repo.findAll(customerId, userId);
-    const first = existing[0];
-    const now = new Date().toISOString();
-
-    // Strip server-managed fields — clients must not overwrite these via the compat route.
-    const {
-      id: _id,
-      name: _name,
-      isDefault: _isDefault,
-      createdAt: _createdAt,
-      updatedAt: _updatedAt,
-      ...safe
-    } = data;
-
-    if (first) {
-      const updated = await this.repo.update(
-        customerId,
-        userId,
-        first.id,
-        safe,
-      );
-      if (!updated)
-        throw new NotFoundException(`Persona ${first.id} not found`);
-      return updated;
-    }
-
-    const persona: Persona = {
-      id: randomUUID(),
-      name: `User ${userId}`,
-      isDefault: false,
-      createdAt: now,
-      updatedAt: now,
-      role: safe.role ?? '',
-      level: safe.level ?? RoleLevel.NONE,
-      department: safe.department ?? '',
-      team: safe.team,
-      focusAreas: safe.focusAreas ?? [],
-      strengths: safe.strengths ?? [],
-      weaknesses: safe.weaknesses ?? [],
-      goals: safe.goals ?? '',
-      skills: safe.skills ?? [],
-      tools: safe.tools ?? [],
-      relationships: safe.relationships ?? [],
-      communicationStyle: safe.communicationStyle ?? null,
-      domainKnowledge: safe.domainKnowledge ?? [],
-      usePersona: safe.usePersona ?? true,
-      useActivity: safe.useActivity ?? true,
-      useData: safe.useData ?? true,
-    };
-    await this.repo.create(customerId, userId, persona);
-    this.logger.log(`Created persona ${persona.id} for user ${userId}`);
-    return persona;
   }
 
   async create(dto: CreatePersonaDto): Promise<Persona> {
