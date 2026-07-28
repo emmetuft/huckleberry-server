@@ -34,9 +34,3 @@ export class MetricSqlPeriodRequestDto extends MetricSqlRequestDto {
   @IsBoolean()
   annotationDate?: boolean;
 }
-
-export interface MetricSql {
-  metric: unknown;
-  sql: string;
-  select?: unknown;
-}

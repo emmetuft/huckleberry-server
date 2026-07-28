@@ -6,6 +6,7 @@ import {
   MetricSqlPeriodRequestDto,
 } from './dto/metric-sql.dto.js';
 import { MetricPreviewRequestDto } from './dto/metric-preview.dto.js';
+import { CreateMetricDto, UpdateMetricDto } from './dto/metric.dto.js';
 
 const BASE = '/api/content/v1/metrics';
 
@@ -21,11 +22,11 @@ export class MetricsService {
     return this.domo.get(`${BASE}/${id}`);
   }
 
-  create(body: unknown): Promise<unknown> {
+  create(body: CreateMetricDto): Promise<unknown> {
     return this.domo.post(BASE, body);
   }
 
-  update(id: number, body: unknown): Promise<unknown> {
+  update(id: number, body: UpdateMetricDto): Promise<unknown> {
     return this.domo.put(`${BASE}/${id}`, body);
   }
 

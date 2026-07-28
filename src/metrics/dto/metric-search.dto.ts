@@ -24,11 +24,3 @@ export class MetricSearchFiltersDto {
   @IsNumber()
   offset?: number;
 }
-
-export interface MetricSearchResponse {
-  metrics: unknown[];
-  totalCount: number;
-  count: number;
-  limit: number;
-  offset: number;
-}

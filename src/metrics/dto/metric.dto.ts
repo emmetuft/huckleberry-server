@@ -1,3 +1,5 @@
+import { IsArray, IsIn, IsObject, IsOptional, IsString } from 'class-validator';
+
 export type AggregationFunction =
   | 'SUM'
   | 'AVG'
@@ -15,40 +17,147 @@ export type DateTimeElement = 'DAY' | 'WEEK' | 'MONTH' | 'QUARTER' | 'YEAR';
 export type CalendarType = 'STANDARD' | 'FISCAL';
 export type CumulativeType = 'RUNNING_TOTAL' | 'NON_CUMULATIVE';
 
-export interface Aggregation {
-  function: AggregationFunction;
-  value: string;
-  alias?: string;
-}
+const DATE_GRAINS: DateTimeElement[] = [
+  'DAY',
+  'WEEK',
+  'MONTH',
+  'QUARTER',
+  'YEAR',
+];
+const CALENDAR_TYPES: CalendarType[] = ['STANDARD', 'FISCAL'];
+const CUMULATIVE_TYPES: CumulativeType[] = ['RUNNING_TOTAL', 'NON_CUMULATIVE'];
 
-export interface MetricFormat {
-  sentiment?: unknown;
-  type?: string;
-  columnFormat?: unknown;
-}
+export class CreateMetricDto {
+  @IsString()
+  name!: string;
 
-export interface Metric {
-  id?: number;
-  name: string;
+  @IsOptional()
+  @IsString()
   description?: string;
-  owner?: number;
-  ownerDisplayName?: string;
-  tags?: string[];
+
+  @IsOptional()
+  @IsString()
   datasourceId?: string;
-  dataSourceName?: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  tags?: string[];
+
+  @IsOptional()
+  @IsString()
   dateColumn?: string;
+
+  @IsOptional()
+  @IsIn(DATE_GRAINS)
   preferredDateGrain?: DateTimeElement;
-  datasetDateGrain?: DateTimeElement;
+
+  @IsOptional()
+  @IsIn(CALENDAR_TYPES)
   calendarType?: CalendarType;
-  dimensions?: string[];
-  aggregation?: Aggregation;
-  filters?: unknown[];
-  aggregatedFilters?: unknown[];
-  legacyFilters?: unknown[];
-  dateRangeFilter?: unknown;
-  properties?: Record<string, unknown>;
-  format?: MetricFormat;
+
+  @IsOptional()
+  @IsIn(CUMULATIVE_TYPES)
   cumulativeType?: CumulativeType;
-  created?: string;
-  modified?: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  dimensions?: string[];
+
+  @IsOptional()
+  @IsObject()
+  aggregation?: Record<string, unknown>;
+
+  @IsOptional()
+  @IsArray()
+  filters?: unknown[];
+
+  @IsOptional()
+  @IsArray()
+  aggregatedFilters?: unknown[];
+
+  @IsOptional()
+  @IsArray()
+  legacyFilters?: unknown[];
+
+  @IsOptional()
+  @IsObject()
+  dateRangeFilter?: Record<string, unknown>;
+
+  @IsOptional()
+  @IsObject()
+  properties?: Record<string, unknown>;
+
+  @IsOptional()
+  @IsObject()
+  format?: Record<string, unknown>;
+}
+
+export class UpdateMetricDto {
+  @IsOptional()
+  @IsString()
+  name?: string;
+
+  @IsOptional()
+  @IsString()
+  description?: string;
+
+  @IsOptional()
+  @IsString()
+  datasourceId?: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  tags?: string[];
+
+  @IsOptional()
+  @IsString()
+  dateColumn?: string;
+
+  @IsOptional()
+  @IsIn(DATE_GRAINS)
+  preferredDateGrain?: DateTimeElement;
+
+  @IsOptional()
+  @IsIn(CALENDAR_TYPES)
+  calendarType?: CalendarType;
+
+  @IsOptional()
+  @IsIn(CUMULATIVE_TYPES)
+  cumulativeType?: CumulativeType;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  dimensions?: string[];
+
+  @IsOptional()
+  @IsObject()
+  aggregation?: Record<string, unknown>;
+
+  @IsOptional()
+  @IsArray()
+  filters?: unknown[];
+
+  @IsOptional()
+  @IsArray()
+  aggregatedFilters?: unknown[];
+
+  @IsOptional()
+  @IsArray()
+  legacyFilters?: unknown[];
+
+  @IsOptional()
+  @IsObject()
+  dateRangeFilter?: Record<string, unknown>;
+
+  @IsOptional()
+  @IsObject()
+  properties?: Record<string, unknown>;
+
+  @IsOptional()
+  @IsObject()
+  format?: Record<string, unknown>;
 }

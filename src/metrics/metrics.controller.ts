@@ -21,6 +21,7 @@ import {
   MetricSqlPeriodRequestDto,
 } from './dto/metric-sql.dto.js';
 import { MetricPreviewRequestDto } from './dto/metric-preview.dto.js';
+import { CreateMetricDto, UpdateMetricDto } from './dto/metric.dto.js';
 
 @ApiTags('Metrics')
 @Controller('metrics')
@@ -34,7 +35,7 @@ export class MetricsController {
   }
 
   @Post()
-  create(@Body() body: unknown) {
+  create(@Body() body: CreateMetricDto) {
     return this.metricsService.create(body);
   }
 
@@ -61,7 +62,7 @@ export class MetricsController {
   }
 
   @Put(':id')
-  update(@Param('id', ParseIntPipe) id: number, @Body() body: unknown) {
+  update(@Param('id', ParseIntPipe) id: number, @Body() body: UpdateMetricDto) {
     return this.metricsService.update(id, body);
   }
 
