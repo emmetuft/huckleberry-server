@@ -22,6 +22,7 @@ import { HealthModule } from './health/health.module.js';
 import { IdentityModule } from './identity/identity.module.js';
 import { HuckleberryModule } from './huckleberry/huckleberry.module.js';
 import { McpModule } from './mcp/mcp.module.js';
+import { MetricsModule } from './metrics/metrics.module.js';
 import { PeopleModule } from './people/people.module.js';
 import { PersonasModule } from './personas/personas.module.js';
 import { SessionsModule } from './sessions/sessions.module.js';
@@ -71,6 +72,7 @@ import { WorkflowsModule } from './workflows/workflows.module.js';
     HuckleberryModule,
     IdentityModule,
     McpModule,
+    MetricsModule,
     PersonasModule,
     PeopleModule,
     SessionsModule,

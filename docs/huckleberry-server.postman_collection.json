@@ -1,0 +1,1247 @@
+{
+  "info": {
+    "_postman_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "name": "Huckleberry Server",
+    "description": "BFF for the Huckleberry AI platform.\n\n**Auth (dev):** Set the `devToken` variable to your `DEV_TOKEN` env value. The collection pre-request script injects `x-domo-developer-token` on every request — this bypasses session cookies and CSRF checks in non-production.\n\n**Auth (session):** For session-based flows, sign in via `POST /api/auth/signin/request`, follow the magic-link, then set the `hb_session` cookie and the `x-csrf-token` header (from the session response) on state-changing requests.\n\n**Variables to set:** `baseUrl`, `devToken`, `adminApiKey`, `agentId`, `sessionId`, `metricId`, `personaId`, `mcpServerId`, `datasourceId`.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3000", "type": "string" },
+    { "key": "devToken", "value": "", "type": "string" },
+    { "key": "adminApiKey", "value": "", "type": "string" },
+    { "key": "agentId", "value": "", "type": "string" },
+    { "key": "sessionId", "value": "", "type": "string" },
+    { "key": "metricId", "value": "1", "type": "string" },
+    { "key": "personaId", "value": "", "type": "string" },
+    { "key": "mcpServerId", "value": "", "type": "string" },
+    { "key": "datasourceId", "value": "", "type": "string" }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "const token = pm.collectionVariables.get('devToken');",
+          "if (token) {",
+          "  pm.request.headers.add({ key: 'x-domo-developer-token', value: token });",
+          "}"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "Health check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/health", "host": ["{{baseUrl}}"], "path": ["health"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Auth",
+      "description": "Magic-link authentication. signup, signin/request, and GET signin are @Public (no auth required).",
+      "item": [
+        {
+          "name": "Signup",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/auth/signup", "host": ["{{baseUrl}}"], "path": ["api", "auth", "signup"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"user@example.com\",\n  \"path\": \"new\",\n  \"instanceUrl\": \"https://your-instance.domo.com\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "Request sign-in (magic link)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/auth/signin/request", "host": ["{{baseUrl}}"], "path": ["api", "auth", "signin", "request"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"user@example.com\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "Verify sign-in token",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/signin?token={{magicLinkToken}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "signin"],
+              "query": [{ "key": "token", "value": "{{magicLinkToken}}" }]
+            }
+          }
+        },
+        {
+          "name": "Get current user (me)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/auth/me", "host": ["{{baseUrl}}"], "path": ["api", "auth", "me"] }
+          }
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/auth/logout", "host": ["{{baseUrl}}"], "path": ["api", "auth", "logout"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Auth — Domo Linkage",
+      "description": "OAuth2 PKCE flow to link a Domo instance to the user's Huckleberry account.",
+      "item": [
+        {
+          "name": "Start Domo link",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/auth/domo/link/start", "host": ["{{baseUrl}}"], "path": ["api", "auth", "domo", "link", "start"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"issuerUrl\": \"https://your-instance.domo.com\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "OAuth2 callback (browser redirect — not for direct invocation)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/domo/callback?code=AUTH_CODE&state=STATE",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "domo", "callback"],
+              "query": [
+                { "key": "code", "value": "AUTH_CODE" },
+                { "key": "state", "value": "STATE" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get active Domo links",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/auth/domo/links", "host": ["{{baseUrl}}"], "path": ["api", "auth", "domo", "links"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin",
+      "description": "Operator-only endpoints protected by x-admin-api-key header. @Public (no session required).",
+      "item": [
+        {
+          "name": "Onboard user",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-admin-api-key", "value": "{{adminApiKey}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/api/admin/users", "host": ["{{baseUrl}}"], "path": ["api", "admin", "users"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"newuser@example.com\",\n  \"displayName\": \"New User\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Identity",
+      "item": [
+        {
+          "name": "Get identity",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/identity", "host": ["{{baseUrl}}"], "path": ["api", "identity"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Agents",
+      "description": "Agent CRUD, search, context management, and streaming execution.",
+      "item": [
+        {
+          "name": "List agents",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/agents", "host": ["{{baseUrl}}"], "path": ["api", "agents"] }
+          }
+        },
+        {
+          "name": "Create agent",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/agents", "host": ["{{baseUrl}}"], "path": ["api", "agents"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"My Agent\",\n  \"description\": \"An agent for data analysis\",\n  \"prompt\": \"You are a helpful data analysis assistant.\",\n  \"model\": \"claude-sonnet-4-6\",\n  \"toolkitIds\": []\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "Search agents",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/agents/search", "host": ["{{baseUrl}}"], "path": ["api", "agents", "search"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"limit\": 20,\n  \"offset\": 0,\n  \"sort\": \"CREATED\",\n  \"order\": \"DESC\",\n  \"search\": { \"name\": \"My Agent\" }\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "Refresh agents",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/agents/refresh", "host": ["{{baseUrl}}"], "path": ["api", "agents", "refresh"] }
+          }
+        },
+        {
+          "name": "Get agent by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/agents/{{agentId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "agents", "{{agentId}}"]
+            }
+          }
+        },
+        {
+          "name": "Get agent by ID (with includes)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/agents/{{agentId}}?include=tools",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "agents", "{{agentId}}"],
+              "query": [{ "key": "include", "value": "tools" }]
+            }
+          }
+        },
+        {
+          "name": "Update agent",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/agents/{{agentId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "agents", "{{agentId}}"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Updated Agent Name\",\n  \"description\": \"Updated description\",\n  \"prompt\": \"Updated system prompt.\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "Delete agent",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/agents/{{agentId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "agents", "{{agentId}}"]
+            }
+          }
+        },
+        {
+          "name": "Get agent tools",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/agents/{{agentId}}/tools",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "agents", "{{agentId}}", "tools"]
+            }
+          }
+        },
+        {
+          "name": "Get agent tools (with session)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/agents/{{agentId}}/tools?sessionId={{sessionId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "agents", "{{agentId}}", "tools"],
+              "query": [{ "key": "sessionId", "value": "{{sessionId}}" }]
+            }
+          }
+        },
+        {
+          "name": "Update agent context",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/agents/{{agentId}}/context",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "agents", "{{agentId}}", "context"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"context\": {\n    \"dataSourceIds\": [\"ds-uuid-1\"],\n    \"cardIds\": [\"card-uuid-1\"],\n    \"filters\": []\n  }\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "Execute agent (streaming SSE)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Accept", "value": "text/event-stream" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/agents/{{agentId}}/execute/streaming",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "agents", "{{agentId}}", "execute", "streaming"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"input\": \"What are the top 5 sales metrics for last quarter?\",\n  \"sessionId\": \"{{sessionId}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "Resume agent (streaming SSE)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Accept", "value": "text/event-stream" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/agents/{{agentId}}/resume/streaming",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "agents", "{{agentId}}", "resume", "streaming"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sessionId\": \"{{sessionId}}\",\n  \"input\": \"Yes, proceed with the analysis.\",\n  \"batchId\": \"\",\n  \"batchConfirmationId\": \"\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Sessions",
+      "description": "Agent conversation session management.",
+      "item": [
+        {
+          "name": "List sessions (for agent)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/sessions?agentId={{agentId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "sessions"],
+              "query": [{ "key": "agentId", "value": "{{agentId}}" }]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"limit\": 20,\n  \"offset\": 0,\n  \"sortFieldMap\": { \"CREATED\": \"DESC\" }\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "Search all sessions",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/sessions/search/all-sessions", "host": ["{{baseUrl}}"], "path": ["api", "sessions", "search", "all-sessions"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"limit\": 20,\n  \"offset\": 0\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "Get session",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/sessions/{{sessionId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "sessions", "{{sessionId}}"]
+            }
+          }
+        },
+        {
+          "name": "Get session events",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/sessions/{{sessionId}}/events",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "sessions", "{{sessionId}}", "events"]
+            }
+          }
+        },
+        {
+          "name": "Delete session",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/sessions/{{sessionId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "sessions", "{{sessionId}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Metrics",
+      "description": "Domo Metrics API proxy. All endpoints require HAS_AUTHORITY_AUTOMATED_INSIGHTS and the metrics feature switch on the Domo instance.",
+      "item": [
+        {
+          "name": "List metrics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/metrics", "host": ["{{baseUrl}}"], "path": ["api", "metrics"] }
+          }
+        },
+        {
+          "name": "Create metric",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/metrics", "host": ["{{baseUrl}}"], "path": ["api", "metrics"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Total Revenue\",\n  \"description\": \"Sum of all revenue\",\n  \"datasourceId\": \"{{datasourceId}}\",\n  \"aggregation\": {\n    \"function\": \"SUM\",\n    \"value\": \"revenue\",\n    \"alias\": \"Total Revenue\"\n  },\n  \"preferredDateGrain\": \"MONTH\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "Filter metrics",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/metrics/filter", "host": ["{{baseUrl}}"], "path": ["api", "metrics", "filter"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nameContains\": \"Revenue\",\n  \"limit\": 20,\n  \"offset\": 0,\n  \"orderBy\": \"CREATED_DESC\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "Preview metric (unsaved dry-run)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/metrics/preview", "host": ["{{baseUrl}}"], "path": ["api", "metrics", "preview"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"metric\": {\n    \"name\": \"Preview Metric\",\n    \"datasourceId\": \"{{datasourceId}}\",\n    \"aggregation\": { \"function\": \"COUNT\", \"value\": \"*\", \"alias\": \"Row Count\" }\n  },\n  \"sqlRequest\": {\n    \"dateGrain\": \"MONTH\"\n  }\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "Get metrics by datasource",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/metrics/datasource/{{datasourceId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "metrics", "datasource", "{{datasourceId}}"]
+            }
+          }
+        },
+        {
+          "name": "Get metric by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/metrics/{{metricId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "metrics", "{{metricId}}"]
+            }
+          }
+        },
+        {
+          "name": "Update metric",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/metrics/{{metricId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "metrics", "{{metricId}}"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Updated Metric Name\",\n  \"description\": \"Updated description\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "Delete metric (soft)",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/metrics/{{metricId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "metrics", "{{metricId}}"]
+            }
+          }
+        },
+        {
+          "name": "Delete metric (hard)",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/metrics/{{metricId}}?hardDelete=true",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "metrics", "{{metricId}}"],
+              "query": [{ "key": "hardDelete", "value": "true" }]
+            }
+          }
+        },
+        {
+          "name": "Get metric SQL",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/metrics/{{metricId}}/sql",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "metrics", "{{metricId}}", "sql"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"dateGrain\": \"MONTH\",\n  \"calendarType\": \"STANDARD\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "Execute metric",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/metrics/{{metricId}}/execute",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "metrics", "{{metricId}}", "execute"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"dateGrain\": \"MONTH\",\n  \"dateRangeFilter\": {\n    \"startDate\": \"2025-01-01\",\n    \"endDate\": \"2025-12-31\",\n    \"column\": \"date\"\n  }\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "Execute metric — period-over-period",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/metrics/{{metricId}}/execute/pop",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "metrics", "{{metricId}}", "execute", "pop"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"dateGrain\": \"MONTH\",\n  \"periodDateRangeFilters\": {\n    \"current\": { \"startDate\": \"2025-01-01\", \"endDate\": \"2025-03-31\" },\n    \"previous\": { \"startDate\": \"2024-01-01\", \"endDate\": \"2024-03-31\" }\n  },\n  \"annotationDate\": false\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Datasources",
+      "description": "Proxies the Domo DataSources API. Note: mounted outside the /api global prefix at /datasources.",
+      "item": [
+        {
+          "name": "List datasources",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/datasources?offset=0&limit=50",
+              "host": ["{{baseUrl}}"],
+              "path": ["datasources"],
+              "query": [
+                { "key": "offset", "value": "0" },
+                { "key": "limit", "value": "50" },
+                { "key": "nameLike", "value": "", "disabled": true }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get datasource schema",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/datasources/{{datasourceId}}/schema",
+              "host": ["{{baseUrl}}"],
+              "path": ["datasources", "{{datasourceId}}", "schema"]
+            }
+          }
+        },
+        {
+          "name": "Query datasource data",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/datasources/{{datasourceId}}/data?page=0&size=100",
+              "host": ["{{baseUrl}}"],
+              "path": ["datasources", "{{datasourceId}}", "data"],
+              "query": [
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "100" }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"columns\": [\"date\", \"revenue\", \"region\"],\n  \"filters\": []\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Personas",
+      "description": "User persona management for contextualizing agent behavior.",
+      "item": [
+        {
+          "name": "List personas",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/personas", "host": ["{{baseUrl}}"], "path": ["api", "personas"] }
+          }
+        },
+        {
+          "name": "Create persona",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/personas", "host": ["{{baseUrl}}"], "path": ["api", "personas"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Data Analyst\",\n  \"role\": \"Senior Data Analyst\",\n  \"level\": \"SENIOR\",\n  \"department\": \"Finance\",\n  \"team\": \"Revenue Analytics\",\n  \"focusAreas\": [\"Revenue\", \"Forecasting\"],\n  \"strengths\": [\"SQL\", \"Statistical analysis\"],\n  \"weaknesses\": [\"Data engineering\"],\n  \"goals\": \"Provide accurate revenue forecasts and identify growth opportunities.\",\n  \"usePersona\": true,\n  \"useActivity\": true,\n  \"useData\": true\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "Get default persona",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/personas/default", "host": ["{{baseUrl}}"], "path": ["api", "personas", "default"] }
+          }
+        },
+        {
+          "name": "Get persona by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/personas/{{personaId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "personas", "{{personaId}}"]
+            }
+          }
+        },
+        {
+          "name": "Update persona",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/personas/{{personaId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "personas", "{{personaId}}"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Updated Persona\",\n  \"goals\": \"Updated goals.\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "Delete persona",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/personas/{{personaId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "personas", "{{personaId}}"]
+            }
+          }
+        },
+        {
+          "name": "Set persona as default",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/personas/{{personaId}}/default",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "personas", "{{personaId}}", "default"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Toolkits",
+      "description": "Search and list available agent toolkits.",
+      "item": [
+        {
+          "name": "Search toolkits",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/toolkits", "host": ["{{baseUrl}}"], "path": ["api", "toolkits"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"limit\": 20,\n  \"offset\": 0\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "MCP Servers",
+      "description": "MCP server management and tool execution.",
+      "item": [
+        {
+          "name": "List MCP servers",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/mcp/servers",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "mcp", "servers"],
+              "query": [{ "key": "enabled", "value": "true", "disabled": true }]
+            }
+          }
+        },
+        {
+          "name": "Create MCP server",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/mcp/servers", "host": ["{{baseUrl}}"], "path": ["api", "mcp", "servers"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"My MCP Server\",\n  \"url\": \"http://localhost:8080/mcp\",\n  \"authType\": \"none\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "Get MCP server",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/mcp/servers/{{mcpServerId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "mcp", "servers", "{{mcpServerId}}"]
+            }
+          }
+        },
+        {
+          "name": "Update MCP server",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/mcp/servers/{{mcpServerId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "mcp", "servers", "{{mcpServerId}}"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Updated MCP Server\",\n  \"url\": \"http://localhost:8080/mcp\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "Delete MCP server",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/mcp/servers/{{mcpServerId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "mcp", "servers", "{{mcpServerId}}"]
+            }
+          }
+        },
+        {
+          "name": "Test MCP server connection",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/mcp/servers/{{mcpServerId}}/test",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "mcp", "servers", "{{mcpServerId}}", "test"]
+            }
+          }
+        },
+        {
+          "name": "Sync MCP server tools",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/mcp/servers/{{mcpServerId}}/sync",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "mcp", "servers", "{{mcpServerId}}", "sync"]
+            }
+          }
+        },
+        {
+          "name": "Toggle MCP server enabled",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/mcp/servers/{{mcpServerId}}/toggle",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "mcp", "servers", "{{mcpServerId}}", "toggle"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"enabled\": true\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "List MCP tools",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/mcp/tools", "host": ["{{baseUrl}}"], "path": ["api", "mcp", "tools"] }
+          }
+        },
+        {
+          "name": "Execute MCP tool",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/mcp/tools/execute", "host": ["{{baseUrl}}"], "path": ["api", "mcp", "tools", "execute"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"serverId\": \"{{mcpServerId}}\",\n  \"toolName\": \"my_tool\",\n  \"params\": {\n    \"key\": \"value\"\n  }\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "OAuth2 — get authorize URL",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/mcp/oauth2/authorize/{{mcpServerId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "mcp", "oauth2", "authorize", "{{mcpServerId}}"]
+            }
+          }
+        },
+        {
+          "name": "OAuth2 — revoke token",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/mcp/oauth2/revoke/{{mcpServerId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "mcp", "oauth2", "revoke", "{{mcpServerId}}"]
+            }
+          }
+        },
+        {
+          "name": "OAuth2 — get status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/mcp/oauth2/status/{{mcpServerId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "mcp", "oauth2", "status", "{{mcpServerId}}"]
+            }
+          }
+        },
+        {
+          "name": "OAuth2 — discover",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/mcp/oauth2/discover/{{mcpServerId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "mcp", "oauth2", "discover", "{{mcpServerId}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Graph",
+      "description": "Neo4j graph query endpoints.",
+      "item": [
+        {
+          "name": "Fetch nodes",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/graph/nodes", "host": ["{{baseUrl}}"], "path": ["api", "graph", "nodes"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"filter\": {\n    \"nodeLabels\": [\"Person\"],\n    \"labelMode\": \"ANY\"\n  },\n  \"limit\": 25\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "Cypher search",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/graph/cypher", "host": ["{{baseUrl}}"], "path": ["api", "graph", "cypher"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cypherQuery\": \"MATCH (n:Person) RETURN n LIMIT 10\",\n  \"parameters\": {},\n  \"limit\": 10\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "Get graph schema",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/graph/schema?sampleSize=100&includeProperties=true",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "graph", "schema"],
+              "query": [
+                { "key": "sampleSize", "value": "100" },
+                { "key": "includeProperties", "value": "true" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Find shortest path",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/graph/path", "host": ["{{baseUrl}}"], "path": ["api", "graph", "path"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fromNode\": { \"primaryLabel\": \"Person\", \"id\": \"node-id-1\" },\n  \"toNode\": { \"primaryLabel\": \"Person\", \"id\": \"node-id-2\" },\n  \"relationshipTypes\": [\"KNOWS\"],\n  \"maxDepth\": 5\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "AI Services",
+      "description": "Domo AI services for text generation, summarization, text-to-SQL, and image-to-text.",
+      "item": [
+        {
+          "name": "List AI models",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/ai/models", "host": ["{{baseUrl}}"], "path": ["api", "ai", "models"] }
+          }
+        },
+        {
+          "name": "Text generation",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/ai/text/generation", "host": ["{{baseUrl}}"], "path": ["api", "ai", "text", "generation"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"input\": \"Summarize the key trends in this dataset.\",\n  \"model\": \"claude-fable-5\",\n  \"temperature\": 0.7,\n  \"maxTokens\": 1024\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "Text summarization",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/ai/text/summarize", "host": ["{{baseUrl}}"], "path": ["api", "ai", "text", "summarize"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"input\": \"Long text content to summarize...\",\n  \"model\": \"claude-fable-5\",\n  \"outputStyle\": \"BULLETS\",\n  \"maxTokens\": 512\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "Text to SQL",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/ai/text/sql", "host": ["{{baseUrl}}"], "path": ["api", "ai", "text", "sql"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"input\": \"Show me total revenue by region for last year\",\n  \"dataSourceSchemas\": [\n    {\n      \"dataSourceId\": \"{{datasourceId}}\",\n      \"columns\": [\n        { \"name\": \"date\", \"type\": \"DATE\" },\n        { \"name\": \"revenue\", \"type\": \"DECIMAL\" },\n        { \"name\": \"region\", \"type\": \"STRING\" }\n      ]\n    }\n  ]\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "Image to text",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/ai/image/text", "host": ["{{baseUrl}}"], "path": ["api", "ai", "image", "text"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"image\": {\n    \"data\": \"<base64-encoded-image>\",\n    \"mediaType\": \"image/png\",\n    \"type\": \"base64\"\n  },\n  \"input\": \"Describe what you see in this chart.\",\n  \"model\": \"claude-fable-5\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "People",
+      "description": "Proxy for Domo users and groups.",
+      "item": [
+        {
+          "name": "Get users by IDs",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/users?ids=1,2,3",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "users"],
+              "query": [{ "key": "ids", "value": "1,2,3" }]
+            }
+          }
+        },
+        {
+          "name": "Get user by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/1",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "users", "1"]
+            }
+          }
+        },
+        {
+          "name": "List groups",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/groups?limit=50&offset=0",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "groups"],
+              "query": [
+                { "key": "limit", "value": "50" },
+                { "key": "offset", "value": "0" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get group by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/groups/1",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "groups", "1"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Connectors",
+      "description": "Domo connector metadata.",
+      "item": [
+        {
+          "name": "Search connectors",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/connectors", "host": ["{{baseUrl}}"], "path": ["api", "connectors"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"filters\": [],\n  \"count\": 20,\n  \"offset\": 0\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "Get connector image",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/connectors/{{databaseId}}/image",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "connectors", "{{databaseId}}", "image"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Huckleberry (legacy direct execution)",
+      "description": "Direct execution endpoints — prefer the agents/:agentId versions for new integrations.",
+      "item": [
+        {
+          "name": "Search sessions",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/huckleberry/sessions", "host": ["{{baseUrl}}"], "path": ["api", "huckleberry", "sessions"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"limit\": 20,\n  \"offset\": 0\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "Execute (streaming SSE)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Accept", "value": "text/event-stream" }
+            ],
+            "url": { "raw": "{{baseUrl}}/api/huckleberry/execute/streaming", "host": ["{{baseUrl}}"], "path": ["api", "huckleberry", "execute", "streaming"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"input\": \"What are the top metrics this quarter?\",\n  \"sessionId\": \"{{sessionId}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "Resume (streaming SSE)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Accept", "value": "text/event-stream" }
+            ],
+            "url": { "raw": "{{baseUrl}}/api/huckleberry/resume/streaming", "host": ["{{baseUrl}}"], "path": ["api", "huckleberry", "resume", "streaming"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sessionId\": \"{{sessionId}}\",\n  \"input\": \"Yes, proceed.\",\n  \"batchId\": \"\",\n  \"batchConfirmationId\": \"\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Workflows",
+      "description": "Domo Workflows proxy.",
+      "item": [
+        {
+          "name": "Search workflows",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/workflows", "host": ["{{baseUrl}}"], "path": ["api", "workflows"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"filters\": [],\n  \"count\": 20,\n  \"offset\": 0\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
