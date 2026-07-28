@@ -1,17 +1,12 @@
-import { IsArray, IsIn, IsObject, IsOptional, IsString } from 'class-validator';
-
-export type AggregationFunction =
-  | 'SUM'
-  | 'AVG'
-  | 'COUNT'
-  | 'MIN'
-  | 'MAX'
-  | 'SUM_DISTINCT'
-  | 'AVG_DISTINCT'
-  | 'COUNT_DISTINCT'
-  | 'MIN_DISTINCT'
-  | 'MAX_DISTINCT'
-  | 'DOMO_BEAST_MODE';
+import { PartialType } from '@nestjs/swagger';
+import {
+  IsArray,
+  IsIn,
+  IsNumber,
+  IsObject,
+  IsOptional,
+  IsString,
+} from 'class-validator';
 
 export type DateTimeElement = 'DAY' | 'WEEK' | 'MONTH' | 'QUARTER' | 'YEAR';
 export type CalendarType = 'STANDARD' | 'FISCAL';
@@ -94,70 +89,34 @@ export class CreateMetricDto {
   format?: Record<string, unknown>;
 }
 
-export class UpdateMetricDto {
+// UpdateMetricDto makes all create fields optional and adds the read-only
+// fields Domo includes in GET responses so round-trip updates don't 400.
+export class UpdateMetricDto extends PartialType(CreateMetricDto) {
   @IsOptional()
-  @IsString()
-  name?: string;
+  @IsNumber()
+  id?: number;
+
+  @IsOptional()
+  @IsNumber()
+  owner?: number;
 
   @IsOptional()
   @IsString()
-  description?: string;
+  ownerDisplayName?: string;
 
   @IsOptional()
   @IsString()
-  datasourceId?: string;
-
-  @IsOptional()
-  @IsArray()
-  @IsString({ each: true })
-  tags?: string[];
-
-  @IsOptional()
-  @IsString()
-  dateColumn?: string;
+  dataSourceName?: string;
 
   @IsOptional()
   @IsIn(DATE_GRAINS)
-  preferredDateGrain?: DateTimeElement;
+  datasetDateGrain?: DateTimeElement;
 
   @IsOptional()
-  @IsIn(CALENDAR_TYPES)
-  calendarType?: CalendarType;
+  @IsString()
+  created?: string;
 
   @IsOptional()
-  @IsIn(CUMULATIVE_TYPES)
-  cumulativeType?: CumulativeType;
-
-  @IsOptional()
-  @IsArray()
-  @IsString({ each: true })
-  dimensions?: string[];
-
-  @IsOptional()
-  @IsObject()
-  aggregation?: Record<string, unknown>;
-
-  @IsOptional()
-  @IsArray()
-  filters?: unknown[];
-
-  @IsOptional()
-  @IsArray()
-  aggregatedFilters?: unknown[];
-
-  @IsOptional()
-  @IsArray()
-  legacyFilters?: unknown[];
-
-  @IsOptional()
-  @IsObject()
-  dateRangeFilter?: Record<string, unknown>;
-
-  @IsOptional()
-  @IsObject()
-  properties?: Record<string, unknown>;
-
-  @IsOptional()
-  @IsObject()
-  format?: Record<string, unknown>;
+  @IsString()
+  modified?: string;
 }

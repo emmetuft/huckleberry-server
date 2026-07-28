@@ -5,19 +5,63 @@
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
-    { "key": "BASE_URL", "value": "http://localhost:3000" },
-    { "key": "devToken", "value": "" },
-    { "key": "hbSession", "value": "" },
-    { "key": "csrfToken", "value": "" },
-    { "key": "adminApiKey", "value": "" },
-    { "key": "agentId", "value": "" },
-    { "key": "sessionId", "value": "" },
-    { "key": "mcpServerId", "value": "" },
-    { "key": "personaId", "value": "" },
-    { "key": "datasourceId", "value": "" },
-    { "key": "connectorDatabaseId", "value": "" },
-    { "key": "userId", "value": "" },
-    { "key": "groupId", "value": "" }
+    {
+      "key": "BASE_URL",
+      "value": "http://localhost:3000"
+    },
+    {
+      "key": "devToken",
+      "value": ""
+    },
+    {
+      "key": "hbSession",
+      "value": ""
+    },
+    {
+      "key": "csrfToken",
+      "value": ""
+    },
+    {
+      "key": "adminApiKey",
+      "value": ""
+    },
+    {
+      "key": "agentId",
+      "value": ""
+    },
+    {
+      "key": "sessionId",
+      "value": ""
+    },
+    {
+      "key": "mcpServerId",
+      "value": ""
+    },
+    {
+      "key": "personaId",
+      "value": ""
+    },
+    {
+      "key": "datasourceId",
+      "value": ""
+    },
+    {
+      "key": "connectorDatabaseId",
+      "value": ""
+    },
+    {
+      "key": "userId",
+      "value": ""
+    },
+    {
+      "key": "groupId",
+      "value": ""
+    },
+    {
+      "key": "metricId",
+      "value": "1",
+      "type": "string"
+    }
   ],
   "item": [
     {
@@ -29,10 +73,14 @@
             "method": "GET",
             "url": {
               "raw": "{{BASE_URL}}/health",
-              "host": ["{{BASE_URL}}"],
-              "path": ["health"]
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "health"
+              ]
             },
-            "description": "Health check — no auth required."
+            "description": "Health check \u2014 no auth required."
           }
         }
       ]
@@ -47,10 +95,21 @@
             "method": "POST",
             "url": {
               "raw": "{{BASE_URL}}/api/auth/signup",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "auth", "signup"]
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "signup"
+              ]
             },
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"email\": \"user@example.com\"\n}"
@@ -64,10 +123,22 @@
             "method": "POST",
             "url": {
               "raw": "{{BASE_URL}}/api/auth/signin/request",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "auth", "signin", "request"]
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "signin",
+                "request"
+              ]
             },
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"email\": \"user@example.com\"\n}"
@@ -81,9 +152,20 @@
             "method": "GET",
             "url": {
               "raw": "{{BASE_URL}}/api/auth/signin?token=MAGIC_LINK_TOKEN",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "auth", "signin"],
-              "query": [{ "key": "token", "value": "MAGIC_LINK_TOKEN" }]
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "signin"
+              ],
+              "query": [
+                {
+                  "key": "token",
+                  "value": "MAGIC_LINK_TOKEN"
+                }
+              ]
             },
             "description": "Exchange magic-link token. Sets hb_session and csrf_token cookies."
           }
@@ -94,14 +176,26 @@
             "method": "POST",
             "url": {
               "raw": "{{BASE_URL}}/api/auth/logout",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "auth", "logout"]
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "logout"
+              ]
             },
             "header": [
-              { "key": "Cookie", "value": "hb_session={{hbSession}}; csrf_token={{csrfToken}}" },
-              { "key": "x-csrf-token", "value": "{{csrfToken}}" }
+              {
+                "key": "Cookie",
+                "value": "hb_session={{hbSession}}; csrf_token={{csrfToken}}"
+              },
+              {
+                "key": "x-csrf-token",
+                "value": "{{csrfToken}}"
+              }
             ],
-            "description": "Logout — clears cookies. Returns 204."
+            "description": "Logout \u2014 clears cookies. Returns 204."
           }
         },
         {
@@ -110,12 +204,24 @@
             "method": "GET",
             "url": {
               "raw": "{{BASE_URL}}/api/auth/me",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "auth", "me"]
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "me"
+              ]
             },
             "header": [
-              { "key": "Cookie", "value": "hb_session={{hbSession}}; csrf_token={{csrfToken}}" },
-              { "key": "x-csrf-token", "value": "{{csrfToken}}" }
+              {
+                "key": "Cookie",
+                "value": "hb_session={{hbSession}}; csrf_token={{csrfToken}}"
+              },
+              {
+                "key": "x-csrf-token",
+                "value": "{{csrfToken}}"
+              }
             ],
             "description": "Returns the current user profile."
           }
@@ -132,12 +238,23 @@
             "method": "POST",
             "url": {
               "raw": "{{BASE_URL}}/admin/users",
-              "host": ["{{BASE_URL}}"],
-              "path": ["admin", "users"]
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "admin",
+                "users"
+              ]
             },
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "x-admin-api-key", "value": "{{adminApiKey}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-admin-api-key",
+                "value": "{{adminApiKey}}"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -158,13 +275,30 @@
             "method": "POST",
             "url": {
               "raw": "{{BASE_URL}}/api/auth/domo/link/start",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "auth", "domo", "link", "start"]
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "domo",
+                "link",
+                "start"
+              ]
             },
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Cookie", "value": "hb_session={{hbSession}}; csrf_token={{csrfToken}}" },
-              { "key": "x-csrf-token", "value": "{{csrfToken}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Cookie",
+                "value": "hb_session={{hbSession}}; csrf_token={{csrfToken}}"
+              },
+              {
+                "key": "x-csrf-token",
+                "value": "{{csrfToken}}"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -179,17 +313,33 @@
             "method": "GET",
             "url": {
               "raw": "{{BASE_URL}}/api/auth/domo/callback?code=AUTH_CODE&state=STATE",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "auth", "domo", "callback"],
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "domo",
+                "callback"
+              ],
               "query": [
-                { "key": "code", "value": "AUTH_CODE" },
-                { "key": "state", "value": "STATE" }
+                {
+                  "key": "code",
+                  "value": "AUTH_CODE"
+                },
+                {
+                  "key": "state",
+                  "value": "STATE"
+                }
               ]
             },
             "header": [
-              { "key": "Cookie", "value": "hb_session={{hbSession}}; csrf_token={{csrfToken}}" }
+              {
+                "key": "Cookie",
+                "value": "hb_session={{hbSession}}; csrf_token={{csrfToken}}"
+              }
             ],
-            "description": "OAuth callback — exchanges code for tokens and redirects."
+            "description": "OAuth callback \u2014 exchanges code for tokens and redirects."
           }
         },
         {
@@ -198,11 +348,21 @@
             "method": "GET",
             "url": {
               "raw": "{{BASE_URL}}/api/auth/domo/links",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "auth", "domo", "links"]
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "domo",
+                "links"
+              ]
             },
             "header": [
-              { "key": "Cookie", "value": "hb_session={{hbSession}}; csrf_token={{csrfToken}}" }
+              {
+                "key": "Cookie",
+                "value": "hb_session={{hbSession}}; csrf_token={{csrfToken}}"
+              }
             ],
             "description": "Returns active Domo link for the current user."
           }
@@ -211,7 +371,7 @@
     },
     {
       "name": "Agents",
-      "description": "DomoAuthGuard — pass x-domo-developer-token or x-domo-embedded-security header.",
+      "description": "DomoAuthGuard \u2014 pass x-domo-developer-token or x-domo-embedded-security header.",
       "item": [
         {
           "name": "GET /api/agents",
@@ -219,10 +379,20 @@
             "method": "GET",
             "url": {
               "raw": "{{BASE_URL}}/api/agents",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "agents"]
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "agents"
+              ]
             },
-            "header": [{ "key": "x-domo-developer-token", "value": "{{devToken}}" }],
+            "header": [
+              {
+                "key": "x-domo-developer-token",
+                "value": "{{devToken}}"
+              }
+            ],
             "description": "List all available agents."
           }
         },
@@ -232,12 +402,23 @@
             "method": "POST",
             "url": {
               "raw": "{{BASE_URL}}/api/agents",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "agents"]
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "agents"
+              ]
             },
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "x-domo-developer-token", "value": "{{devToken}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-domo-developer-token",
+                "value": "{{devToken}}"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -252,10 +433,21 @@
             "method": "POST",
             "url": {
               "raw": "{{BASE_URL}}/api/agents/refresh",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "agents", "refresh"]
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "agents",
+                "refresh"
+              ]
             },
-            "header": [{ "key": "x-domo-developer-token", "value": "{{devToken}}" }],
+            "header": [
+              {
+                "key": "x-domo-developer-token",
+                "value": "{{devToken}}"
+              }
+            ],
             "description": "Refresh the agents list. Returns { count }."
           }
         },
@@ -265,12 +457,24 @@
             "method": "POST",
             "url": {
               "raw": "{{BASE_URL}}/api/agents/search",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "agents", "search"]
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "agents",
+                "search"
+              ]
             },
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "x-domo-developer-token", "value": "{{devToken}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-domo-developer-token",
+                "value": "{{devToken}}"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -285,10 +489,21 @@
             "method": "GET",
             "url": {
               "raw": "{{BASE_URL}}/api/agents/{{agentId}}",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "agents", "{{agentId}}"]
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "agents",
+                "{{agentId}}"
+              ]
             },
-            "header": [{ "key": "x-domo-developer-token", "value": "{{devToken}}" }],
+            "header": [
+              {
+                "key": "x-domo-developer-token",
+                "value": "{{devToken}}"
+              }
+            ],
             "description": "Get a specific agent by ID."
           }
         },
@@ -298,12 +513,24 @@
             "method": "PUT",
             "url": {
               "raw": "{{BASE_URL}}/api/agents/{{agentId}}",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "agents", "{{agentId}}"]
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "agents",
+                "{{agentId}}"
+              ]
             },
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "x-domo-developer-token", "value": "{{devToken}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-domo-developer-token",
+                "value": "{{devToken}}"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -318,10 +545,21 @@
             "method": "DELETE",
             "url": {
               "raw": "{{BASE_URL}}/api/agents/{{agentId}}",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "agents", "{{agentId}}"]
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "agents",
+                "{{agentId}}"
+              ]
             },
-            "header": [{ "key": "x-domo-developer-token", "value": "{{devToken}}" }],
+            "header": [
+              {
+                "key": "x-domo-developer-token",
+                "value": "{{devToken}}"
+              }
+            ],
             "description": "Delete an agent. Returns 204."
           }
         },
@@ -331,12 +569,25 @@
             "method": "PATCH",
             "url": {
               "raw": "{{BASE_URL}}/api/agents/{{agentId}}/context",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "agents", "{{agentId}}", "context"]
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "agents",
+                "{{agentId}}",
+                "context"
+              ]
             },
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "x-domo-developer-token", "value": "{{devToken}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-domo-developer-token",
+                "value": "{{devToken}}"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -351,13 +602,30 @@
             "method": "POST",
             "url": {
               "raw": "{{BASE_URL}}/api/agents/{{agentId}}/execute/streaming",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "agents", "{{agentId}}", "execute", "streaming"]
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "agents",
+                "{{agentId}}",
+                "execute",
+                "streaming"
+              ]
             },
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "x-domo-developer-token", "value": "{{devToken}}" },
-              { "key": "Accept", "value": "text/event-stream" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-domo-developer-token",
+                "value": "{{devToken}}"
+              },
+              {
+                "key": "Accept",
+                "value": "text/event-stream"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -372,13 +640,30 @@
             "method": "POST",
             "url": {
               "raw": "{{BASE_URL}}/api/agents/{{agentId}}/resume/streaming",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "agents", "{{agentId}}", "resume", "streaming"]
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "agents",
+                "{{agentId}}",
+                "resume",
+                "streaming"
+              ]
             },
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "x-domo-developer-token", "value": "{{devToken}}" },
-              { "key": "Accept", "value": "text/event-stream" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-domo-developer-token",
+                "value": "{{devToken}}"
+              },
+              {
+                "key": "Accept",
+                "value": "text/event-stream"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -391,7 +676,7 @@
     },
     {
       "name": "Huckleberry",
-      "description": "Direct huckleberry execution endpoints — DomoAuthGuard.",
+      "description": "Direct huckleberry execution endpoints \u2014 DomoAuthGuard.",
       "item": [
         {
           "name": "POST /api/huckleberry/execute/streaming",
@@ -399,13 +684,29 @@
             "method": "POST",
             "url": {
               "raw": "{{BASE_URL}}/api/huckleberry/execute/streaming",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "huckleberry", "execute", "streaming"]
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "huckleberry",
+                "execute",
+                "streaming"
+              ]
             },
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "x-domo-developer-token", "value": "{{devToken}}" },
-              { "key": "Accept", "value": "text/event-stream" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-domo-developer-token",
+                "value": "{{devToken}}"
+              },
+              {
+                "key": "Accept",
+                "value": "text/event-stream"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -420,13 +721,29 @@
             "method": "POST",
             "url": {
               "raw": "{{BASE_URL}}/api/huckleberry/resume/streaming",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "huckleberry", "resume", "streaming"]
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "huckleberry",
+                "resume",
+                "streaming"
+              ]
             },
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "x-domo-developer-token", "value": "{{devToken}}" },
-              { "key": "Accept", "value": "text/event-stream" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-domo-developer-token",
+                "value": "{{devToken}}"
+              },
+              {
+                "key": "Accept",
+                "value": "text/event-stream"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -447,12 +764,23 @@
             "method": "POST",
             "url": {
               "raw": "{{BASE_URL}}/api/sessions",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "sessions"]
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "sessions"
+              ]
             },
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "x-domo-developer-token", "value": "{{devToken}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-domo-developer-token",
+                "value": "{{devToken}}"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -467,10 +795,21 @@
             "method": "GET",
             "url": {
               "raw": "{{BASE_URL}}/api/sessions/{{sessionId}}",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "sessions", "{{sessionId}}"]
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "sessions",
+                "{{sessionId}}"
+              ]
             },
-            "header": [{ "key": "x-domo-developer-token", "value": "{{devToken}}" }],
+            "header": [
+              {
+                "key": "x-domo-developer-token",
+                "value": "{{devToken}}"
+              }
+            ],
             "description": "Get a specific session."
           }
         },
@@ -480,10 +819,22 @@
             "method": "GET",
             "url": {
               "raw": "{{BASE_URL}}/api/sessions/{{sessionId}}/events",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "sessions", "{{sessionId}}", "events"]
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "sessions",
+                "{{sessionId}}",
+                "events"
+              ]
             },
-            "header": [{ "key": "x-domo-developer-token", "value": "{{devToken}}" }],
+            "header": [
+              {
+                "key": "x-domo-developer-token",
+                "value": "{{devToken}}"
+              }
+            ],
             "description": "Get all events for a session."
           }
         },
@@ -493,10 +844,21 @@
             "method": "DELETE",
             "url": {
               "raw": "{{BASE_URL}}/api/sessions/{{sessionId}}",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "sessions", "{{sessionId}}"]
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "sessions",
+                "{{sessionId}}"
+              ]
             },
-            "header": [{ "key": "x-domo-developer-token", "value": "{{devToken}}" }],
+            "header": [
+              {
+                "key": "x-domo-developer-token",
+                "value": "{{devToken}}"
+              }
+            ],
             "description": "Delete a session."
           }
         }
@@ -512,15 +874,34 @@
             "method": "GET",
             "url": {
               "raw": "{{BASE_URL}}/datasources?offset=0&limit=20",
-              "host": ["{{BASE_URL}}"],
-              "path": ["datasources"],
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "datasources"
+              ],
               "query": [
-                { "key": "offset", "value": "0" },
-                { "key": "limit", "value": "20" },
-                { "key": "nameLike", "value": "", "disabled": true }
+                {
+                  "key": "offset",
+                  "value": "0"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                },
+                {
+                  "key": "nameLike",
+                  "value": "",
+                  "disabled": true
+                }
               ]
             },
-            "header": [{ "key": "x-domo-developer-token", "value": "{{devToken}}" }],
+            "header": [
+              {
+                "key": "x-domo-developer-token",
+                "value": "{{devToken}}"
+              }
+            ],
             "description": "List datasources with optional pagination and name filter."
           }
         },
@@ -530,10 +911,21 @@
             "method": "GET",
             "url": {
               "raw": "{{BASE_URL}}/datasources/{{datasourceId}}/schema",
-              "host": ["{{BASE_URL}}"],
-              "path": ["datasources", "{{datasourceId}}", "schema"]
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "datasources",
+                "{{datasourceId}}",
+                "schema"
+              ]
             },
-            "header": [{ "key": "x-domo-developer-token", "value": "{{devToken}}" }],
+            "header": [
+              {
+                "key": "x-domo-developer-token",
+                "value": "{{devToken}}"
+              }
+            ],
             "description": "Get the schema for a datasource."
           }
         },
@@ -543,16 +935,34 @@
             "method": "POST",
             "url": {
               "raw": "{{BASE_URL}}/datasources/{{datasourceId}}/data?page=0&size=100",
-              "host": ["{{BASE_URL}}"],
-              "path": ["datasources", "{{datasourceId}}", "data"],
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "datasources",
+                "{{datasourceId}}",
+                "data"
+              ],
               "query": [
-                { "key": "page", "value": "0" },
-                { "key": "size", "value": "100" }
+                {
+                  "key": "page",
+                  "value": "0"
+                },
+                {
+                  "key": "size",
+                  "value": "100"
+                }
               ]
             },
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "x-domo-developer-token", "value": "{{devToken}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-domo-developer-token",
+                "value": "{{devToken}}"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -573,12 +983,23 @@
             "method": "POST",
             "url": {
               "raw": "{{BASE_URL}}/api/connectors",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "connectors"]
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "connectors"
+              ]
             },
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "x-domo-developer-token", "value": "{{devToken}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-domo-developer-token",
+                "value": "{{devToken}}"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -593,10 +1014,22 @@
             "method": "GET",
             "url": {
               "raw": "{{BASE_URL}}/api/connectors/{{connectorDatabaseId}}/image",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "connectors", "{{connectorDatabaseId}}", "image"]
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "connectors",
+                "{{connectorDatabaseId}}",
+                "image"
+              ]
             },
-            "header": [{ "key": "x-domo-developer-token", "value": "{{devToken}}" }],
+            "header": [
+              {
+                "key": "x-domo-developer-token",
+                "value": "{{devToken}}"
+              }
+            ],
             "description": "Get connector icon image (image/png)."
           }
         }
@@ -612,12 +1045,23 @@
             "method": "POST",
             "url": {
               "raw": "{{BASE_URL}}/api/workflows",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "workflows"]
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "workflows"
+              ]
             },
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "x-domo-developer-token", "value": "{{devToken}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-domo-developer-token",
+                "value": "{{devToken}}"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -638,10 +1082,20 @@
             "method": "GET",
             "url": {
               "raw": "{{BASE_URL}}/api/identity",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "identity"]
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "identity"
+              ]
             },
-            "header": [{ "key": "x-domo-developer-token", "value": "{{devToken}}" }],
+            "header": [
+              {
+                "key": "x-domo-developer-token",
+                "value": "{{devToken}}"
+              }
+            ],
             "description": "Get identity for the current session."
           }
         }
@@ -657,12 +1111,24 @@
             "method": "POST",
             "url": {
               "raw": "{{BASE_URL}}/api/graph/nodes",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "graph", "nodes"]
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "graph",
+                "nodes"
+              ]
             },
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "x-domo-developer-token", "value": "{{devToken}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-domo-developer-token",
+                "value": "{{devToken}}"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -683,10 +1149,20 @@
             "method": "GET",
             "url": {
               "raw": "{{BASE_URL}}/api/toolkits",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "toolkits"]
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "toolkits"
+              ]
             },
-            "header": [{ "key": "x-domo-developer-token", "value": "{{devToken}}" }],
+            "header": [
+              {
+                "key": "x-domo-developer-token",
+                "value": "{{devToken}}"
+              }
+            ],
             "description": "List all available toolkits."
           }
         }
@@ -702,11 +1178,28 @@
             "method": "GET",
             "url": {
               "raw": "{{BASE_URL}}/api/mcp/servers",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "mcp", "servers"],
-              "query": [{ "key": "enabled", "value": "true", "disabled": true }]
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "mcp",
+                "servers"
+              ],
+              "query": [
+                {
+                  "key": "enabled",
+                  "value": "true",
+                  "disabled": true
+                }
+              ]
             },
-            "header": [{ "key": "x-domo-developer-token", "value": "{{devToken}}" }],
+            "header": [
+              {
+                "key": "x-domo-developer-token",
+                "value": "{{devToken}}"
+              }
+            ],
             "description": "List MCP servers. Optional ?enabled=true|false filter."
           }
         },
@@ -716,12 +1209,24 @@
             "method": "POST",
             "url": {
               "raw": "{{BASE_URL}}/api/mcp/servers",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "mcp", "servers"]
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "mcp",
+                "servers"
+              ]
             },
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "x-domo-developer-token", "value": "{{devToken}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-domo-developer-token",
+                "value": "{{devToken}}"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -736,10 +1241,22 @@
             "method": "GET",
             "url": {
               "raw": "{{BASE_URL}}/api/mcp/servers/{{mcpServerId}}",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "mcp", "servers", "{{mcpServerId}}"]
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "mcp",
+                "servers",
+                "{{mcpServerId}}"
+              ]
             },
-            "header": [{ "key": "x-domo-developer-token", "value": "{{devToken}}" }],
+            "header": [
+              {
+                "key": "x-domo-developer-token",
+                "value": "{{devToken}}"
+              }
+            ],
             "description": "Get a specific MCP server."
           }
         },
@@ -749,12 +1266,25 @@
             "method": "PUT",
             "url": {
               "raw": "{{BASE_URL}}/api/mcp/servers/{{mcpServerId}}",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "mcp", "servers", "{{mcpServerId}}"]
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "mcp",
+                "servers",
+                "{{mcpServerId}}"
+              ]
             },
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "x-domo-developer-token", "value": "{{devToken}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-domo-developer-token",
+                "value": "{{devToken}}"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -769,10 +1299,22 @@
             "method": "DELETE",
             "url": {
               "raw": "{{BASE_URL}}/api/mcp/servers/{{mcpServerId}}",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "mcp", "servers", "{{mcpServerId}}"]
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "mcp",
+                "servers",
+                "{{mcpServerId}}"
+              ]
             },
-            "header": [{ "key": "x-domo-developer-token", "value": "{{devToken}}" }],
+            "header": [
+              {
+                "key": "x-domo-developer-token",
+                "value": "{{devToken}}"
+              }
+            ],
             "description": "Delete an MCP server. Returns 204."
           }
         },
@@ -782,10 +1324,23 @@
             "method": "POST",
             "url": {
               "raw": "{{BASE_URL}}/api/mcp/servers/{{mcpServerId}}/test",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "mcp", "servers", "{{mcpServerId}}", "test"]
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "mcp",
+                "servers",
+                "{{mcpServerId}}",
+                "test"
+              ]
             },
-            "header": [{ "key": "x-domo-developer-token", "value": "{{devToken}}" }],
+            "header": [
+              {
+                "key": "x-domo-developer-token",
+                "value": "{{devToken}}"
+              }
+            ],
             "description": "Test connectivity to an MCP server."
           }
         },
@@ -795,10 +1350,23 @@
             "method": "POST",
             "url": {
               "raw": "{{BASE_URL}}/api/mcp/servers/{{mcpServerId}}/sync",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "mcp", "servers", "{{mcpServerId}}", "sync"]
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "mcp",
+                "servers",
+                "{{mcpServerId}}",
+                "sync"
+              ]
             },
-            "header": [{ "key": "x-domo-developer-token", "value": "{{devToken}}" }],
+            "header": [
+              {
+                "key": "x-domo-developer-token",
+                "value": "{{devToken}}"
+              }
+            ],
             "description": "Sync tools from an MCP server."
           }
         },
@@ -808,12 +1376,26 @@
             "method": "PATCH",
             "url": {
               "raw": "{{BASE_URL}}/api/mcp/servers/{{mcpServerId}}/toggle",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "mcp", "servers", "{{mcpServerId}}", "toggle"]
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "mcp",
+                "servers",
+                "{{mcpServerId}}",
+                "toggle"
+              ]
             },
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "x-domo-developer-token", "value": "{{devToken}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-domo-developer-token",
+                "value": "{{devToken}}"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -834,10 +1416,21 @@
             "method": "GET",
             "url": {
               "raw": "{{BASE_URL}}/api/mcp/tools",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "mcp", "tools"]
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "mcp",
+                "tools"
+              ]
             },
-            "header": [{ "key": "x-domo-developer-token", "value": "{{devToken}}" }],
+            "header": [
+              {
+                "key": "x-domo-developer-token",
+                "value": "{{devToken}}"
+              }
+            ],
             "description": "List all MCP tools across all enabled servers."
           }
         },
@@ -847,12 +1440,25 @@
             "method": "POST",
             "url": {
               "raw": "{{BASE_URL}}/api/mcp/tools/execute",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "mcp", "tools", "execute"]
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "mcp",
+                "tools",
+                "execute"
+              ]
             },
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "x-domo-developer-token", "value": "{{devToken}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-domo-developer-token",
+                "value": "{{devToken}}"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -873,10 +1479,23 @@
             "method": "GET",
             "url": {
               "raw": "{{BASE_URL}}/api/mcp/oauth2/authorize/{{mcpServerId}}",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "mcp", "oauth2", "authorize", "{{mcpServerId}}"]
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "mcp",
+                "oauth2",
+                "authorize",
+                "{{mcpServerId}}"
+              ]
             },
-            "header": [{ "key": "x-domo-developer-token", "value": "{{devToken}}" }],
+            "header": [
+              {
+                "key": "x-domo-developer-token",
+                "value": "{{devToken}}"
+              }
+            ],
             "description": "Get OAuth2 authorization URL for an MCP server."
           }
         },
@@ -886,10 +1505,23 @@
             "method": "GET",
             "url": {
               "raw": "{{BASE_URL}}/api/mcp/oauth2/status/{{mcpServerId}}",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "mcp", "oauth2", "status", "{{mcpServerId}}"]
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "mcp",
+                "oauth2",
+                "status",
+                "{{mcpServerId}}"
+              ]
             },
-            "header": [{ "key": "x-domo-developer-token", "value": "{{devToken}}" }],
+            "header": [
+              {
+                "key": "x-domo-developer-token",
+                "value": "{{devToken}}"
+              }
+            ],
             "description": "Get OAuth2 status for an MCP server."
           }
         },
@@ -899,10 +1531,23 @@
             "method": "POST",
             "url": {
               "raw": "{{BASE_URL}}/api/mcp/oauth2/discover/{{mcpServerId}}",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "mcp", "oauth2", "discover", "{{mcpServerId}}"]
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "mcp",
+                "oauth2",
+                "discover",
+                "{{mcpServerId}}"
+              ]
             },
-            "header": [{ "key": "x-domo-developer-token", "value": "{{devToken}}" }],
+            "header": [
+              {
+                "key": "x-domo-developer-token",
+                "value": "{{devToken}}"
+              }
+            ],
             "description": "Discover OAuth2 configuration for an MCP server."
           }
         },
@@ -912,10 +1557,23 @@
             "method": "POST",
             "url": {
               "raw": "{{BASE_URL}}/api/mcp/oauth2/revoke/{{mcpServerId}}",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "mcp", "oauth2", "revoke", "{{mcpServerId}}"]
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "mcp",
+                "oauth2",
+                "revoke",
+                "{{mcpServerId}}"
+              ]
             },
-            "header": [{ "key": "x-domo-developer-token", "value": "{{devToken}}" }],
+            "header": [
+              {
+                "key": "x-domo-developer-token",
+                "value": "{{devToken}}"
+              }
+            ],
             "description": "Revoke OAuth2 tokens for an MCP server."
           }
         }
@@ -931,10 +1589,20 @@
             "method": "GET",
             "url": {
               "raw": "{{BASE_URL}}/api/personas",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "personas"]
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "personas"
+              ]
             },
-            "header": [{ "key": "x-domo-developer-token", "value": "{{devToken}}" }],
+            "header": [
+              {
+                "key": "x-domo-developer-token",
+                "value": "{{devToken}}"
+              }
+            ],
             "description": "List all personas."
           }
         },
@@ -944,12 +1612,23 @@
             "method": "POST",
             "url": {
               "raw": "{{BASE_URL}}/api/personas",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "personas"]
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "personas"
+              ]
             },
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "x-domo-developer-token", "value": "{{devToken}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-domo-developer-token",
+                "value": "{{devToken}}"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -964,10 +1643,21 @@
             "method": "GET",
             "url": {
               "raw": "{{BASE_URL}}/api/personas/default",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "personas", "default"]
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "personas",
+                "default"
+              ]
             },
-            "header": [{ "key": "x-domo-developer-token", "value": "{{devToken}}" }],
+            "header": [
+              {
+                "key": "x-domo-developer-token",
+                "value": "{{devToken}}"
+              }
+            ],
             "description": "Get the default persona (or null)."
           }
         },
@@ -977,10 +1667,21 @@
             "method": "GET",
             "url": {
               "raw": "{{BASE_URL}}/api/personas/{{personaId}}",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "personas", "{{personaId}}"]
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "personas",
+                "{{personaId}}"
+              ]
             },
-            "header": [{ "key": "x-domo-developer-token", "value": "{{devToken}}" }],
+            "header": [
+              {
+                "key": "x-domo-developer-token",
+                "value": "{{devToken}}"
+              }
+            ],
             "description": "Get a specific persona."
           }
         },
@@ -990,12 +1691,24 @@
             "method": "PUT",
             "url": {
               "raw": "{{BASE_URL}}/api/personas/{{personaId}}",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "personas", "{{personaId}}"]
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "personas",
+                "{{personaId}}"
+              ]
             },
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "x-domo-developer-token", "value": "{{devToken}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-domo-developer-token",
+                "value": "{{devToken}}"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -1010,10 +1723,21 @@
             "method": "DELETE",
             "url": {
               "raw": "{{BASE_URL}}/api/personas/{{personaId}}",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "personas", "{{personaId}}"]
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "personas",
+                "{{personaId}}"
+              ]
             },
-            "header": [{ "key": "x-domo-developer-token", "value": "{{devToken}}" }],
+            "header": [
+              {
+                "key": "x-domo-developer-token",
+                "value": "{{devToken}}"
+              }
+            ],
             "description": "Delete a persona. Returns 204."
           }
         },
@@ -1023,10 +1747,22 @@
             "method": "PATCH",
             "url": {
               "raw": "{{BASE_URL}}/api/personas/{{personaId}}/default",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "personas", "{{personaId}}", "default"]
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "personas",
+                "{{personaId}}",
+                "default"
+              ]
             },
-            "header": [{ "key": "x-domo-developer-token", "value": "{{devToken}}" }],
+            "header": [
+              {
+                "key": "x-domo-developer-token",
+                "value": "{{devToken}}"
+              }
+            ],
             "description": "Set a persona as the default."
           }
         }
@@ -1042,10 +1778,21 @@
             "method": "GET",
             "url": {
               "raw": "{{BASE_URL}}/api/persona/{{userId}}",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "persona", "{{userId}}"]
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "persona",
+                "{{userId}}"
+              ]
             },
-            "header": [{ "key": "x-domo-developer-token", "value": "{{devToken}}" }],
+            "header": [
+              {
+                "key": "x-domo-developer-token",
+                "value": "{{devToken}}"
+              }
+            ],
             "description": "Get persona for a user (backward compat)."
           }
         },
@@ -1055,12 +1802,24 @@
             "method": "POST",
             "url": {
               "raw": "{{BASE_URL}}/api/persona/{{userId}}",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "persona", "{{userId}}"]
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "persona",
+                "{{userId}}"
+              ]
             },
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "x-domo-developer-token", "value": "{{devToken}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-domo-developer-token",
+                "value": "{{devToken}}"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -1081,11 +1840,27 @@
             "method": "GET",
             "url": {
               "raw": "{{BASE_URL}}/api/users",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "users"],
-              "query": [{ "key": "ids", "value": "id1,id2", "disabled": true }]
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "users"
+              ],
+              "query": [
+                {
+                  "key": "ids",
+                  "value": "id1,id2",
+                  "disabled": true
+                }
+              ]
             },
-            "header": [{ "key": "x-domo-developer-token", "value": "{{devToken}}" }],
+            "header": [
+              {
+                "key": "x-domo-developer-token",
+                "value": "{{devToken}}"
+              }
+            ],
             "description": "List users. Optionally bulk-fetch by ?ids=id1,id2."
           }
         },
@@ -1095,10 +1870,21 @@
             "method": "GET",
             "url": {
               "raw": "{{BASE_URL}}/api/users/{{userId}}",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "users", "{{userId}}"]
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                "{{userId}}"
+              ]
             },
-            "header": [{ "key": "x-domo-developer-token", "value": "{{devToken}}" }],
+            "header": [
+              {
+                "key": "x-domo-developer-token",
+                "value": "{{devToken}}"
+              }
+            ],
             "description": "Get a specific user."
           }
         },
@@ -1108,14 +1894,30 @@
             "method": "GET",
             "url": {
               "raw": "{{BASE_URL}}/api/groups?limit=20&offset=0",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "groups"],
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "groups"
+              ],
               "query": [
-                { "key": "limit", "value": "20" },
-                { "key": "offset", "value": "0" }
+                {
+                  "key": "limit",
+                  "value": "20"
+                },
+                {
+                  "key": "offset",
+                  "value": "0"
+                }
               ]
             },
-            "header": [{ "key": "x-domo-developer-token", "value": "{{devToken}}" }],
+            "header": [
+              {
+                "key": "x-domo-developer-token",
+                "value": "{{devToken}}"
+              }
+            ],
             "description": "List groups with pagination."
           }
         },
@@ -1125,10 +1927,21 @@
             "method": "GET",
             "url": {
               "raw": "{{BASE_URL}}/api/groups/{{groupId}}",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "groups", "{{groupId}}"]
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "groups",
+                "{{groupId}}"
+              ]
             },
-            "header": [{ "key": "x-domo-developer-token", "value": "{{devToken}}" }],
+            "header": [
+              {
+                "key": "x-domo-developer-token",
+                "value": "{{devToken}}"
+              }
+            ],
             "description": "Get a specific group."
           }
         }
@@ -1144,10 +1957,21 @@
             "method": "GET",
             "url": {
               "raw": "{{BASE_URL}}/api/ai/models",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "ai", "models"]
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "ai",
+                "models"
+              ]
             },
-            "header": [{ "key": "x-domo-developer-token", "value": "{{devToken}}" }],
+            "header": [
+              {
+                "key": "x-domo-developer-token",
+                "value": "{{devToken}}"
+              }
+            ],
             "description": "List available AI models."
           }
         },
@@ -1157,12 +1981,25 @@
             "method": "POST",
             "url": {
               "raw": "{{BASE_URL}}/api/ai/text/generation",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "ai", "text", "generation"]
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "ai",
+                "text",
+                "generation"
+              ]
             },
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "x-domo-developer-token", "value": "{{devToken}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-domo-developer-token",
+                "value": "{{devToken}}"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -1177,12 +2014,25 @@
             "method": "POST",
             "url": {
               "raw": "{{BASE_URL}}/api/ai/text/summarize",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "ai", "text", "summarize"]
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "ai",
+                "text",
+                "summarize"
+              ]
             },
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "x-domo-developer-token", "value": "{{devToken}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-domo-developer-token",
+                "value": "{{devToken}}"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -1197,12 +2047,25 @@
             "method": "POST",
             "url": {
               "raw": "{{BASE_URL}}/api/ai/text/sql",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "ai", "text", "sql"]
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "ai",
+                "text",
+                "sql"
+              ]
             },
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "x-domo-developer-token", "value": "{{devToken}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-domo-developer-token",
+                "value": "{{devToken}}"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -1217,18 +2080,389 @@
             "method": "POST",
             "url": {
               "raw": "{{BASE_URL}}/api/ai/image/text",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "ai", "image", "text"]
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "ai",
+                "image",
+                "text"
+              ]
             },
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "x-domo-developer-token", "value": "{{devToken}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-domo-developer-token",
+                "value": "{{devToken}}"
+              }
             ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"input\": \"What text is in this image?\",\n  \"image\": {\n    \"type\": \"base64\",\n    \"mediaType\": \"image/png\",\n    \"data\": \"BASE64_ENCODED_IMAGE_DATA\"\n  }\n}"
             },
             "description": "Extract text from an image (OCR/vision)."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Metrics",
+      "item": [
+        {
+          "name": "GET /api/metrics",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{BASE_URL}}/api/metrics",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "metrics"
+              ]
+            },
+            "header": [
+              {
+                "key": "x-domo-developer-token",
+                "value": "{{devToken}}"
+              }
+            ],
+            "description": "List all metrics."
+          }
+        },
+        {
+          "name": "POST /api/metrics",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{BASE_URL}}/api/metrics",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "metrics"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-domo-developer-token",
+                "value": "{{devToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Total Revenue\",\n  \"description\": \"Sum of all revenue\",\n  \"datasourceId\": \"{{datasourceId}}\",\n  \"aggregation\": {\n    \"function\": \"SUM\",\n    \"value\": \"revenue\",\n    \"alias\": \"Total Revenue\"\n  },\n  \"preferredDateGrain\": \"MONTH\"\n}"
+            },
+            "description": "Create a new metric."
+          }
+        },
+        {
+          "name": "POST /api/metrics/filter",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{BASE_URL}}/api/metrics/filter",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "metrics",
+                "filter"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-domo-developer-token",
+                "value": "{{devToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nameContains\": \"Revenue\",\n  \"limit\": 20,\n  \"offset\": 0,\n  \"orderBy\": \"CREATED_DESC\"\n}"
+            },
+            "description": "Search/filter metrics (paginated)."
+          }
+        },
+        {
+          "name": "POST /api/metrics/preview",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{BASE_URL}}/api/metrics/preview",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "metrics",
+                "preview"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-domo-developer-token",
+                "value": "{{devToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"metric\": {\n    \"name\": \"Preview Metric\",\n    \"datasourceId\": \"{{datasourceId}}\",\n    \"aggregation\": {\n      \"function\": \"COUNT\",\n      \"value\": \"*\",\n      \"alias\": \"Row Count\"\n    }\n  },\n  \"sqlRequest\": {\n    \"dateGrain\": \"MONTH\"\n  }\n}"
+            },
+            "description": "Preview an unsaved metric (dry-run SQL + execute)."
+          }
+        },
+        {
+          "name": "GET /api/metrics/datasource/:dsId",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{BASE_URL}}/api/metrics/datasource/{{datasourceId}}",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "metrics",
+                "datasource",
+                "{{datasourceId}}"
+              ]
+            },
+            "header": [
+              {
+                "key": "x-domo-developer-token",
+                "value": "{{devToken}}"
+              }
+            ],
+            "description": "Get metrics for a datasource."
+          }
+        },
+        {
+          "name": "GET /api/metrics/:id",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{BASE_URL}}/api/metrics/{{metricId}}",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "metrics",
+                "{{metricId}}"
+              ]
+            },
+            "header": [
+              {
+                "key": "x-domo-developer-token",
+                "value": "{{devToken}}"
+              }
+            ],
+            "description": "Get a metric by ID."
+          }
+        },
+        {
+          "name": "PUT /api/metrics/:id",
+          "request": {
+            "method": "PUT",
+            "url": {
+              "raw": "{{BASE_URL}}/api/metrics/{{metricId}}",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "metrics",
+                "{{metricId}}"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-domo-developer-token",
+                "value": "{{devToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Updated Metric Name\",\n  \"description\": \"Updated description\"\n}"
+            },
+            "description": "Update a metric."
+          }
+        },
+        {
+          "name": "DELETE /api/metrics/:id",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{BASE_URL}}/api/metrics/{{metricId}}",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "metrics",
+                "{{metricId}}"
+              ]
+            },
+            "header": [
+              {
+                "key": "x-domo-developer-token",
+                "value": "{{devToken}}"
+              }
+            ],
+            "description": "Soft-delete a metric."
+          }
+        },
+        {
+          "name": "DELETE /api/metrics/:id (hard)",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{BASE_URL}}/api/metrics/{{metricId}}?hardDelete=true",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "metrics",
+                "{{metricId}}"
+              ],
+              "query": [
+                {
+                  "key": "hardDelete",
+                  "value": "true"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "x-domo-developer-token",
+                "value": "{{devToken}}"
+              }
+            ],
+            "description": "Hard-delete a metric."
+          }
+        },
+        {
+          "name": "POST /api/metrics/:id/sql",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{BASE_URL}}/api/metrics/{{metricId}}/sql",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "metrics",
+                "{{metricId}}",
+                "sql"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-domo-developer-token",
+                "value": "{{devToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"dateGrain\": \"MONTH\",\n  \"calendarType\": \"STANDARD\"\n}"
+            },
+            "description": "Get the generated SQL for a metric."
+          }
+        },
+        {
+          "name": "POST /api/metrics/:id/execute",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{BASE_URL}}/api/metrics/{{metricId}}/execute",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "metrics",
+                "{{metricId}}",
+                "execute"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-domo-developer-token",
+                "value": "{{devToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"dateGrain\": \"MONTH\",\n  \"dateRangeFilter\": {\n    \"startDate\": \"2025-01-01\",\n    \"endDate\": \"2025-12-31\",\n    \"column\": \"date\"\n  }\n}"
+            },
+            "description": "Execute a metric and return results."
+          }
+        },
+        {
+          "name": "POST /api/metrics/:id/execute/pop",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{BASE_URL}}/api/metrics/{{metricId}}/execute/pop",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "metrics",
+                "{{metricId}}",
+                "execute",
+                "pop"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-domo-developer-token",
+                "value": "{{devToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"dateGrain\": \"MONTH\",\n  \"periodDateRangeFilters\": {\n    \"current\": {\n      \"startDate\": \"2025-01-01\",\n      \"endDate\": \"2025-03-31\"\n    },\n    \"previous\": {\n      \"startDate\": \"2024-01-01\",\n      \"endDate\": \"2024-03-31\"\n    }\n  },\n  \"annotationDate\": false\n}"
+            },
+            "description": "Period-over-period metric execution."
           }
         }
       ]
