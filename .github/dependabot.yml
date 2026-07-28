@@ -9,10 +9,28 @@ updates:
       npm-dependencies:
         patterns:
           - "*"
+        exclude-patterns:
+          - "typescript"
+          - "typescript-eslint"
+          - "@typescript-eslint/*"
         update-types:
-          - major
           - minor
           - patch
+      typescript-toolchain:
+        patterns:
+          - "typescript"
+          - "typescript-eslint"
+          - "@typescript-eslint/*"
+        update-types:
+          - minor
+          - patch
+    ignore:
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "typescript-eslint"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@typescript-eslint/*"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: maven
     directory: /
