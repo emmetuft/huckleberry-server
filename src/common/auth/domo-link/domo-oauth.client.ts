@@ -22,8 +22,8 @@ export interface TokenResponse {
  * Gatekeeper instance. Uses CIMD (Client ID Metadata Document) — the
  * client_id is the URL of the metadata document hosted at
  * `MAGIC_LINK_BASE_URL/.well-known/oauth-client`. Gatekeeper fetches the
- * document on demand, so scope and redirect URI changes take effect
- * immediately by updating the document.
+ * document on demand, so scope and redirect URI changes take effect after
+ * restarting the server (the document is built once at boot from config).
  *
  * For local dev against rigs (whose Gatekeeper can't reach our document),
  * set `DOMO_OAUTH_CLIENT_ID` to override the derived client_id with a
@@ -186,6 +186,13 @@ export class DomoOAuthClient {
    */
   async validateInstance(issuerUrl: string): Promise<void> {
     const transport = this.transportFor(issuerUrl);
+    const parsedTransport = new URL(transport);
+    if (!isPublicHost(parsedTransport.hostname)) {
+      throw new BadRequestException(
+        'The Domo instance URL must be a public hostname.',
+      );
+    }
+
     const url = new URL(
       '/.well-known/oauth-authorization-server',
       transport,
@@ -320,4 +327,36 @@ export class DomoOAuthClient {
       Accept: 'application/json',
     };
   }
+}
+
+/**
+ * Rejects loopback, link-local, and RFC 1918 private ranges so
+ * user-supplied issuerUrls can't be used to probe internal infrastructure.
+ */
+function isPublicHost(hostname: string): boolean {
+  // IPv6 loopback
+  if (hostname === '::1' || hostname === '[::]' || hostname === '[::]') {
+    return false;
+  }
+  // Strip IPv6 brackets for numeric check
+  const h = hostname.startsWith('[') ? hostname.slice(1, -1) : hostname;
+  if (h === 'localhost') return false;
+
+  // Parse dotted-decimal IPv4
+  const parts = h.split('.');
+  if (parts.length === 4) {
+    const [a, b] = parts.map(Number);
+    // 127.x.x.x  — loopback
+    if (a === 127) return false;
+    // 10.x.x.x   — RFC 1918
+    if (a === 10) return false;
+    // 172.16–31.x.x — RFC 1918
+    if (a === 172 && b >= 16 && b <= 31) return false;
+    // 192.168.x.x — RFC 1918
+    if (a === 192 && b === 168) return false;
+    // 169.254.x.x — link-local (EC2 IMDS)
+    if (a === 169 && b === 254) return false;
+  }
+
+  return true;
 }

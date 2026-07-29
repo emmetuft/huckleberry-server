@@ -171,6 +171,27 @@ describe('DomoOAuthClient.revoke', () => {
   });
 });
 
+describe('DomoOAuthClient.validateInstance — private IP rejection', () => {
+  it.each([
+    ['loopback hostname', 'http://localhost'],
+    ['IPv4 loopback', 'http://127.0.0.1'],
+    ['link-local / EC2 IMDS', 'http://169.254.169.254'],
+    ['RFC 1918 class A', 'http://10.0.0.1'],
+    ['RFC 1918 class B', 'http://172.16.0.1'],
+    ['RFC 1918 class C', 'http://192.168.1.1'],
+  ])(
+    'rejects %s without making a network request (%s)',
+    async (_label, url) => {
+      const fetchSpy = jest.spyOn(globalThis, 'fetch');
+      await expect(makeClient().validateInstance(url)).rejects.toThrow(
+        BadRequestException,
+      );
+      expect(fetchSpy).not.toHaveBeenCalled();
+      fetchSpy.mockRestore();
+    },
+  );
+});
+
 describe('DomoOAuthClient.validateInstance', () => {
   let fetchSpy: jest.SpiedFunction<typeof globalThis.fetch>;
 
