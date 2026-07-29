@@ -1,6 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { DomoProxyService } from '../domo-proxy/domo-proxy.service.js';
 
+type ColumnExpr = { exprType: string; column: string };
+
 @Injectable()
 export class DataSourcesService {
   constructor(private readonly domo: DomoProxyService) {}
@@ -28,19 +30,20 @@ export class DataSourcesService {
     dataSourceId: string,
     page: number,
     pageSize: number,
-    body?: { columns: string[]; filters?: unknown },
+    body?: { columns: Array<string | ColumnExpr>; filters?: unknown },
   ): Promise<unknown> {
-    // This doesn't work, need another endpoint
+    const columns: ColumnExpr[] = (body?.columns ?? []).map((col) =>
+      typeof col === 'string' ? { exprType: 'COLUMN', column: col } : col,
+    );
     return this.domo.post(`/api/query/v1/execute/${dataSourceId}`, {
       query: {
-        columns: body?.columns ?? [],
+        columns,
         groupByColumns: [],
         having: null,
         limit: { limit: pageSize, offset: page * pageSize },
         orderByColumns: [],
         where: null,
       },
-      querySource: 'data_table',
     });
   }
 }

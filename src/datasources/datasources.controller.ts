@@ -48,7 +48,11 @@ export class DataSourcesController {
     @Param('id') id: string,
     @Query('page') page?: string,
     @Query('size') size?: string,
-    @Body() body?: { columns: string[]; filters?: unknown },
+    @Body()
+    body?: {
+      columns: Array<string | { exprType: string; column: string }>;
+      filters?: unknown;
+    },
   ) {
     return this.dataSourcesService.queryData(
       id,
