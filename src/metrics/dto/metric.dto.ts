@@ -7,6 +7,7 @@ import {
   IsOptional,
   IsString,
   Allow,
+  ValidateIf,
 } from 'class-validator';
 
 export type DateTimeElement = 'DAY' | 'WEEK' | 'MONTH' | 'QUARTER' | 'YEAR';
@@ -40,7 +41,8 @@ export class CreateMetricDto {
   @IsString({ each: true })
   tags?: string[];
 
-  @IsOptional()
+  // Required when preferredDateGrain is set — Domo rejects the combination without it.
+  @ValidateIf((o: CreateMetricDto) => o.preferredDateGrain != null)
   @IsString()
   dateColumn?: string;
 
@@ -93,6 +95,12 @@ export class CreateMetricDto {
 // UpdateMetricDto makes all create fields optional and adds the read-only
 // fields Domo includes in GET responses so round-trip updates don't 400.
 export class UpdateMetricDto extends PartialType(CreateMetricDto) {
+  // PartialType adds @IsOptional() to all inherited fields, which would bypass the
+  // @ValidateIf constraint from CreateMetricDto. Redeclare to preserve it.
+  @ValidateIf((o: UpdateMetricDto) => o.preferredDateGrain != null)
+  @IsString()
+  declare dateColumn?: string;
+
   @IsOptional()
   @IsNumber()
   id?: number;
