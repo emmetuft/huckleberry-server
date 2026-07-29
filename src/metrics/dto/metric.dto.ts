@@ -6,6 +6,7 @@ import {
   IsObject,
   IsOptional,
   IsString,
+  Allow,
 } from 'class-validator';
 
 export type DateTimeElement = 'DAY' | 'WEEK' | 'MONTH' | 'QUARTER' | 'YEAR';
@@ -113,10 +114,32 @@ export class UpdateMetricDto extends PartialType(CreateMetricDto) {
   datasetDateGrain?: DateTimeElement;
 
   @IsOptional()
-  @IsString()
-  created?: string;
+  @IsNumber()
+  created?: number;
 
   @IsOptional()
-  @IsString()
-  modified?: string;
+  @IsNumber()
+  modified?: number;
+
+  // Server-computed round-trip fields — present in GET responses, must be whitelisted
+  // so a round-trip PUT (send back what you received) doesn't 400 with forbidNonWhitelisted.
+  @IsOptional()
+  @Allow()
+  dateColumnExpression?: unknown;
+
+  @IsOptional()
+  @IsObject()
+  dimensionExpressions?: Record<string, unknown>;
+
+  @IsOptional()
+  @IsObject()
+  dimensionExpressionsByName?: Record<string, unknown>;
+
+  @IsOptional()
+  @IsArray()
+  sqlFilters?: unknown[];
+
+  @IsOptional()
+  @IsArray()
+  aggregatedSqlFilters?: unknown[];
 }
