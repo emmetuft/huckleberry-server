@@ -76,7 +76,10 @@ async function bootstrap() {
   });
 
   app.setGlobalPrefix('api', {
-    exclude: [{ path: 'health', method: RequestMethod.ALL }],
+    exclude: [
+      { path: 'health', method: RequestMethod.ALL },
+      { path: '.well-known/oauth-client', method: RequestMethod.GET },
+    ],
   });
 
   app.useGlobalPipes(

@@ -127,23 +127,6 @@ export const domoOauthTokens = mysqlTable('domo_oauth_tokens', {
   refreshDekId: varchar('refresh_dek_id', { length: 500 }),
 });
 
-/**
- * Per-instance OAuth client credentials. One row per Domo instance (issuerUrl).
- * Created via DCR (`POST {issuerUrl}/oauth2/register`) during provisioning or
- * on the first `link/start` for an instance we haven't seen before.
- */
-export const domoOauthClients = mysqlTable('domo_oauth_clients', {
-  issuerUrl: varchar('issuer_url', { length: 255 }).primaryKey(),
-  clientId: varchar('client_id', { length: 200 }).notNull(),
-  registrationAccessToken: varchar('registration_access_token', {
-    length: 2000,
-  }),
-  redirectUri: varchar('redirect_uri', { length: 500 }).notNull(),
-  scope: varchar('scope', { length: 1000 }).notNull(),
-  registeredAt: datetime('registered_at', { fsp: 3 }).notNull(),
-  lastUsedAt: datetime('last_used_at', { fsp: 3 }),
-});
-
 export const personas = mysqlTable(
   'personas',
   {

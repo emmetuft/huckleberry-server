@@ -1,7 +1,6 @@
 import {
   BadGatewayException,
   BadRequestException,
-  Inject,
   Injectable,
   Logger,
   UnauthorizedException,
@@ -9,18 +8,6 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { createHash, randomBytes } from 'node:crypto';
 import type { AppConfig } from '../../config/configuration.js';
-import {
-  CLIENT_CREDENTIAL_STORE,
-  type ClientCredentialStore,
-} from './client-credential.store.js';
-
-export interface AuthorizeUrlParams {
-  issuerUrl: string;
-  redirectUri: string;
-  scope: string;
-  state: string;
-  codeChallenge: string;
-}
 
 export interface TokenResponse {
   accessToken: string;
@@ -30,62 +17,67 @@ export interface TokenResponse {
   tokenType: string;
 }
 
-export interface DcrResponse {
-  clientId: string;
-  registrationAccessToken: string | null;
-  scope: string;
-}
-
 /**
  * OAuth 2.1 client that runs the authorization-code + PKCE flow against a
- * Gatekeeper instance. Resolves per-instance credentials from the
- * ClientCredentialStore (populated by DCR at provision time), with env-var
- * fallback for local dev.
+ * Gatekeeper instance. Uses CIMD (Client ID Metadata Document) — the
+ * client_id is the URL of the metadata document hosted at
+ * `MAGIC_LINK_BASE_URL/.well-known/oauth-client`. Gatekeeper fetches the
+ * document on demand, so scope and redirect URI changes take effect after
+ * restarting the server (the document is built once at boot from config).
+ *
+ * For local dev against rigs (whose Gatekeeper can't reach our document),
+ * set `DOMO_OAUTH_CLIENT_ID` to override the derived client_id with a
+ * manually-registered value.
  */
 @Injectable()
 export class DomoOAuthClient {
   private readonly logger = new Logger(DomoOAuthClient.name);
-  private readonly clientId: string;
-  private readonly clientSecret: string;
+  private readonly clientIdOverride: string;
+  private readonly baseUrl: string;
   private readonly redirectUri: string;
   private readonly scopes: string;
   private readonly transportOverrides: Record<string, string>;
 
-  constructor(
-    private readonly config: ConfigService,
-    @Inject(CLIENT_CREDENTIAL_STORE)
-    private readonly credentials: ClientCredentialStore,
-  ) {
+  constructor(private readonly config: ConfigService) {
     const app = this.config.get<AppConfig>('app');
-    this.clientId = app?.domoOAuthClientId ?? '';
-    this.clientSecret = app?.domoOAuthClientSecret ?? '';
+    this.clientIdOverride = app?.domoOAuthClientId ?? '';
+    this.baseUrl = app?.magicLinkBaseUrl ?? '';
     this.redirectUri = app?.domoOAuthRedirectUri ?? '';
     this.scopes = app?.domoOAuthScopes ?? '';
     this.transportOverrides = app?.gatekeeperTransportOverrides ?? {};
+
+    if (app?.nodeEnv === 'production' && !this.baseUrl.startsWith('https://')) {
+      throw new Error(
+        `MAGIC_LINK_BASE_URL must be an HTTPS URL in production (got: ${this.baseUrl || '(unset)'})`,
+      );
+    }
+
+    this.logger.log(`CIMD client_id: ${this.getClientId()}`);
   }
 
   /**
-   * Resolves the client_id for a given issuerUrl. Checks the credential
-   * store first (DCR-registered or dev-fallback), falls back to the
-   * global env-var `DOMO_OAUTH_CLIENT_ID` for backwards compatibility.
+   * The CIMD metadata document URL, derived from MAGIC_LINK_BASE_URL. This is
+   * always the derived form (never the rig override) — the served document's
+   * `client_id` must equal its own URL per the CIMD spec.
    */
-  private async resolveClientId(issuerUrl: string): Promise<string> {
-    const cred = await this.credentials.get(issuerUrl);
-    if (cred) return cred.clientId;
-    if (this.clientId) return this.clientId;
-    throw new Error(
-      `No OAuth client registered for issuer ${issuerUrl} and DOMO_OAUTH_CLIENT_ID is not set`,
-    );
+  getMetadataDocumentUrl(): string {
+    return `${this.baseUrl}/.well-known/oauth-client`;
+  }
+
+  /**
+   * Returns the OAuth client_id sent in the authorization/token flow. When
+   * DOMO_OAUTH_CLIENT_ID is set, uses it verbatim (dev-only rig escape hatch).
+   * Otherwise it is the CIMD metadata document URL.
+   */
+  getClientId(): string {
+    if (this.clientIdOverride) return this.clientIdOverride;
+    return this.getMetadataDocumentUrl();
   }
 
   /**
    * Returns the transport base URL for an issuer — used to build the actual
    * HTTP URLs for `/oauth2/authorize`, `/oauth2/token`, `/oauth2/revoke`.
    * Falls back to the issuer string itself when no override is configured.
-   *
-   * Needed when an issuer signs tokens with `iss = http://host:443` but the
-   * endpoints are reachable over HTTPS — `iss` is a string identifier,
-   * not a transport instruction.
    */
   private transportFor(issuerUrl: string): string {
     return this.transportOverrides[issuerUrl] ?? issuerUrl;
@@ -101,21 +93,16 @@ export class DomoOAuthClient {
     return { codeVerifier, codeChallenge };
   }
 
-  getRedirectUri(): string {
-    return this.redirectUri;
-  }
-
   /**
    * Composes the authorize URL the browser is redirected to. Caller supplies
    * `state` + `codeChallenge`; the matching `codeVerifier` must be stored
    * server-side for the callback exchange.
    */
-  async buildAuthorizeUrl(params: {
+  buildAuthorizeUrl(params: {
     issuerUrl: string;
     state: string;
     codeChallenge: string;
-  }): Promise<string> {
-    const clientId = await this.resolveClientId(params.issuerUrl);
+  }): string {
     if (!this.redirectUri) {
       throw new Error('DOMO_OAUTH_REDIRECT_URI not configured');
     }
@@ -124,7 +111,7 @@ export class DomoOAuthClient {
       this.transportFor(params.issuerUrl),
     );
     url.searchParams.set('response_type', 'code');
-    url.searchParams.set('client_id', clientId);
+    url.searchParams.set('client_id', this.getClientId());
     url.searchParams.set('redirect_uri', this.redirectUri);
     url.searchParams.set('scope', this.scopes);
     url.searchParams.set('state', params.state);
@@ -139,12 +126,11 @@ export class DomoOAuthClient {
     code: string;
     codeVerifier: string;
   }): Promise<TokenResponse> {
-    const clientId = await this.resolveClientId(params.issuerUrl);
     const body = new URLSearchParams({
       grant_type: 'authorization_code',
       code: params.code,
       redirect_uri: this.redirectUri,
-      client_id: clientId,
+      client_id: this.getClientId(),
       code_verifier: params.codeVerifier,
     });
     return this.postToken(params.issuerUrl, body);
@@ -155,75 +141,12 @@ export class DomoOAuthClient {
     issuerUrl: string;
     refreshToken: string;
   }): Promise<TokenResponse> {
-    const clientId = await this.resolveClientId(params.issuerUrl);
     const body = new URLSearchParams({
       grant_type: 'refresh_token',
       refresh_token: params.refreshToken,
-      client_id: clientId,
+      client_id: this.getClientId(),
     });
     return this.postToken(params.issuerUrl, body);
-  }
-
-  /**
-   * Dev-only: exchange a DDCI developer token for a short-lived OAuth JWT via
-   * the `client_credentials` grant. The DDCI token acts as the client secret.
-   * Caller is responsible for caching — this always hits the token endpoint.
-   */
-  async clientCredentials(params: {
-    issuerUrl: string;
-    clientId: string;
-    clientSecret: string;
-    scope: string;
-  }): Promise<{ accessToken: string; expiresIn: number }> {
-    const body = new URLSearchParams({
-      grant_type: 'client_credentials',
-      scope: params.scope,
-    });
-    const basic = Buffer.from(
-      `${params.clientId}:${params.clientSecret}`,
-    ).toString('base64');
-    const url = new URL(
-      '/oauth2/token',
-      this.transportFor(params.issuerUrl),
-    ).toString();
-    let resp: Response;
-    try {
-      resp = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-          Accept: 'application/json',
-          Authorization: `Basic ${basic}`,
-        },
-        body,
-      });
-    } catch (err) {
-      throw new BadGatewayException(`Gatekeeper unreachable: ${String(err)}`);
-    }
-    const text = await resp.text();
-    if (!resp.ok) {
-      this.logger.warn(
-        `/oauth2/token (client_credentials) ${resp.status}: ${text}`,
-      );
-      throw new UnauthorizedException({
-        error: 'client_credentials_failed',
-        status: resp.status,
-      });
-    }
-    interface AccessJson {
-      access_token: string;
-      expires_in?: number;
-    }
-    const parsed = JSON.parse(text) as AccessJson;
-    if (!parsed.access_token) {
-      throw new BadGatewayException(
-        `Malformed client_credentials response: ${text.slice(0, 120)}`,
-      );
-    }
-    return {
-      accessToken: parsed.access_token,
-      expiresIn: parsed.expires_in ?? 3600,
-    };
   }
 
   /** Best-effort revoke. Gatekeeper's `/oauth2/revoke` accepts either token. */
@@ -232,20 +155,13 @@ export class DomoOAuthClient {
     token: string;
     tokenTypeHint?: 'access_token' | 'refresh_token';
   }): Promise<void> {
-    let clientId: string;
-    try {
-      clientId = await this.resolveClientId(params.issuerUrl);
-    } catch {
-      this.logger.debug('revoke skipped — no client_id resolvable');
-      return;
-    }
     const url = new URL(
       '/oauth2/revoke',
       this.transportFor(params.issuerUrl),
     ).toString();
     const body = new URLSearchParams({
       token: params.token,
-      client_id: clientId,
+      client_id: this.getClientId(),
       ...(params.tokenTypeHint
         ? { token_type_hint: params.tokenTypeHint }
         : {}),
@@ -253,7 +169,7 @@ export class DomoOAuthClient {
     try {
       await fetch(url, {
         method: 'POST',
-        headers: this.authHeaders(),
+        headers: this.tokenHeaders(),
         body,
       });
     } catch (_err) {
@@ -262,13 +178,21 @@ export class DomoOAuthClient {
   }
 
   /**
-   * Validates that issuerUrl points to a real Gatekeeper instance by
-   * fetching its RFC 8414 metadata. Throws BadRequestException with a
-   * user-facing message if the instance is unreachable or not a
-   * Gatekeeper.
+   * Validates that issuerUrl points to a real Gatekeeper instance that
+   * supports CIMD. Fetches RFC 8414 metadata and verifies
+   * `client_id_metadata_document_supported: true`. In rig-override mode
+   * (DOMO_OAUTH_CLIENT_ID set), skips the CIMD check since the rig resolves
+   * the client from its own store.
    */
   async validateInstance(issuerUrl: string): Promise<void> {
     const transport = this.transportFor(issuerUrl);
+    const parsedTransport = new URL(transport);
+    if (!isPublicHost(parsedTransport.hostname)) {
+      throw new BadRequestException(
+        'The Domo instance URL must be a public hostname.',
+      );
+    }
+
     const url = new URL(
       '/.well-known/oauth-authorization-server',
       transport,
@@ -300,7 +224,10 @@ export class DomoOAuthClient {
       );
     }
 
-    let meta: { issuer?: string; registration_endpoint?: string };
+    let meta: {
+      issuer?: string;
+      client_id_metadata_document_supported?: boolean;
+    };
     try {
       meta = (await resp.json()) as typeof meta;
     } catch {
@@ -309,98 +236,30 @@ export class DomoOAuthClient {
       );
     }
 
-    if (!meta.issuer || !meta.registration_endpoint) {
+    if (!meta.issuer) {
       throw new BadRequestException(
         'The URL does not appear to be a valid Domo instance (missing OAuth metadata).',
       );
     }
-  }
 
-  /**
-   * Register huckleberry as a public PKCE OAuth client on a Gatekeeper
-   * instance via RFC 7591 Dynamic Client Registration.
-   *
-   * Returns the `client_id` and `registration_access_token` (for future
-   * RFC 7592 self-management). The registration_access_token is displayed
-   * exactly once — Gatekeeper stores a BCrypt hash.
-   */
-  async registerClient(issuerUrl: string): Promise<DcrResponse> {
-    if (!this.redirectUri) {
-      throw new Error('DOMO_OAUTH_REDIRECT_URI not configured');
-    }
-    const url = new URL(
-      '/oauth2/register',
-      this.transportFor(issuerUrl),
-    ).toString();
-
-    const body = {
-      client_name: 'huckleberry',
-      redirect_uris: [this.redirectUri],
-      grant_types: ['authorization_code', 'refresh_token'],
-      response_types: ['code'],
-      token_endpoint_auth_method: 'none',
-      scope: this.scopes,
-    };
-
-    let resp: Response;
-    try {
-      resp = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Accept: 'application/json',
-        },
-        body: JSON.stringify(body),
-      });
-    } catch (err) {
-      throw new BadGatewayException(
-        `Gatekeeper DCR endpoint unreachable: ${String(err)}`,
+    if (!this.clientIdOverride && !meta.client_id_metadata_document_supported) {
+      this.logger.warn(
+        `validateInstance: ${issuerUrl} does not support CIMD (client_id_metadata_document_supported missing)`,
+      );
+      throw new BadRequestException(
+        'This Domo instance does not support CIMD. Contact your Domo administrator to enable it.',
       );
     }
 
-    const text = await resp.text();
-    if (!resp.ok) {
-      this.logger.warn(`DCR ${resp.status}: ${text}`);
-      throw new BadGatewayException(
-        `DCR failed (${resp.status}): ${text.slice(0, 200)}`,
-      );
-    }
-
-    interface DcrJson {
-      client_id: string;
-      registration_access_token?: string;
-      client_id_issued_at?: number;
-      scope?: string;
-    }
-    let parsed: DcrJson;
-    try {
-      parsed = JSON.parse(text) as DcrJson;
-    } catch {
-      throw new BadGatewayException(
-        `Malformed DCR response from Gatekeeper: ${text.slice(0, 120)}`,
-      );
-    }
-
-    if (!parsed.client_id) {
-      throw new BadGatewayException('DCR response missing client_id');
-    }
-
-    this.logger.log(
-      `DCR registered client ${parsed.client_id} on ${issuerUrl}`,
-    );
-
-    return {
-      clientId: parsed.client_id,
-      registrationAccessToken: parsed.registration_access_token ?? null,
-      scope: parsed.scope ?? this.scopes,
-    };
+    const mode = this.clientIdOverride ? 'rig override' : 'CIMD';
+    this.logger.log(`validateInstance: ${issuerUrl} OK (mode: ${mode})`);
   }
 
   private postToken(
     issuerUrl: string,
     body: URLSearchParams,
   ): Promise<TokenResponse> {
-    return this.postTokenWithHeaders(issuerUrl, body, this.authHeaders());
+    return this.postTokenWithHeaders(issuerUrl, body, this.tokenHeaders());
   }
 
   private async postTokenWithHeaders(
@@ -462,17 +321,42 @@ export class DomoOAuthClient {
     };
   }
 
-  private authHeaders(): Record<string, string> {
-    const headers: Record<string, string> = {
+  private tokenHeaders(): Record<string, string> {
+    return {
       'Content-Type': 'application/x-www-form-urlencoded',
       Accept: 'application/json',
     };
-    if (this.clientSecret) {
-      const basic = Buffer.from(
-        `${this.clientId}:${this.clientSecret}`,
-      ).toString('base64');
-      headers.Authorization = `Basic ${basic}`;
-    }
-    return headers;
   }
+}
+
+/**
+ * Rejects loopback, link-local, and RFC 1918 private ranges so
+ * user-supplied issuerUrls can't be used to probe internal infrastructure.
+ */
+function isPublicHost(hostname: string): boolean {
+  // IPv6 loopback
+  if (hostname === '::1' || hostname === '[::]' || hostname === '[::]') {
+    return false;
+  }
+  // Strip IPv6 brackets for numeric check
+  const h = hostname.startsWith('[') ? hostname.slice(1, -1) : hostname;
+  if (h === 'localhost') return false;
+
+  // Parse dotted-decimal IPv4
+  const parts = h.split('.');
+  if (parts.length === 4) {
+    const [a, b] = parts.map(Number);
+    // 127.x.x.x  — loopback
+    if (a === 127) return false;
+    // 10.x.x.x   — RFC 1918
+    if (a === 10) return false;
+    // 172.16–31.x.x — RFC 1918
+    if (a === 172 && b >= 16 && b <= 31) return false;
+    // 192.168.x.x — RFC 1918
+    if (a === 192 && b === 168) return false;
+    // 169.254.x.x — link-local (EC2 IMDS)
+    if (a === 169 && b === 254) return false;
+  }
+
+  return true;
 }

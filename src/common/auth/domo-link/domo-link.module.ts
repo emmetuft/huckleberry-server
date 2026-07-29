@@ -4,6 +4,7 @@ import { DomoLinkController } from './domo-link.controller.js';
 import { DomoLinkService } from './domo-link.service.js';
 import { DomoOAuthClient } from './domo-oauth.client.js';
 import { DomoAuthBroker } from './domo-auth.broker.js';
+import { OAuthClientMetadataController } from './oauth-client-metadata.controller.js';
 import { LINK_REPOSITORY, InMemoryLinkRepository } from './link.repository.js';
 import { DOMO_TOKEN_STORE, InMemoryDomoTokenStore } from './token.store.js';
 import {
@@ -14,14 +15,9 @@ import {
   INSTANCE_PROVISIONER,
   DevStubInstanceProvisioner,
 } from './instance-provisioner.service.js';
-import {
-  CLIENT_CREDENTIAL_STORE,
-  InMemoryClientCredentialStore,
-} from './client-credential.store.js';
 import { DbModule, DRIZZLE, type Db } from '../../db/db.module.js';
 import { MysqlLinkRepository } from '../../db/repositories/mysql-link.repository.js';
 import { MysqlDomoTokenStore } from '../../db/repositories/mysql-domo-token.store.js';
-import { MysqlClientCredentialStore } from '../../db/repositories/mysql-client-credential.store.js';
 import { EnvelopeEncryptionService } from '../../crypto/envelope-encryption.service.js';
 import type { AppConfig } from '../../config/configuration.js';
 
@@ -36,7 +32,7 @@ import type { AppConfig } from '../../config/configuration.js';
 @Global()
 @Module({
   imports: [DbModule],
-  controllers: [DomoLinkController],
+  controllers: [DomoLinkController, OAuthClientMetadataController],
   providers: [
     DomoLinkService,
     DomoOAuthClient,
@@ -64,14 +60,6 @@ import type { AppConfig } from '../../config/configuration.js';
     },
     { provide: OAUTH_STATE_STORE, useClass: InMemoryOAuthStateStore },
     { provide: INSTANCE_PROVISIONER, useClass: DevStubInstanceProvisioner },
-    {
-      provide: CLIENT_CREDENTIAL_STORE,
-      inject: [ConfigService, DRIZZLE],
-      useFactory: (config: ConfigService, db: Db | null) =>
-        useMysql(config) && db
-          ? new MysqlClientCredentialStore(db)
-          : new InMemoryClientCredentialStore(config),
-    },
   ],
   exports: [
     DomoLinkService,
@@ -81,7 +69,6 @@ import type { AppConfig } from '../../config/configuration.js';
     DOMO_TOKEN_STORE,
     OAUTH_STATE_STORE,
     INSTANCE_PROVISIONER,
-    CLIENT_CREDENTIAL_STORE,
   ],
 })
 export class DomoLinkModule {}

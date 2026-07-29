@@ -1,0 +1,1 @@
+DROP TABLE `domo_oauth_clients`;
