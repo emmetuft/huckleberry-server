@@ -1,170 +1,280 @@
 import { jest } from '@jest/globals';
-import { BadGatewayException } from '@nestjs/common';
+import { BadGatewayException, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { DomoOAuthClient } from './domo-oauth.client';
-import type {
-  ClientCredentialStore,
-  OAuthClientCredentials,
-} from './client-credential.store';
 
 const TEST_ISSUER = 'http://test.domo.com';
+const TEST_BASE_URL = 'https://huckleberry.example.com';
+const CIMD_CLIENT_ID = `${TEST_BASE_URL}/.well-known/oauth-client`;
 
-function makeConfig(): ConfigService {
+function makeConfig(
+  overrides: Partial<{
+    domoOAuthClientId: string;
+    domoOAuthRedirectUri: string;
+    domoOAuthScopes: string;
+    gatekeeperTransportOverrides: Record<string, string>;
+    magicLinkBaseUrl: string;
+    nodeEnv: string;
+  }> = {},
+): ConfigService {
   return {
     get: () => ({
-      domoOAuthClientId: 'fallback-client',
-      domoOAuthClientSecret: '',
+      domoOAuthClientId: '',
       domoOAuthRedirectUri: 'http://localhost:3000/api/auth/domo/callback',
       domoOAuthScopes: 'ai:read ai:execute',
       gatekeeperTransportOverrides: {},
+      magicLinkBaseUrl: TEST_BASE_URL,
+      nodeEnv: 'test',
+      ...overrides,
     }),
   } as unknown as ConfigService;
 }
 
-function makeCredStore(
-  data?: OAuthClientCredentials | null,
-): ClientCredentialStore {
-  return {
-    get: jest
-      .fn()
-      .mockResolvedValue(data ?? null) as ClientCredentialStore['get'],
-    upsert: jest
-      .fn()
-      .mockImplementation((r) =>
-        Promise.resolve(r),
-      ) as ClientCredentialStore['upsert'],
-    delete: jest
-      .fn()
-      .mockResolvedValue(undefined) as ClientCredentialStore['delete'],
-    touchLastUsed: jest
-      .fn()
-      .mockResolvedValue(undefined) as ClientCredentialStore['touchLastUsed'],
-  };
+function makeClient(
+  overrides?: Parameters<typeof makeConfig>[0],
+): DomoOAuthClient {
+  return new DomoOAuthClient(makeConfig(overrides));
 }
 
-describe('DomoOAuthClient.registerClient', () => {
-  let client: DomoOAuthClient;
+describe('DomoOAuthClient.getClientId', () => {
+  it('returns the CIMD metadata URL when no override is set', () => {
+    const client = makeClient();
+    expect(client.getClientId()).toBe(CIMD_CLIENT_ID);
+  });
+
+  it('returns the rig override verbatim when DOMO_OAUTH_CLIENT_ID is set', () => {
+    const client = makeClient({ domoOAuthClientId: 'rig-client-123' });
+    expect(client.getClientId()).toBe('rig-client-123');
+  });
+});
+
+describe('DomoOAuthClient — production boot guard', () => {
+  it('throws if NODE_ENV=production and MAGIC_LINK_BASE_URL is not HTTPS', () => {
+    expect(() =>
+      makeClient({
+        nodeEnv: 'production',
+        magicLinkBaseUrl: 'http://localhost:5173',
+      }),
+    ).toThrow('MAGIC_LINK_BASE_URL must be an HTTPS URL in production');
+  });
+
+  it('does not throw in test/dev even with a localhost base URL', () => {
+    expect(() =>
+      makeClient({
+        nodeEnv: 'test',
+        magicLinkBaseUrl: 'http://localhost:5173',
+      }),
+    ).not.toThrow();
+  });
+});
+
+describe('DomoOAuthClient.buildAuthorizeUrl', () => {
+  it('includes the CIMD client_id in the authorize URL', () => {
+    const client = makeClient();
+    const url = client.buildAuthorizeUrl({
+      issuerUrl: TEST_ISSUER,
+      state: 'test-state',
+      codeChallenge: 'test-challenge',
+    });
+    expect(url).toContain(`client_id=${encodeURIComponent(CIMD_CLIENT_ID)}`);
+    expect(url).toContain('response_type=code');
+    expect(url).toContain('code_challenge_method=S256');
+  });
+
+  it('uses the rig override when set', () => {
+    const client = makeClient({ domoOAuthClientId: 'rig-client' });
+    const url = client.buildAuthorizeUrl({
+      issuerUrl: TEST_ISSUER,
+      state: 's',
+      codeChallenge: 'c',
+    });
+    expect(url).toContain('client_id=rig-client');
+  });
+});
+
+describe('DomoOAuthClient.exchangeCode', () => {
   let fetchSpy: jest.SpiedFunction<typeof globalThis.fetch>;
 
   beforeEach(() => {
-    client = new DomoOAuthClient(makeConfig(), makeCredStore());
     fetchSpy = jest.spyOn(globalThis, 'fetch');
   });
+  afterEach(() => fetchSpy.mockRestore());
 
-  afterEach(() => {
-    fetchSpy.mockRestore();
-  });
-
-  it('sends correct DCR request and returns parsed response', async () => {
+  it('sends CIMD client_id in the token request body', async () => {
     fetchSpy.mockResolvedValueOnce(
       new Response(
         JSON.stringify({
-          client_id: 'dcr-new-123',
-          registration_access_token: 'rat-xyz',
-          scope: 'ai:read ai:execute',
+          access_token: 'at',
+          refresh_token: 'rt',
+          expires_in: 3600,
+          scope: 'ai:read',
+          token_type: 'Bearer',
         }),
-        { status: 201 },
+        { status: 200 },
       ),
     );
-
-    const result = await client.registerClient(TEST_ISSUER);
-
-    expect(result.clientId).toBe('dcr-new-123');
-    expect(result.registrationAccessToken).toBe('rat-xyz');
-    expect(result.scope).toBe('ai:read ai:execute');
-
-    const [url, init] = fetchSpy.mock.calls[0];
-    expect(url).toBe(`${TEST_ISSUER}/oauth2/register`);
-    expect(init.method).toBe('POST');
-    const body = JSON.parse(init.body as string);
-    expect(body.token_endpoint_auth_method).toBe('none');
-    expect(body.redirect_uris).toEqual([
-      'http://localhost:3000/api/auth/domo/callback',
-    ]);
-    expect(body.grant_types).toEqual(['authorization_code', 'refresh_token']);
-    expect(body.client_name).toBe('huckleberry');
+    const client = makeClient();
+    await client.exchangeCode({
+      issuerUrl: TEST_ISSUER,
+      code: 'code',
+      codeVerifier: 'cv',
+    });
+    const body = new URLSearchParams(fetchSpy.mock.calls[0][1]?.body as string);
+    expect(body.get('client_id')).toBe(CIMD_CLIENT_ID);
+    expect(body.get('grant_type')).toBe('authorization_code');
   });
+});
 
-  it('throws BadGatewayException on non-OK response', async () => {
+describe('DomoOAuthClient.refresh', () => {
+  let fetchSpy: jest.SpiedFunction<typeof globalThis.fetch>;
+
+  beforeEach(() => {
+    fetchSpy = jest.spyOn(globalThis, 'fetch');
+  });
+  afterEach(() => fetchSpy.mockRestore());
+
+  it('sends CIMD client_id in the refresh request', async () => {
     fetchSpy.mockResolvedValueOnce(
-      new Response('rate limited', { status: 429 }),
+      new Response(
+        JSON.stringify({
+          access_token: 'at2',
+          refresh_token: 'rt2',
+          expires_in: 3600,
+          scope: 'ai:read',
+          token_type: 'Bearer',
+        }),
+        { status: 200 },
+      ),
     );
-    await expect(client.registerClient(TEST_ISSUER)).rejects.toThrow(
-      BadGatewayException,
+    const client = makeClient();
+    await client.refresh({ issuerUrl: TEST_ISSUER, refreshToken: 'old-rt' });
+    const body = new URLSearchParams(fetchSpy.mock.calls[0][1]?.body as string);
+    expect(body.get('client_id')).toBe(CIMD_CLIENT_ID);
+    expect(body.get('grant_type')).toBe('refresh_token');
+  });
+});
+
+describe('DomoOAuthClient.revoke', () => {
+  let fetchSpy: jest.SpiedFunction<typeof globalThis.fetch>;
+
+  beforeEach(() => {
+    fetchSpy = jest.spyOn(globalThis, 'fetch');
+  });
+  afterEach(() => fetchSpy.mockRestore());
+
+  it('sends CIMD client_id in the revoke request', async () => {
+    fetchSpy.mockResolvedValueOnce(new Response(null, { status: 200 }));
+    const client = makeClient();
+    await client.revoke({ issuerUrl: TEST_ISSUER, token: 'tok' });
+    const body = new URLSearchParams(fetchSpy.mock.calls[0][1]?.body as string);
+    expect(body.get('client_id')).toBe(CIMD_CLIENT_ID);
+  });
+});
+
+describe('DomoOAuthClient.validateInstance', () => {
+  let fetchSpy: jest.SpiedFunction<typeof globalThis.fetch>;
+
+  beforeEach(() => {
+    fetchSpy = jest.spyOn(globalThis, 'fetch');
+  });
+  afterEach(() => fetchSpy.mockRestore());
+
+  it('succeeds when CIMD support is advertised', async () => {
+    fetchSpy.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          issuer: TEST_ISSUER,
+          client_id_metadata_document_supported: true,
+        }),
+        { status: 200 },
+      ),
+    );
+    await expect(
+      makeClient().validateInstance(TEST_ISSUER),
+    ).resolves.toBeUndefined();
+  });
+
+  it('throws BadRequestException when CIMD support is absent', async () => {
+    fetchSpy.mockResolvedValueOnce(
+      new Response(JSON.stringify({ issuer: TEST_ISSUER }), { status: 200 }),
+    );
+    await expect(makeClient().validateInstance(TEST_ISSUER)).rejects.toThrow(
+      BadRequestException,
     );
   });
 
-  it('throws BadGatewayException when fetch rejects (network error)', async () => {
+  it('skips CIMD check in rig-override mode', async () => {
+    fetchSpy.mockResolvedValueOnce(
+      new Response(JSON.stringify({ issuer: TEST_ISSUER }), { status: 200 }),
+    );
+    const client = makeClient({ domoOAuthClientId: 'rig-client' });
+    await expect(client.validateInstance(TEST_ISSUER)).resolves.toBeUndefined();
+  });
+
+  it('throws BadRequestException when issuer is missing', async () => {
+    fetchSpy.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({ client_id_metadata_document_supported: true }),
+        { status: 200 },
+      ),
+    );
+    await expect(makeClient().validateInstance(TEST_ISSUER)).rejects.toThrow(
+      BadRequestException,
+    );
+  });
+
+  it('throws BadRequestException on network error', async () => {
     fetchSpy.mockRejectedValueOnce(new Error('ECONNREFUSED'));
-    await expect(client.registerClient(TEST_ISSUER)).rejects.toThrow(
-      BadGatewayException,
+    await expect(makeClient().validateInstance(TEST_ISSUER)).rejects.toThrow(
+      BadRequestException,
     );
   });
 
-  it('throws BadGatewayException on malformed JSON response', async () => {
-    fetchSpy.mockResolvedValueOnce(new Response('not json', { status: 201 }));
-    await expect(client.registerClient(TEST_ISSUER)).rejects.toThrow(
-      BadGatewayException,
+  it('throws BadRequestException on non-OK HTTP response', async () => {
+    fetchSpy.mockResolvedValueOnce(new Response('not found', { status: 404 }));
+    await expect(makeClient().validateInstance(TEST_ISSUER)).rejects.toThrow(
+      BadRequestException,
     );
   });
 
-  it('throws BadGatewayException when client_id is missing', async () => {
-    fetchSpy.mockResolvedValueOnce(
-      new Response(JSON.stringify({ scope: 'ai:read' }), { status: 201 }),
-    );
-    await expect(client.registerClient(TEST_ISSUER)).rejects.toThrow(
-      BadGatewayException,
+  it('throws BadRequestException on malformed JSON', async () => {
+    fetchSpy.mockResolvedValueOnce(new Response('not json', { status: 200 }));
+    await expect(makeClient().validateInstance(TEST_ISSUER)).rejects.toThrow(
+      BadRequestException,
     );
   });
 });
 
-describe('DomoOAuthClient.resolveClientId (via buildAuthorizeUrl)', () => {
-  it('uses clientId from credential store when available', async () => {
-    const cred: OAuthClientCredentials = {
-      issuerUrl: TEST_ISSUER,
-      clientId: 'stored-client-id',
-      registrationAccessToken: null,
-      redirectUri: 'http://localhost:3000/api/auth/domo/callback',
-      scope: 'ai:read',
-      registeredAt: new Date(),
-      lastUsedAt: null,
-    };
-    const client = new DomoOAuthClient(makeConfig(), makeCredStore(cred));
-    const url = await client.buildAuthorizeUrl({
-      issuerUrl: TEST_ISSUER,
-      state: 'test-state',
-      codeChallenge: 'test-challenge',
-    });
-    expect(url).toContain('client_id=stored-client-id');
-  });
+describe('DomoOAuthClient token error handling', () => {
+  let fetchSpy: jest.SpiedFunction<typeof globalThis.fetch>;
 
-  it('falls back to env-var clientId when store returns null', async () => {
-    const client = new DomoOAuthClient(makeConfig(), makeCredStore(null));
-    const url = await client.buildAuthorizeUrl({
-      issuerUrl: TEST_ISSUER,
-      state: 'test-state',
-      codeChallenge: 'test-challenge',
-    });
-    expect(url).toContain('client_id=fallback-client');
+  beforeEach(() => {
+    fetchSpy = jest.spyOn(globalThis, 'fetch');
   });
+  afterEach(() => fetchSpy.mockRestore());
 
-  it('throws when neither store nor env var has a clientId', async () => {
-    const emptyConfig = {
-      get: () => ({
-        domoOAuthClientId: '',
-        domoOAuthClientSecret: '',
-        domoOAuthRedirectUri: 'http://localhost:3000/api/auth/domo/callback',
-        domoOAuthScopes: 'ai:read',
-        gatekeeperTransportOverrides: {},
-      }),
-    } as unknown as ConfigService;
-    const client = new DomoOAuthClient(emptyConfig, makeCredStore(null));
+  it('throws BadGatewayException on network error during exchangeCode', async () => {
+    fetchSpy.mockRejectedValueOnce(new Error('ECONNREFUSED'));
     await expect(
-      client.buildAuthorizeUrl({
+      makeClient().exchangeCode({
         issuerUrl: TEST_ISSUER,
-        state: 's',
-        codeChallenge: 'c',
+        code: 'c',
+        codeVerifier: 'v',
       }),
-    ).rejects.toThrow('No OAuth client registered');
+    ).rejects.toThrow(BadGatewayException);
+  });
+
+  it('throws UnauthorizedException on non-OK token response', async () => {
+    fetchSpy.mockResolvedValueOnce(
+      new Response('invalid_grant', { status: 400 }),
+    );
+    const { UnauthorizedException } = await import('@nestjs/common');
+    await expect(
+      makeClient().exchangeCode({
+        issuerUrl: TEST_ISSUER,
+        code: 'c',
+        codeVerifier: 'v',
+      }),
+    ).rejects.toThrow(UnauthorizedException);
   });
 });

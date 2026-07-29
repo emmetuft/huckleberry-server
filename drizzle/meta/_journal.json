@@ -50,6 +50,13 @@
       "when": 1783440102951,
       "tag": "0006_strong_magus",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "5",
+      "when": 1785355635715,
+      "tag": "0007_stormy_star_brand",
+      "breakpoints": true
     }
   ]
 }

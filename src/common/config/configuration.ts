@@ -116,23 +116,19 @@ export interface AppConfig {
    */
   adminApiKey: string;
   /**
-   * Layer B — Domo OAuth client credentials. `DomoLinkService` uses these
-   * to run the authorization-code + PKCE flow against Gatekeeper on behalf
-   * of the signed-in huckleberry user.
+   * Layer B — Domo OAuth (CIMD) config. `DomoOAuthClient` derives the
+   * `client_id` from `MAGIC_LINK_BASE_URL` at runtime (CIMD — no registration
+   * step). The metadata document is served at `/.well-known/oauth-client`.
    *
-   * - `domoOAuthClientId` — the `client_id` returned when the BFF was
-   *   registered with Gatekeeper (via DCR `POST /oauth2/register` or admin).
-   * - `domoOAuthClientSecret` — required for confidential clients
-   *   (`token_endpoint_auth_method: client_secret_basic`); leave blank for
-   *   public clients (`token_endpoint_auth_method: none`, PKCE only).
-   * - `domoOAuthRedirectUri` — must match a registered redirect URI
-   *   exactly. For dev this is `http://localhost:3000/api/auth/domo/callback`.
-   * - `domoOAuthScopes` — space-separated scope set requested at
-   *   authorization time. Must be a subset of the scopes the client is
-   *   registered for.
+   * - `domoOAuthClientId` — dev-only rig override. Set when running against a
+   *   local Domo instance (rig) whose Gatekeeper can't fetch our metadata
+   *   document. Leave unset in all deployed environments.
+   * - `domoOAuthRedirectUri` — must match the `redirect_uris` entry in the
+   *   metadata document exactly.
+   * - `domoOAuthScopes` — space-separated scope set; written into the metadata
+   *   document and sent at authorization time.
    */
   domoOAuthClientId: string;
-  domoOAuthClientSecret: string;
   domoOAuthRedirectUri: string;
   domoOAuthScopes: string;
   /**
@@ -297,11 +293,11 @@ export default (): { app: AppConfig } => ({
       10,
     ),
     sessionTtlSeconds: parseInt(process.env.SESSION_TTL_SECONDS || '43200', 10),
-    magicLinkBaseUrl:
+    magicLinkBaseUrl: stripTrailingSlash(
       process.env.MAGIC_LINK_BASE_URL || 'http://localhost:5173',
+    ),
     adminApiKey: process.env.ADMIN_API_KEY || '',
     domoOAuthClientId: process.env.DOMO_OAUTH_CLIENT_ID || '',
-    domoOAuthClientSecret: process.env.DOMO_OAUTH_CLIENT_SECRET || '',
     domoOAuthRedirectUri:
       process.env.DOMO_OAUTH_REDIRECT_URI ||
       'http://localhost:3000/api/auth/domo/callback',
