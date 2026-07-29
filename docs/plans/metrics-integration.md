@@ -1,7 +1,8 @@
 # Plan: Integrate Domo Metrics API (`/api/content/v1/metrics`)
 
-**Status:** Draft
+**Status:** Phase 1 implemented (`src/metrics/`, PR #42); Phases 2–4 draft
 **Created:** 2025-07-28
+**Updated:** 2026-07-29
 
 ## Problem
 
@@ -135,8 +136,58 @@ Register a `metrics` toolkit exposing tool functions for agent conversations:
 - `execute_metric` — run a metric and return results
 - `preview_metric` — preview an unsaved metric definition
 - `create_metric` / `update_metric` — CRUD (gated by agent permissions)
+- `suggest_metrics` — AI-generated candidates for a datasource (Phase 4)
 
 This turns metrics into a first-class capability agents can invoke during reasoning.
+
+#### Phase 4 — AI-Assisted Metric Suggestion with Confidence Scoring
+
+Generate candidate metric definitions from a dataset's schema, validate them mechanically, score them with an AI judge, and present ranked options for the user to accept. Every primitive already exists in the BFF:
+
+| Primitive | Existing surface | Role in pipeline |
+|-----------|------------------|------------------|
+| Dataset schema | `GET /datasources/:id/schema` → `/api/data/v3/datasources/{id}/schema` | Column names/types seed generation and validate candidates |
+| Structured generation | `POST /ai/text/generation` (`/api/ai/v1/text/generation`) with `responseFormat` JSON schema | Emit N candidate metric definitions as validated JSON |
+| Schema-aware NL→SQL | `POST /ai/text/sql` with `dataSourceSchemas[]` (name/type/description/sampleValues) | Optional cross-check of a candidate's intent |
+| Dry-run execution | `POST /metrics/preview` (`/api/content/v1/metrics/preview`) | Ground truth: does the candidate compile and execute? |
+| Agent execution | `POST /agents/:id/execute/streaming` | Future judge option — streaming-only today (see Decision 5) |
+
+##### New Endpoints
+
+| BFF Route | Method | Purpose |
+|-----------|--------|---------|
+| `/metrics/suggest` | POST | `{ datasourceId, count?, focus? }` → ranked, scored candidate metrics |
+| `/metrics/suggest/score` | POST | Score a single (user-drafted or edited) metric definition before save |
+
+Both are **orchestration endpoints**, not proxies — the first non-passthrough logic in this module. Implemented as a `MetricSuggestionService` in `src/metrics/` composing `DataSourcesService`, `AiServicesService`, and `MetricsService` (requires exporting the first two from their modules).
+
+##### Pipeline
+
+1. **Fetch schema** for `datasourceId`; map columns to `AIDataSourceSchemaDto` shape.
+2. **Generate candidates** via `text/generation` with a JSON `responseFormat` constraining output to a restricted Metric subset: `name`, `description`, `aggregation` (function + column), `dimensions`, `dateColumn`, `preferredDateGrain`, optional `sentiment`. **No `filters`/`aggregatedFilters` in v1** — LLM-emitted JSqlParser JSON is fragile (ties to Decision 1; a simplified filter DSL unlocks filtered candidates later). The optional `focus` param is a natural-language hint ("revenue metrics", "customer churn") injected into the prompt.
+3. **Mechanical validation** (deterministic, free): referenced columns exist in schema; aggregation function is type-compatible (SUM/AVG only on numerics); `dateColumn` is date-typed. Failures are dropped or returned flagged.
+4. **Dry-run** each survivor through `POST /metrics/preview`. Capture: success/failure, row count, all-null aggregate detection, and a small result sample.
+5. **AI confidence judgment**: second `text/generation` call (JSON `responseFormat`) given the candidate + schema + preview sample, returning `{ confidence: 0–1, rationale, caveats[] }`. Judged against: semantic plausibility of the aggregation, whether the preview results look sane, name/description accuracy.
+6. **Return ranked candidates**: `{ metric, confidence, rationale, validation: { schemaValid, previewOk, rowCount }, previewSample }`, sorted by composite score. Accepting a candidate is a plain `POST /metrics` — no new create path.
+
+##### Confidence model
+
+Composite, not raw LLM opinion:
+
+- **Hard gates** (deterministic): schema validity and preview executability. A candidate that fails preview is never presented as a top option regardless of judge score.
+- **Judge score** (0–1 + rationale): only differentiates candidates that passed the gates.
+- Response carries all components separately so the UI can explain *why* a candidate is trusted, not just a bare number.
+
+##### Cost/latency bounds
+
+- Cap candidates at ~5 per request (`count` param, server-enforced max).
+- Run preview + judge calls concurrently per candidate.
+- Total: 1 schema fetch + 1 generation + ≤5 previews + ≤5 judge calls per suggest request. Consider a per-datasource short-TTL schema cache if the UI calls repeatedly.
+
+##### Known constraints
+
+- The `metrics` feature switch and `HAS_AUTHORITY_AUTOMATED_INSIGHTS` still gate preview — suggestion inherits the same failure mode (400 when disabled).
+- AI Services calls run under the user's Gatekeeper JWT, so AI feature enablement in the instance is also required.
 
 ## Decisions to Make
 
@@ -149,6 +200,13 @@ This turns metrics into a first-class capability agents can invoke during reason
 
 3. **`QueryResultSet` passthrough.** The execute endpoints return Icebox `QueryResultSet` (columns metadata + row arrays). Passthrough as `unknown` or define a lightweight TS interface? Recommendation: define a minimal interface (`{ columns: { name, type }[]; rows: unknown[][] }`) for type safety, but don't validate — let Domo be the source of truth.
 
+4. **Judge implementation: AI Services vs. Domo agent.** (Phase 4)
+   - **(a) `text/generation` with JSON `responseFormat`** — synchronous, structured, works today. Recommended v1.
+   - **(b) Domo agent as judge** — richer (agent can call tools, inspect data itself), but the BFF's agent execution is streaming-only pass-through. Requires a buffered `executeCollect()` helper in `AgentsService` that consumes the SSE stream server-side and extracts the final message. Also requires a designated judge agent to exist in the instance (discovery/config question).
+   - **Recommendation:** implement scoring behind a small `ConfidenceScorer` interface so (b) can swap in without touching the pipeline.
+
+5. **Suggestion determinism.** LLM generation is nondeterministic — same datasource may yield different candidates per call. Acceptable for a "suggest options" UX; if reproducibility matters later, persist suggestion sets or seed prompts with prior accepted metrics.
+
 ## Excluded
 
 - **S2S / search / permission endpoints** — these are for inter-service communication (search indexing). Not relevant for a BFF.
@@ -157,6 +215,7 @@ This turns metrics into a first-class capability agents can invoke during reason
 
 ## Verification
 
-- Phase 1: `pnpm test` passes, `pnpm lint` passes, manual curl against a running Domo instance confirms round-trip for create → get → execute → delete.
+- Phase 1: `pnpm test` passes, `pnpm lint` passes, manual curl against a running Domo instance confirms round-trip for create → get → execute → delete. ✅ Done.
 - Phase 2: Follow/unfollow round-trip test.
 - Phase 3: Agent can invoke `execute_metric` in a conversation and receive tabular results.
+- Phase 4: Unit tests for mechanical validation (column existence, type compatibility) with mocked schema; integration test that `POST /metrics/suggest` against a real datasource returns ≥1 candidate that passes preview; a deliberately bad candidate (nonexistent column) is gated out. Accepted candidate round-trips through `POST /metrics` unchanged.
