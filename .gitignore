@@ -9,6 +9,7 @@
 .idea/dictionaries
 /*.yaml
 !pnpm-lock.yaml
+.playwright-mcp
 
 # Sensitive or high-churn files:
 .idea/**/dataSources/

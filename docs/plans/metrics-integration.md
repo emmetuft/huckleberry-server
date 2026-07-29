@@ -12,12 +12,12 @@ Huckleberry agents need the ability to create, retrieve, execute, and manage Dom
 
 The metrics domain in `apiContent` (`content-app/src/main/java/com/domo/api/content/metrics/`) provides 28 endpoints across four functional groups:
 
-| Group | Endpoints | Notes |
-|-------|-----------|-------|
-| **CRUD** | create, get, list, update, delete, bulk delete, unarchive, change owner, filter, by-datasource | All require `HAS_AUTHORITY_AUTOMATED_INSIGHTS` + feature switch `metrics` enabled |
-| **SQL/Execute** | preview, get SQL, execute, period-over-period (pop), pop-chart | Generates SQL from metric definition, executes against Icebox |
-| **Follow** | follow, unfollow, followed list, follow status, bulk statuses, followers | User-facing subscription system |
-| **Search (S2S)** | indexDataCount, indexData, indexDataByIds, search, permission filter | Service-to-service only — not relevant for BFF |
+| Group            | Endpoints                                                                                      | Notes                                                                             |
+| ---------------- | ---------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| **CRUD**         | create, get, list, update, delete, bulk delete, unarchive, change owner, filter, by-datasource | All require `HAS_AUTHORITY_AUTOMATED_INSIGHTS` + feature switch `metrics` enabled |
+| **SQL/Execute**  | preview, get SQL, execute, period-over-period (pop), pop-chart                                 | Generates SQL from metric definition, executes against Icebox                     |
+| **Follow**       | follow, unfollow, followed list, follow status, bulk statuses, followers                       | User-facing subscription system                                                   |
+| **Search (S2S)** | indexDataCount, indexData, indexDataByIds, search, permission filter                           | Service-to-service only — not relevant for BFF                                    |
 
 ### Core Model: `Metric`
 
@@ -98,19 +98,19 @@ src/metrics/
 
 The minimum set an agent needs to discover, inspect, and run metrics.
 
-| BFF Route | Method | Upstream Path | Purpose |
-|-----------|--------|---------------|---------|
-| `/metrics` | GET | `/api/content/v1/metrics` | List all |
-| `/metrics/:id` | GET | `/api/content/v1/metrics/:id` | Get by ID |
-| `/metrics` | POST | `/api/content/v1/metrics` | Create |
-| `/metrics/:id` | PUT | `/api/content/v1/metrics/:id` | Update |
-| `/metrics/:id` | DELETE | `/api/content/v1/metrics/:id` | Delete |
-| `/metrics/filter` | POST | `/api/content/v1/metrics/filter` | Search/filter (paginated) |
-| `/metrics/datasource/:dsId` | GET | `/api/content/v1/metrics/datasource/:dsId` | By datasource |
-| `/metrics/preview` | POST | `/api/content/v1/metrics/preview` | Preview SQL + execute |
-| `/metrics/:id/sql` | POST | `/api/content/v1/metrics/:id/sql` | Get generated SQL |
-| `/metrics/:id/execute` | POST | `/api/content/v1/metrics/:id/execute` | Execute metric |
-| `/metrics/:id/execute/pop` | POST | `/api/content/v1/metrics/:id/execute/pop` | Period-over-period |
+| BFF Route                   | Method | Upstream Path                              | Purpose                   |
+| --------------------------- | ------ | ------------------------------------------ | ------------------------- |
+| `/metrics`                  | GET    | `/api/content/v1/metrics`                  | List all                  |
+| `/metrics/:id`              | GET    | `/api/content/v1/metrics/:id`              | Get by ID                 |
+| `/metrics`                  | POST   | `/api/content/v1/metrics`                  | Create                    |
+| `/metrics/:id`              | PUT    | `/api/content/v1/metrics/:id`              | Update                    |
+| `/metrics/:id`              | DELETE | `/api/content/v1/metrics/:id`              | Delete                    |
+| `/metrics/filter`           | POST   | `/api/content/v1/metrics/filter`           | Search/filter (paginated) |
+| `/metrics/datasource/:dsId` | GET    | `/api/content/v1/metrics/datasource/:dsId` | By datasource             |
+| `/metrics/preview`          | POST   | `/api/content/v1/metrics/preview`          | Preview SQL + execute     |
+| `/metrics/:id/sql`          | POST   | `/api/content/v1/metrics/:id/sql`          | Get generated SQL         |
+| `/metrics/:id/execute`      | POST   | `/api/content/v1/metrics/:id/execute`      | Execute metric            |
+| `/metrics/:id/execute/pop`  | POST   | `/api/content/v1/metrics/:id/execute/pop`  | Period-over-period        |
 
 11 endpoints. Service methods are one-liner proxy calls.
 
@@ -144,20 +144,20 @@ This turns metrics into a first-class capability agents can invoke during reason
 
 Generate candidate metric definitions from a dataset's schema, validate them mechanically, score them with an AI judge, and present ranked options for the user to accept. Every primitive already exists in the BFF:
 
-| Primitive | Existing surface | Role in pipeline |
-|-----------|------------------|------------------|
-| Dataset schema | `GET /datasources/:id/schema` → `/api/data/v3/datasources/{id}/schema` | Column names/types seed generation and validate candidates |
-| Structured generation | `POST /ai/text/generation` (`/api/ai/v1/text/generation`) with `responseFormat` JSON schema | Emit N candidate metric definitions as validated JSON |
-| Schema-aware NL→SQL | `POST /ai/text/sql` with `dataSourceSchemas[]` (name/type/description/sampleValues) | Optional cross-check of a candidate's intent |
-| Dry-run execution | `POST /metrics/preview` (`/api/content/v1/metrics/preview`) | Ground truth: does the candidate compile and execute? |
-| Agent execution | `POST /agents/:id/execute/streaming` | Future judge option — streaming-only today (see Decision 5) |
+| Primitive             | Existing surface                                                                            | Role in pipeline                                            |
+| --------------------- | ------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| Dataset schema        | `GET /datasources/:id/schema` → `/api/data/v3/datasources/{id}/schema`                      | Column names/types seed generation and validate candidates  |
+| Structured generation | `POST /ai/text/generation` (`/api/ai/v1/text/generation`) with `responseFormat` JSON schema | Emit N candidate metric definitions as validated JSON       |
+| Schema-aware NL→SQL   | `POST /ai/text/sql` with `dataSourceSchemas[]` (name/type/description/sampleValues)         | Optional cross-check of a candidate's intent                |
+| Dry-run execution     | `POST /metrics/preview` (`/api/content/v1/metrics/preview`)                                 | Ground truth: does the candidate compile and execute?       |
+| Agent execution       | `POST /agents/:id/execute/streaming`                                                        | Future judge option — streaming-only today (see Decision 5) |
 
 ##### New Endpoints
 
-| BFF Route | Method | Purpose |
-|-----------|--------|---------|
-| `/metrics/suggest` | POST | `{ datasourceId, count?, focus? }` → ranked, scored candidate metrics |
-| `/metrics/suggest/score` | POST | Score a single (user-drafted or edited) metric definition before save |
+| BFF Route                | Method | Purpose                                                               |
+| ------------------------ | ------ | --------------------------------------------------------------------- |
+| `/metrics/suggest`       | POST   | `{ datasourceId, count?, focus? }` → ranked, scored candidate metrics |
+| `/metrics/suggest/score` | POST   | Score a single (user-drafted or edited) metric definition before save |
 
 Both are **orchestration endpoints**, not proxies — the first non-passthrough logic in this module. Implemented as a `MetricSuggestionService` in `src/metrics/` composing `DataSourcesService`, `AiServicesService`, and `MetricsService` (requires exporting the first two from their modules).
 
@@ -176,7 +176,7 @@ Composite, not raw LLM opinion:
 
 - **Hard gates** (deterministic): schema validity and preview executability. A candidate that fails preview is never presented as a top option regardless of judge score.
 - **Judge score** (0–1 + rationale): only differentiates candidates that passed the gates.
-- Response carries all components separately so the UI can explain *why* a candidate is trusted, not just a bare number.
+- Response carries all components separately so the UI can explain _why_ a candidate is trusted, not just a bare number.
 
 ##### Cost/latency bounds
 
