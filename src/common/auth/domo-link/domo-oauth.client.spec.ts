@@ -215,16 +215,14 @@ describe('DomoOAuthClient.validateInstance', () => {
     ).resolves.toBeUndefined();
   });
 
-  it('throws BadRequestException when CIMD support is absent', async () => {
+  it('succeeds when client_id_metadata_document_supported is absent', async () => {
     fetchSpy.mockResolvedValueOnce(
       new Response(JSON.stringify({ issuer: TEST_ISSUER }), { status: 200 }),
     );
-    await expect(makeClient().validateInstance(TEST_ISSUER)).rejects.toThrow(
-      BadRequestException,
-    );
+    await expect(makeClient().validateInstance(TEST_ISSUER)).resolves.toBeUndefined();
   });
 
-  it('skips CIMD check in rig-override mode', async () => {
+  it('succeeds in rig-override mode', async () => {
     fetchSpy.mockResolvedValueOnce(
       new Response(JSON.stringify({ issuer: TEST_ISSUER }), { status: 200 }),
     );

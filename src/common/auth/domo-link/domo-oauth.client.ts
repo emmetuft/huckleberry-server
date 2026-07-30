@@ -224,10 +224,7 @@ export class DomoOAuthClient {
       );
     }
 
-    let meta: {
-      issuer?: string;
-      client_id_metadata_document_supported?: boolean;
-    };
+    let meta: { issuer?: string };
     try {
       meta = (await resp.json()) as typeof meta;
     } catch {
@@ -239,15 +236,6 @@ export class DomoOAuthClient {
     if (!meta.issuer) {
       throw new BadRequestException(
         'The URL does not appear to be a valid Domo instance (missing OAuth metadata).',
-      );
-    }
-
-    if (!this.clientIdOverride && !meta.client_id_metadata_document_supported) {
-      this.logger.warn(
-        `validateInstance: ${issuerUrl} does not support CIMD (client_id_metadata_document_supported missing)`,
-      );
-      throw new BadRequestException(
-        'This Domo instance does not support CIMD. Contact your Domo administrator to enable it.',
       );
     }
 
