@@ -24,10 +24,8 @@ export class OAuthClientMetadataController {
 
   @Get()
   @Public()
-  getMetadata(
-    @Res({ passthrough: true }) res: Response,
-  ): Record<string, unknown> {
+  getMetadata(@Res() res: Response): void {
     res.setHeader('Cache-Control', 'max-age=300, public');
-    return this.document;
+    res.json(this.document);
   }
 }
