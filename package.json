@@ -42,7 +42,7 @@
     "@aws-sdk/client-sesv2": "^3.1096.0",
     "@aws-sdk/client-sts": "^3.1096.0",
     "@aws-sdk/rds-signer": "^3.1096.0",
-    "@nestjs/common": "^11.1.28",
+    "@nestjs/common": "^11.2.8",
     "@nestjs/config": "^4.0.3",
     "@nestjs/core": "^11.1.28",
     "@nestjs/platform-express": "^11.1.28",
